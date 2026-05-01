@@ -6,7 +6,7 @@ test("plays a complete staged battle", async ({ page }) => {
   await expect(page.getByText("Соперник", { exact: true })).toBeVisible();
   await expect(page.getByText("75 сек")).toBeVisible();
   await expect(page.getByText("Меню")).toBeVisible();
-  await expect(page.getByText("Раунд 1")).toBeVisible();
+  await expect(page.getByTestId("round-marker")).toHaveText("Раунд 1");
   await expect(page.getByTestId("round-status")).toContainText(/Твой ход|Ход соперника/);
   await expect(page.getByText("Выбери бойца, вложи энергию и выпусти его на улицу.")).toBeVisible();
   await expect(page.getByText("Энергия в карту:")).toBeVisible();
@@ -25,8 +25,9 @@ test("plays a complete staged battle", async ({ page }) => {
 
     await playButton.scrollIntoViewIfNeeded();
     await playButton.click();
-    await expect(page.getByRole("button", { name: "Бой..." })).toBeVisible();
-    await expect(page.getByText(`Раунд ${round}`, { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("battle-overlay")).toBeVisible();
+    await expect(page.getByTestId("battle-overlay")).toBeHidden({ timeout: 10_000 });
+    await expect(page.getByTestId("round-marker")).toHaveText(`Раунд ${Math.min(round + 1, 4)}`);
   }
 
   await expect(page.getByTestId("round-status")).toContainText(/Победа|Ничья/, { timeout: 10_000 });

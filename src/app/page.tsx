@@ -6,6 +6,7 @@ import styles from "./page.module.css";
 const MAX_HEALTH = 12;
 const MAX_ENERGY = 12;
 const EXCHANGE_THROWS = 6;
+const DAMAGE_THROWS_CAP = 12;
 const TURN_SECONDS = 75;
 
 type Side = "player" | "enemy";
@@ -429,7 +430,9 @@ export default function Home() {
       />
 
       <section className={styles.playerBar}>
-        <div className={styles.roundMarker}>Раунд {roundLabel}</div>
+        <div className={styles.roundMarker} data-testid="round-marker">
+          Раунд {roundLabel}
+        </div>
         <ResourceCounter label="Энергия" value={player.energy} tone="energy" />
         <div className={`${styles.namePlate} ${styles.playerName}`}>
           <strong>{player.name}</strong>
@@ -492,7 +495,168 @@ export default function Home() {
           ))
         )}
       </section>
+
+      {pending ? <BattleOverlay outcome={pending} player={player} enemy={enemy} phase={phase} /> : null}
     </main>
+  );
+}
+
+function BattleOverlay({
+  outcome,
+  player,
+  enemy,
+  phase,
+}: {
+  outcome: Outcome;
+  player: Fighter;
+  enemy: Fighter;
+  phase: Phase;
+}) {
+  const { clash } = outcome;
+  const isDamage = phase === "damage";
+  const playerHealth = isDamage ? outcome.nextPlayer.health : player.health;
+  const enemyHealth = isDamage ? outcome.nextEnemy.health : enemy.health;
+  const playerEnergy = isDamage ? outcome.nextPlayer.energy : player.energy;
+  const enemyEnergy = isDamage ? outcome.nextEnemy.energy : enemy.energy;
+  const loser: Side = clash.winner === "player" ? "enemy" : "player";
+  const isFinisher = isDamage && (loser === "player" ? outcome.nextPlayer.health <= 0 : outcome.nextEnemy.health <= 0);
+  const statusText =
+    phase === "exchange"
+      ? `${clash.playerAttack} против ${clash.enemyAttack}`
+      : isFinisher
+        ? `Добивание: ${clash.damage} урона`
+        : `${clash.damage} урона нанесено`;
+
+  return (
+    <section
+      className={styles.battleOverlay}
+      data-testid="battle-overlay"
+      data-phase={phase}
+      data-winner={clash.winner}
+    >
+      <div className={styles.battleWindow}>
+        <div className={`${styles.duelHud} ${styles.duelHudPlayer}`}>
+          <DuelStatus
+            fighter={player}
+            health={playerHealth}
+            energy={playerEnergy}
+            usedEnergy={clash.playerEnergy}
+            attack={clash.playerAttack}
+          />
+        </div>
+        <div className={`${styles.duelHud} ${styles.duelHudEnemy}`}>
+          <DuelStatus
+            fighter={enemy}
+            health={enemyHealth}
+            energy={enemyEnergy}
+            usedEnergy={clash.enemyEnergy}
+            attack={clash.enemyAttack}
+          />
+        </div>
+
+        <div className={styles.duelStage}>
+          <div className={`${styles.duelCard} ${styles.duelCardPlayer} ${loser === "player" && isDamage ? styles.takingHit : ""}`}>
+            <BattleCard card={clash.playerCard} compact />
+          </div>
+
+          <DuelProjectiles clash={clash} phase={phase} finisher={isFinisher} />
+
+          <div className={`${styles.duelCard} ${styles.duelCardEnemy} ${loser === "enemy" && isDamage ? styles.takingHit : ""}`}>
+            <BattleCard card={clash.enemyCard} compact />
+          </div>
+        </div>
+
+        <div className={styles.duelCaption}>
+          <strong>{phase === "exchange" ? "Обмен ударами" : isFinisher ? "Последний удар" : "Урон"}</strong>
+          <span>{statusText}</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DuelStatus({
+  fighter,
+  health,
+  energy,
+  usedEnergy,
+  attack,
+}: {
+  fighter: Fighter;
+  health: number;
+  energy: number;
+  usedEnergy: number;
+  attack: number;
+}) {
+  return (
+    <article className={styles.duelStatus}>
+      <strong>{fighter.name}</strong>
+      <DuelBar label="Жизнь" value={health} max={MAX_HEALTH} tone="health" />
+      <div className={styles.duelNumbers}>
+        <span>Энергия {energy}</span>
+        <span>Вложено {usedEnergy}</span>
+        <span>Атака {attack}</span>
+      </div>
+      <DuelBar label="Энергия" value={energy} max={MAX_ENERGY} tone="energy" />
+    </article>
+  );
+}
+
+function DuelBar({ label, value, max, tone }: { label: string; value: number; max: number; tone: "health" | "energy" }) {
+  return (
+    <div className={`${styles.duelBar} ${styles[tone]}`}>
+      <span>{label}</span>
+      <i style={{ "--value": `${Math.max(0, Math.min(100, (value / max) * 100))}%` } as React.CSSProperties} />
+      <b>{value}</b>
+    </div>
+  );
+}
+
+function DuelProjectiles({ clash, phase, finisher }: { clash: Clash; phase: Phase; finisher: boolean }) {
+  if (phase === "exchange") {
+    return (
+      <div className={styles.duelProjectiles} aria-hidden="true">
+        {Array.from({ length: EXCHANGE_THROWS + 2 }).map((_, index) => {
+          const from = index % 2 === 0 ? clash.first : otherSide(clash.first);
+          return <DuelProjectile key={`${clash.round}-duel-${index}`} from={from} index={index} kind={index % 4} mode="exchange" />;
+        })}
+      </div>
+    );
+  }
+
+  const throws = Math.min(DAMAGE_THROWS_CAP, clash.damage);
+
+  return (
+    <div className={styles.duelProjectiles} aria-hidden="true">
+      {Array.from({ length: throws }).map((_, index) => (
+        <DuelProjectile key={`${clash.round}-hit-${index}`} from={clash.winner} index={index} kind={(index + 1) % 4} mode="damage" />
+      ))}
+      {finisher ? <DuelProjectile from={clash.winner} index={throws + 1} kind={4} mode="finish" /> : null}
+    </div>
+  );
+}
+
+function DuelProjectile({
+  from,
+  index,
+  kind,
+  mode,
+}: {
+  from: Side;
+  index: number;
+  kind: number;
+  mode: "exchange" | "damage" | "finish";
+}) {
+  const modeClass =
+    mode === "exchange" ? styles.duelModeExchange : mode === "damage" ? styles.duelModeDamage : styles.duelModeFinish;
+
+  return (
+    <i
+      className={`${styles.duelProjectile} ${styles[`duelKind${kind}`]} ${modeClass} ${
+        from === "player" ? styles.fromPlayer : styles.fromEnemy
+      }`}
+      style={{ "--i": index, "--row": index % 5 } as React.CSSProperties}
+    />
   );
 }
 
