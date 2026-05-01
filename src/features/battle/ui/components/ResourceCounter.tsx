@@ -40,14 +40,17 @@ export function ResourcePills({
   max,
   tone,
   dense = false,
+  slots,
 }: {
   value: number;
   max: number;
   tone: "health" | "energy";
   dense?: boolean;
+  slots?: number;
 }) {
   const current = Math.max(0, Math.floor(value));
-  const slots = Math.max(max, current);
+  const slotCount = slots ?? Math.max(max, current);
+  const activeSlots = slots ? Math.ceil((Math.min(current, max) / Math.max(1, max)) * slotCount) : Math.min(current, slotCount);
 
   return (
     <div
@@ -57,8 +60,8 @@ export function ResourcePills({
       )}
       aria-hidden="true"
     >
-      {Array.from({ length: slots }).map((_, index) => {
-        const active = index < current;
+      {Array.from({ length: slotCount }).map((_, index) => {
+        const active = index < activeSlots;
 
         return (
           <i

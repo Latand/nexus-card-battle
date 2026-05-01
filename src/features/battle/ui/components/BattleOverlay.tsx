@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { cn } from "@/shared/lib/cn";
-import { DAMAGE_THROWS_CAP, EXCHANGE_THROWS, MAX_ENERGY, MAX_HEALTH } from "../../model/constants";
+import { DAMAGE_THROWS_CAP, EXCHANGE_THROWS, MAX_ENERGY } from "../../model/constants";
 import { otherSide } from "../../model/game";
 import type { Clash, Fighter, Outcome, Phase, Side } from "../../model/types";
 import { BattleCard } from "./BattleCard";
@@ -21,16 +21,19 @@ export function BattleOverlay({
   const isDamage = phase === "damage";
   const playerHealth = isDamage ? outcome.nextPlayer.health : player.health;
   const enemyHealth = isDamage ? outcome.nextEnemy.health : enemy.health;
-  const playerEnergy = isDamage ? outcome.nextPlayer.energy : player.energy;
-  const enemyEnergy = isDamage ? outcome.nextEnemy.energy : enemy.energy;
+  const virtualLifeMax = Math.max(clash.playerAttack, clash.enemyAttack, 1);
+  const playerCardLife = getVirtualCardLife(clash, phase, "player");
+  const enemyCardLife = getVirtualCardLife(clash, phase, "enemy");
   const loser: Side = clash.winner === "player" ? "enemy" : "player";
   const isFinisher = isDamage && (loser === "player" ? outcome.nextPlayer.health <= 0 : outcome.nextEnemy.health <= 0);
+  const loserCard = loser === "player" ? clash.playerCard : clash.enemyCard;
+  const damageTarget = loser === "player" ? player.name : enemy.name;
   const statusText =
     phase === "exchange"
-      ? `${clash.playerAttack} против ${clash.enemyAttack}`
+      ? `Жизнь карт: ${clash.playerAttack} против ${clash.enemyAttack}`
       : isFinisher
-        ? `Добивание: ${clash.damage} урона`
-        : `${clash.damage} урона нанесено`;
+        ? `${loserCard.name} на нуле. Добивание: ${clash.damage} урона по ${damageTarget}`
+        : `${loserCard.name} на нуле. ${clash.damage} урона получает ${damageTarget}`;
 
   return (
     <section
@@ -41,10 +44,26 @@ export function BattleOverlay({
     >
       <div className="relative min-h-[min(640px,88vh)] w-[min(1100px,96vw)] overflow-hidden rounded border-[3px] border-[#0b0d0f] bg-[linear-gradient(180deg,rgba(23,27,25,0.12),rgba(0,0,0,0.28)),url('/generated/klanz-battle-bg.png')] bg-cover bg-center shadow-[0_0_0_4px_rgba(255,255,255,0.08),0_28px_80px_rgba(0,0,0,0.72),inset_0_0_0_2px_rgba(255,244,201,0.15)] before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(90deg,rgba(201,232,111,0.2),transparent_20%_80%,rgba(255,225,128,0.18)),radial-gradient(circle_at_50%_56%,transparent_0_34%,rgba(0,0,0,0.34)_66%)] before:content-[''] max-[960px]:min-h-[min(580px,88vh)] max-[760px]:min-h-[min(560px,92vh)]">
         <div className="absolute left-[18px] top-[18px] z-[3] w-[min(390px,42%)] max-[960px]:w-[calc(50%_-_28px)] max-[760px]:top-2.5 max-[620px]:w-[calc(50%_-_16px)]">
-          <DuelStatus fighter={player} health={playerHealth} energy={playerEnergy} usedEnergy={clash.playerEnergy} attack={clash.playerAttack} />
+          <DuelStatus
+            fighter={player}
+            cardName={clash.playerCard.name}
+            cardLife={playerCardLife}
+            cardLifeMax={virtualLifeMax}
+            cardEnergy={clash.playerEnergy}
+            attack={clash.playerAttack}
+            humanHealth={playerHealth}
+          />
         </div>
         <div className="absolute right-[18px] top-[18px] z-[3] w-[min(390px,42%)] max-[960px]:w-[calc(50%_-_28px)] max-[760px]:top-2.5 max-[620px]:w-[calc(50%_-_16px)]">
-          <DuelStatus fighter={enemy} health={enemyHealth} energy={enemyEnergy} usedEnergy={clash.enemyEnergy} attack={clash.enemyAttack} />
+          <DuelStatus
+            fighter={enemy}
+            cardName={clash.enemyCard.name}
+            cardLife={enemyCardLife}
+            cardLifeMax={virtualLifeMax}
+            cardEnergy={clash.enemyEnergy}
+            attack={clash.enemyAttack}
+            humanHealth={enemyHealth}
+          />
         </div>
 
         <div className="absolute inset-[94px_26px_82px] z-[2] grid grid-cols-[minmax(150px,220px)_minmax(220px,1fr)_minmax(150px,220px)] items-end gap-[18px] max-[960px]:inset-[102px_18px_82px] max-[960px]:grid-cols-[minmax(132px,190px)_minmax(180px,1fr)_minmax(132px,190px)] max-[760px]:inset-[112px_10px_78px] max-[760px]:grid-cols-[minmax(96px,140px)_minmax(110px,1fr)_minmax(96px,140px)] max-[760px]:gap-2 max-[620px]:grid-cols-[92px_minmax(86px,1fr)_92px]">
@@ -78,40 +97,66 @@ export function BattleOverlay({
   );
 }
 
+function getVirtualCardLife(clash: Clash, phase: Phase, side: Side) {
+  const ownAttack = side === "player" ? clash.playerAttack : clash.enemyAttack;
+  const rivalAttack = side === "player" ? clash.enemyAttack : clash.playerAttack;
+
+  if (phase !== "damage") return ownAttack;
+  if (clash.winner !== side) return 0;
+
+  return Math.max(1, ownAttack - rivalAttack);
+}
+
 function DuelStatus({
   fighter,
-  health,
-  energy,
-  usedEnergy,
+  cardName,
+  cardLife,
+  cardLifeMax,
+  cardEnergy,
   attack,
+  humanHealth,
 }: {
   fighter: Fighter;
-  health: number;
-  energy: number;
-  usedEnergy: number;
+  cardName: string;
+  cardLife: number;
+  cardLifeMax: number;
+  cardEnergy: number;
   attack: number;
+  humanHealth: number;
 }) {
   return (
     <article className="grid gap-[5px] border-2 border-[#c7ccd1] bg-[linear-gradient(180deg,#444c50,#16191c_48%,#08090b),repeating-linear-gradient(135deg,rgba(255,255,255,0.12)_0_1px,transparent_1px_8px)] p-1.5 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.7),0_8px_22px_rgba(0,0,0,0.52)] max-[760px]:p-[5px]">
       <strong className="grid min-h-[18px] place-items-center text-[13px] font-black uppercase leading-none text-[#f3f3f3] [text-shadow:0_1px_0_#000] max-[760px]:text-[11px]">
         {fighter.name}
       </strong>
-      <DuelBar label="Жизнь" value={health} max={MAX_HEALTH} tone="health" />
+      <DuelBar label="Карта" value={cardLife} max={cardLifeMax} tone="health" slots={12} />
       <div className="grid grid-cols-3 gap-1 max-[760px]:grid-cols-2 [&>span:last-child]:max-[760px]:col-span-full">
-        <span className={duelNumber()}>Энергия {energy}</span>
-        <span className={duelNumber()}>Вложено {usedEnergy}</span>
+        <span className={duelNumber()}>{cardName}</span>
+        <span className={duelNumber()}>HP {humanHealth}</span>
         <span className={duelNumber()}>Атака {attack}</span>
       </div>
-      <DuelBar label="Энергия" value={energy} max={MAX_ENERGY} tone="energy" />
+      <DuelBar label="Энергия" value={cardEnergy} max={MAX_ENERGY} tone="energy" />
     </article>
   );
 }
 
-function DuelBar({ label, value, max, tone }: { label: string; value: number; max: number; tone: "health" | "energy" }) {
+function DuelBar({
+  label,
+  value,
+  max,
+  tone,
+  slots,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  tone: "health" | "energy";
+  slots?: number;
+}) {
   return (
     <div className="relative grid min-h-[18px] grid-cols-[54px_minmax(0,1fr)_28px] items-center gap-1.5 max-[760px]:grid-cols-[38px_minmax(0,1fr)_22px] max-[620px]:grid-cols-[minmax(0,1fr)_20px]">
       <span className="text-[10px] font-black uppercase text-[#fff7d6] [text-shadow:0_1px_0_#000] max-[620px]:hidden">{label}</span>
-      <ResourcePills value={value} max={max} tone={tone} dense />
+      <ResourcePills value={value} max={max} tone={tone} dense slots={slots} />
       <b className="text-[10px] font-black uppercase text-[#fff7d6] [text-shadow:0_1px_0_#000]">{value}</b>
     </div>
   );
