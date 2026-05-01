@@ -7,6 +7,7 @@ const MAX_HEALTH = 12;
 const MAX_ENERGY = 12;
 const EXCHANGE_THROWS = 6;
 const DAMAGE_THROWS_CAP = 12;
+const DAMAGE_BOOST_COST = 3;
 const TURN_SECONDS = 75;
 
 type Side = "player" | "enemy";
@@ -232,7 +233,7 @@ function resolveRound(
 
   const nextPlayer: Fighter = {
     ...player,
-    energy: Math.max(0, player.energy - playerEnergy - (damageBoost ? 3 : 0)),
+    energy: Math.max(0, player.energy - playerEnergy - (damageBoost ? DAMAGE_BOOST_COST : 0)),
     used: [...player.used, playerCard.id],
   };
   const nextEnemy: Fighter = {
@@ -289,12 +290,13 @@ export default function Home() {
   const [lastClash, setLastClash] = useState<Clash | null>(null);
   const [pending, setPending] = useState<Outcome | null>(null);
   const [phase, setPhase] = useState<Phase>("ready");
+  const [selectionOpen, setSelectionOpen] = useState(false);
 
   const selected = player.hand.find((card) => card.id === selectedId)!;
-  const boostCost = damageBoost ? 3 : 0;
+  const boostCost = damageBoost ? DAMAGE_BOOST_COST : 0;
   const maxEnergyForCard = Math.max(0, player.energy - boostCost);
   const selectedEnergy = Math.min(energy, maxEnergyForCard);
-  const canBoost = !damageBoost ? player.energy >= selectedEnergy + 3 : true;
+  const canBoost = !damageBoost ? player.energy >= selectedEnergy + DAMAGE_BOOST_COST : true;
   const busy = pending !== null;
   const finished = player.health <= 0 || enemy.health <= 0 || player.used.length >= 4;
   const activeClash = pending?.clash ?? lastClash;
@@ -339,8 +341,9 @@ export default function Home() {
 
   function play() {
     if (busy || finished || player.used.includes(selected.id)) return;
-    const effectiveBoost = damageBoost && player.energy >= selectedEnergy + 3;
+    const effectiveBoost = damageBoost && player.energy >= selectedEnergy + DAMAGE_BOOST_COST;
     const outcome = resolveRound(player, enemy, selected, selectedEnergy, effectiveBoost, first);
+    setSelectionOpen(false);
     setPending(outcome);
     setLastClash(outcome.clash);
     setPhase("exchange");
@@ -357,13 +360,14 @@ export default function Home() {
     setLastClash(null);
     setPending(null);
     setPhase("ready");
+    setSelectionOpen(false);
   }
 
   function toggleBoost() {
     if (busy || finished) return;
     if (!damageBoost) {
       if (!canBoost) return;
-      setEnergy((value) => Math.min(value, Math.max(0, player.energy - 3)));
+      setEnergy((value) => Math.min(value, Math.max(0, player.energy - DAMAGE_BOOST_COST)));
       setDamageBoost(true);
     } else {
       setDamageBoost(false);
@@ -424,7 +428,10 @@ export default function Home() {
         owner="player"
         selectedId={selectedId}
         onPick={(card) => {
-          if (!busy) setSelectedId(card.id);
+          if (!busy && !finished) {
+            setSelectedId(card.id);
+            setSelectionOpen(true);
+          }
         }}
         disabled={busy || finished}
       />
@@ -450,32 +457,13 @@ export default function Home() {
             <strong>{selected.name}</strong>
           </div>
 
-          <EnergyPicker
-            value={selectedEnergy}
-            max={maxEnergyForCard}
-            total={player.energy}
-            boostReserved={boostCost}
-            disabled={busy || finished}
-            onChange={(value) => setEnergy(value)}
-          />
-
-          <button
-            type="button"
-            className={`${styles.boostButton} ${damageBoost ? styles.boostOn : ""}`}
-            disabled={busy || finished || (!damageBoost && !canBoost)}
-            onClick={toggleBoost}
-          >
-            <span>+2 урона</span>
-            <small>3 энергии</small>
-          </button>
-
           <div className={styles.combatPreview}>
             <b>Атака {preview.attack}</b>
             <b>Урон {previewDamage}</b>
           </div>
 
-          <button className={styles.play} onClick={play} disabled={busy || finished}>
-            {busy ? "Бой..." : "Сыграть"}
+          <button className={styles.play} onClick={() => setSelectionOpen(true)} disabled={busy || finished}>
+            Выбор
           </button>
         </div>
       </section>
@@ -496,8 +484,139 @@ export default function Home() {
         )}
       </section>
 
+      {selectionOpen && !busy && !finished ? (
+        <SelectionOverlay
+          selected={selected}
+          enemy={enemy}
+          player={player}
+          energy={selectedEnergy}
+          maxEnergy={maxEnergyForCard}
+          damageBoost={damageBoost}
+          boostCost={DAMAGE_BOOST_COST}
+          previewAttack={preview.attack}
+          previewDamage={previewDamage}
+          canBoost={canBoost}
+          onClose={() => setSelectionOpen(false)}
+          onMinus={() => setEnergy((value) => Math.max(0, Math.min(value, maxEnergyForCard) - 1))}
+          onPlus={() => setEnergy((value) => Math.min(maxEnergyForCard, value + 1))}
+          onToggleBoost={toggleBoost}
+          onConfirm={play}
+        />
+      ) : null}
+
       {pending ? <BattleOverlay outcome={pending} player={player} enemy={enemy} phase={phase} /> : null}
     </main>
+  );
+}
+
+function SelectionOverlay({
+  selected,
+  enemy,
+  player,
+  energy,
+  maxEnergy,
+  damageBoost,
+  boostCost,
+  previewAttack,
+  previewDamage,
+  canBoost,
+  onClose,
+  onMinus,
+  onPlus,
+  onToggleBoost,
+  onConfirm,
+}: {
+  selected: Card;
+  enemy: Fighter;
+  player: Fighter;
+  energy: number;
+  maxEnergy: number;
+  damageBoost: boolean;
+  boostCost: number;
+  previewAttack: number;
+  previewDamage: number;
+  canBoost: boolean;
+  onClose: () => void;
+  onMinus: () => void;
+  onPlus: () => void;
+  onToggleBoost: () => void;
+  onConfirm: () => void;
+}) {
+  const enemyPreview = getEnemyPreview(enemy, player.health);
+
+  return (
+    <section className={styles.selectionOverlay} data-testid="selection-overlay" aria-label="Выбор карты">
+      <button className={styles.selectionBackdrop} type="button" aria-label="Закрыть выбор" onClick={onClose} />
+      <div className={styles.selectionDialog}>
+        <button className={styles.selectionClose} type="button" aria-label="Закрыть выбор" onClick={onClose}>
+          ×
+        </button>
+
+        <div className={styles.selectionCard}>
+          <BattleCard card={selected} compact />
+        </div>
+
+        <div className={styles.selectionMenu}>
+          <div className={styles.selectionName}>
+            <span>{selected.clan}</span>
+            <strong>{selected.name}</strong>
+          </div>
+
+          <div className={styles.selectionStepper}>
+            <button type="button" data-testid="energy-minus" aria-label="Меньше энергии" onClick={onMinus} disabled={energy <= 0}>
+              -
+            </button>
+            <strong data-testid="selection-energy">x{energy}</strong>
+            <button type="button" data-testid="energy-plus" aria-label="Больше энергии" onClick={onPlus} disabled={energy >= maxEnergy}>
+              +
+            </button>
+            <b>{maxEnergy}</b>
+          </div>
+
+          <div className={styles.selectionCharge} aria-hidden="true">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <i key={index} className={index < Math.min(energy, 4) ? styles.chargeOn : ""} />
+            ))}
+          </div>
+
+          <button
+            type="button"
+            className={`${styles.selectionBoost} ${damageBoost ? styles.selectionBoostOn : ""}`}
+            data-testid="damage-boost-toggle"
+            onClick={onToggleBoost}
+            disabled={!damageBoost && !canBoost}
+          >
+            <span>+2 урона</span>
+            <b>{boostCost}</b>
+          </button>
+
+          <div className={styles.selectionPreview}>
+            <span>Атака {previewAttack}</span>
+            <span>Урон {previewDamage}</span>
+          </div>
+
+          <button className={styles.selectionOk} type="button" data-testid="selection-ok" onClick={onConfirm}>
+            OK
+          </button>
+        </div>
+
+        <strong className={styles.selectionVs}>VS</strong>
+
+        {enemyPreview ? (
+          <div className={styles.selectionEnemy}>
+            <BattleCard card={enemyPreview} compact />
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function getEnemyPreview(enemy: Fighter, playerHealth: number) {
+  const available = enemy.hand.filter((card) => !enemy.used.includes(card.id));
+  return (
+    available.find((item) => item.damage >= playerHealth) ??
+    [...available].sort((a, b) => b.power + b.damage - (a.power + a.damage))[0]
   );
 }
 
@@ -690,57 +809,6 @@ function getArenaText(phase: Phase, clash: Clash | null, finished: boolean, verd
   return `${clash.damage} урона нанесено. Выбирай следующую карту.`;
 }
 
-function EnergyPicker({
-  value,
-  max,
-  total,
-  boostReserved,
-  disabled,
-  onChange,
-}: {
-  value: number;
-  max: number;
-  total: number;
-  boostReserved: number;
-  disabled: boolean;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <div className={styles.energyPicker}>
-      <div className={styles.energyHeader}>
-        <span>
-          Энергия в карту: <b>{value}</b>
-        </span>
-        <small>
-          доступно {max} / всего {total}
-          {boostReserved > 0 ? `, урон держит ${boostReserved}` : ""}
-        </small>
-      </div>
-      <div className={styles.energyButtons}>
-        <button type="button" disabled={disabled} onClick={() => onChange(0)} className={value === 0 ? styles.energyZeroOn : ""}>
-          0
-        </button>
-        {Array.from({ length: MAX_ENERGY }).map((_, index) => {
-          const amount = index + 1;
-          const state =
-            amount <= value ? styles.energySelected : amount <= max ? styles.energyAvailable : styles.energyUnavailable;
-          return (
-            <button
-              key={amount}
-              type="button"
-              disabled={disabled || amount > max}
-              className={state}
-              onClick={() => onChange(amount)}
-              aria-label={`${amount} энергии`}
-              title={amount <= max ? `${amount} энергии` : `Недоступно: всего ${total}`}
-            />
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function AttackAnimation({ clash, phase, first }: { clash: Clash | null; phase: Phase; first: Side }) {
   if (!clash || phase === "ready" || phase === "summary") {
     return (
@@ -801,6 +869,7 @@ function Hand({
         owner === "player" ? (
           <button
             key={card.id}
+            data-testid={`player-card-${card.id}`}
             className={`${styles.cardButton} ${selectedId === card.id ? styles.chosen : ""} ${used.includes(card.id) ? styles.spent : ""}`}
             onClick={() => onPick?.(card)}
             disabled={disabled || used.includes(card.id)}
@@ -810,6 +879,7 @@ function Hand({
         ) : (
           <div
             key={card.id}
+            data-testid={`enemy-card-${card.id}`}
             className={`${styles.cardButton} ${selectedId === card.id ? styles.chosen : ""} ${used.includes(card.id) ? styles.spent : ""}`}
           >
             <BattleCard card={card} />

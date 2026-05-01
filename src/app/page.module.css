@@ -693,6 +693,266 @@
   animation: captionPop 340ms ease both;
 }
 
+.selectionOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 34;
+  display: grid;
+  place-items: center;
+  padding: min(26px, 3vw);
+  background: rgba(0, 0, 0, 0.52);
+  backdrop-filter: blur(5px) saturate(0.78);
+}
+
+.selectionBackdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.selectionDialog {
+  position: relative;
+  z-index: 1;
+  width: min(760px, 94vw);
+  min-height: 360px;
+  display: grid;
+  grid-template-columns: minmax(170px, 238px) 188px minmax(138px, 188px);
+  gap: 18px;
+  align-items: center;
+  padding: 20px 22px;
+  border: 2px solid rgba(225, 231, 224, 0.62);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(31, 34, 35, 0.92), rgba(8, 9, 10, 0.9)),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 8px);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.72),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+
+.selectionClose {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 4;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 50%;
+  color: #fff7d8;
+  background: rgba(0, 0, 0, 0.46);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.selectionCard,
+.selectionEnemy {
+  display: grid;
+  justify-items: center;
+}
+
+.selectionCard .compact {
+  width: min(236px, 31vw);
+  min-height: 328px;
+}
+
+.selectionEnemy {
+  transform: translateY(14px) rotate(1deg);
+  filter: brightness(1.06);
+}
+
+.selectionEnemy .compact {
+  width: min(178px, 22vw);
+  min-height: 258px;
+}
+
+.selectionMenu {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 2px solid #1e2527;
+  border-radius: 7px;
+  background:
+    linear-gradient(180deg, #6c6b65 0 6%, #2d3032 7% 54%, #151719 55%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0 1px, transparent 1px 7px);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    0 16px 30px rgba(0, 0, 0, 0.44);
+}
+
+.selectionName {
+  min-height: 42px;
+  display: grid;
+  align-content: center;
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.34);
+}
+
+.selectionName span {
+  color: #d8bd82;
+  font-size: 10px;
+  font-weight: 1000;
+  text-transform: uppercase;
+}
+
+.selectionName strong {
+  color: #fff7d7;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.selectionStepper {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 34px 34px;
+  gap: 5px;
+  align-items: center;
+}
+
+.selectionStepper button,
+.selectionOk,
+.selectionBoost {
+  border: 2px solid rgba(0, 0, 0, 0.62);
+  color: #fff8d8;
+  font-weight: 1000;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow:
+    inset 0 -4px 0 rgba(0, 0, 0, 0.2),
+    0 6px 12px rgba(0, 0, 0, 0.32);
+}
+
+.selectionStepper button {
+  height: 28px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #4de06f, #168e36);
+  font-size: 18px;
+}
+
+.selectionStepper button:first-child {
+  background: linear-gradient(180deg, #dfb44d, #8b5d18);
+}
+
+.selectionStepper button:disabled,
+.selectionBoost:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.selectionStepper strong {
+  min-height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.48);
+  color: #f8f8f8;
+  font-size: 16px;
+  text-transform: uppercase;
+}
+
+.selectionStepper b,
+.selectionBoost b {
+  min-height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: #fff;
+  background: linear-gradient(180deg, #7656f0, #3e2bb1);
+  font-size: 18px;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.52);
+}
+
+.selectionCharge {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+}
+
+.selectionCharge i {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #2b1607;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #29231c, #0d0b0a);
+}
+
+.selectionCharge .chargeOn {
+  background: radial-gradient(circle at 35% 28%, #fff4ac 0 18%, #ffba2e 20% 58%, #8d4b11 60%);
+  box-shadow: 0 0 10px rgba(255, 198, 51, 0.58);
+}
+
+.selectionBoost {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: 6px;
+  align-items: center;
+  min-height: 34px;
+  border-radius: 5px;
+  padding: 2px 4px 2px 10px;
+  background: linear-gradient(180deg, #ec4d40, #9f1f1a);
+  font-size: 14px;
+}
+
+.selectionBoostOn {
+  outline: 2px solid #fff0a5;
+  box-shadow:
+    inset 0 -4px 0 rgba(0, 0, 0, 0.16),
+    0 0 14px rgba(255, 224, 138, 0.58);
+}
+
+.selectionPreview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.selectionPreview span {
+  min-height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.35);
+  color: #f5e9c8;
+  font-size: 11px;
+  font-weight: 1000;
+  text-transform: uppercase;
+}
+
+.selectionOk {
+  min-height: 42px;
+  border-radius: 6px;
+  color: #1a1408;
+  background: linear-gradient(180deg, #fff26d, #e3b51e 54%, #a66d12);
+  font-size: 20px;
+}
+
+.selectionVs {
+  position: absolute;
+  right: 168px;
+  bottom: 82px;
+  z-index: 3;
+  min-width: 126px;
+  padding: 8px 18px 12px;
+  color: #fff;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.42), transparent 28%),
+    linear-gradient(180deg, #6a6b69, #191a1b);
+  border-radius: 8px;
+  font-size: 54px;
+  font-style: italic;
+  line-height: 0.8;
+  text-align: center;
+  text-shadow:
+    0 3px 0 rgba(0, 0, 0, 0.65),
+    0 0 16px rgba(255, 255, 255, 0.4);
+  transform: rotate(-2deg) skewX(-8deg);
+}
+
 .battleOverlay {
   position: fixed;
   inset: 0;
@@ -1001,7 +1261,7 @@
 
 .controls {
   display: grid;
-  grid-template-columns: minmax(104px, 132px) minmax(170px, 1fr) minmax(106px, 124px) minmax(98px, 124px) 88px;
+  grid-template-columns: minmax(160px, 220px) minmax(160px, 1fr) 112px;
   gap: 12px;
   align-items: center;
   padding: 12px;
@@ -1175,7 +1435,7 @@
   }
 
   .controls {
-    grid-template-columns: minmax(94px, 118px) minmax(150px, 1fr) minmax(98px, 116px) 82px;
+    grid-template-columns: minmax(140px, 190px) minmax(150px, 1fr) 96px;
   }
 
   .combatPreview {
@@ -1202,6 +1462,18 @@
 
   .duelCaption span {
     font-size: 20px;
+  }
+
+  .selectionDialog {
+    grid-template-columns: minmax(160px, 210px) 180px minmax(122px, 160px);
+    gap: 12px;
+  }
+
+  .selectionVs {
+    right: 132px;
+    bottom: 82px;
+    min-width: 108px;
+    font-size: 44px;
   }
 }
 
@@ -1432,6 +1704,22 @@
     grid-template-columns: 1fr;
   }
 
+  .selectionDialog {
+    width: min(520px, 94vw);
+    grid-template-columns: minmax(148px, 200px) minmax(164px, 1fr);
+  }
+
+  .selectionEnemy {
+    display: none;
+  }
+
+  .selectionVs {
+    right: 28px;
+    bottom: 64px;
+    min-width: 92px;
+    font-size: 36px;
+  }
+
   .battleOverlay {
     padding: 10px;
   }
@@ -1514,6 +1802,27 @@
   .compact,
   .emptyCard {
     width: 100%;
+  }
+
+  .selectionDialog {
+    width: min(360px, 94vw);
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .selectionCard .compact {
+    width: min(220px, 68vw);
+    min-height: 296px;
+  }
+
+  .selectionMenu {
+    width: min(260px, 100%);
+    justify-self: center;
+  }
+
+  .selectionVs {
+    display: none;
   }
 
   .duelHud {
