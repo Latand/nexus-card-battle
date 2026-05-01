@@ -13,10 +13,8 @@
   inset: 0;
   z-index: -2;
   background:
-    linear-gradient(180deg, rgba(18, 15, 18, 0.1), rgba(18, 15, 18, 0.76) 64%, #120f12),
-    radial-gradient(circle at 50% 42%, rgba(236, 177, 62, 0.24), transparent 26%),
-    linear-gradient(90deg, transparent 0 5%, #1e2529 5% 13%, transparent 13% 17%, #24252c 17% 27%, transparent 27% 35%, #1d2027 35% 47%, transparent 47% 54%, #262229 54% 66%, transparent 66% 74%, #1c2525 74% 88%, transparent 88%),
-    linear-gradient(180deg, #283540 0 32%, #5c362a 32% 34%, #181316 34% 100%);
+    linear-gradient(180deg, rgba(18, 15, 18, 0.18), rgba(18, 15, 18, 0.64) 62%, #120f12),
+    url("/generated/klanz-battle-bg.png") center / cover no-repeat;
 }
 
 .city::before {
@@ -24,10 +22,10 @@
   position: absolute;
   inset: 0;
   background:
-    repeating-linear-gradient(90deg, transparent 0 38px, rgba(255, 202, 87, 0.52) 39px 43px, transparent 44px 88px),
-    repeating-linear-gradient(0deg, transparent 0 34px, rgba(255, 255, 255, 0.08) 35px 37px, transparent 38px 78px);
+    repeating-linear-gradient(90deg, transparent 0 38px, rgba(255, 202, 87, 0.28) 39px 43px, transparent 44px 88px),
+    repeating-linear-gradient(0deg, transparent 0 34px, rgba(255, 255, 255, 0.05) 35px 37px, transparent 38px 78px);
   clip-path: polygon(0 18%, 100% 8%, 100% 70%, 0 82%);
-  opacity: 0.58;
+  opacity: 0.4;
 }
 
 .city::after {
@@ -113,7 +111,7 @@
 .hud span,
 .roundPlate span,
 .selectedTitle span,
-.controls label span,
+.energyPicker > span,
 .cardTop span {
   color: #d8bd82;
   font-size: 11px;
@@ -130,19 +128,49 @@
 }
 
 .meters {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
-.meters b,
-.formula span {
-  min-width: 92px;
-  padding: 8px 10px;
+.pillMeter {
+  display: grid;
+  gap: 5px;
+  min-width: 112px;
+  padding: 7px 8px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff8df;
-  font-size: 13px;
-  text-align: center;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.pillMeter span {
+  color: #fff5cf;
+  font-size: 12px;
+  font-weight: 1000;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.pillMeter div {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 3px;
+}
+
+.pillMeter i {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.26);
+}
+
+.health .pillOn {
+  background: linear-gradient(180deg, #b9f56c, #3fad48);
+  box-shadow: 0 0 8px rgba(119, 225, 72, 0.55);
+}
+
+.energy .pillOn {
+  background: linear-gradient(180deg, #ffe889, #d99a22);
+  box-shadow: 0 0 8px rgba(255, 208, 87, 0.5);
 }
 
 .roundPlate {
@@ -227,7 +255,8 @@
   border-radius: 10px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 12%),
-    linear-gradient(135deg, color-mix(in srgb, var(--accent), #1a1113 72%), #171115 60%);
+    linear-gradient(135deg, color-mix(in srgb, var(--accent), transparent 62%), rgba(23, 17, 21, 0.72) 60%),
+    url("/generated/klanz-card-frame.png") center / cover no-repeat;
   box-shadow:
     inset 0 0 0 3px color-mix(in srgb, var(--accent), #fff 20%),
     inset 0 0 0 7px rgba(0, 0, 0, 0.55),
@@ -413,34 +442,79 @@
   text-transform: uppercase;
 }
 
-.projectiles {
+.attackTrack {
   position: relative;
   width: min(420px, 100%);
-  height: 66px;
+  height: 78px;
+  overflow: visible;
 }
 
-.projectiles i {
+.trackHint {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  color: rgba(255, 232, 137, 0.38);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transform: translate(-50%, -50%);
+}
+
+.projectile {
   --i: 0;
   position: absolute;
-  top: calc(14px + (var(--i) % 4) * 12px);
+  top: calc(14px + (var(--i) % 4) * 13px);
   left: calc(50% - 16px);
-  width: 30px;
-  height: 18px;
+  width: 32px;
+  height: 19px;
   border: 2px solid rgba(255, 245, 204, 0.82);
   border-radius: 50% 50% 45% 45%;
   background: linear-gradient(90deg, #ffe08a, #d34b38);
   box-shadow: 0 0 14px rgba(255, 196, 79, 0.58);
-  animation: toss 900ms ease-in-out infinite;
-  animation-delay: calc(var(--i) * 80ms);
+  opacity: 0;
+  animation-fill-mode: both;
+  animation-iteration-count: 1;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.35, 1);
 }
 
-.projectiles[data-winner="enemy"] i {
-  animation-name: tossBack;
+.exchange.fromPlayer,
+.damage.fromPlayer {
+  animation-name: throwPlayer;
 }
 
-.projectiles[data-winner="idle"] i {
-  opacity: 0.42;
-  animation-play-state: paused;
+.exchange.fromEnemy,
+.damage.fromEnemy {
+  animation-name: throwEnemy;
+}
+
+.projectile.exchange {
+  animation-duration: 520ms;
+  animation-delay: calc(var(--i) * 260ms);
+}
+
+.projectile.damage {
+  top: calc(12px + (var(--i) % 5) * 10px);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #fff9cf 0 18%, #ffe08a 20% 48%, #df533f 50% 100%);
+  animation-duration: 820ms;
+  animation-delay: calc(var(--i) * 220ms);
+}
+
+.damageCaption {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  padding: 7px 12px;
+  border: 1px solid rgba(255, 224, 138, 0.45);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #ffe08a;
+  font-size: 16px;
+  transform: translate(-50%, -50%);
+  animation: captionPop 340ms ease both;
 }
 
 .exchange p {
@@ -452,7 +526,7 @@
 
 .command {
   display: grid;
-  grid-template-columns: minmax(250px, 260px) minmax(0, 1fr);
+  grid-template-columns: minmax(218px, 236px) minmax(0, 1fr);
   gap: 12px;
   align-items: stretch;
   margin-top: -8px;
@@ -468,7 +542,7 @@
 
 .controls {
   display: grid;
-  grid-template-columns: minmax(120px, 148px) minmax(130px, 1fr) minmax(138px, 154px) 96px;
+  grid-template-columns: minmax(104px, 132px) minmax(170px, 1fr) minmax(106px, 124px) minmax(98px, 124px) 88px;
   gap: 12px;
   align-items: center;
   padding: 12px;
@@ -481,36 +555,116 @@
   font-size: 22px;
 }
 
-.controls label {
+.energyPicker {
   display: grid;
-  gap: 8px;
+  gap: 7px;
   font-weight: 900;
 }
 
-.controls input[type="range"] {
-  width: 100%;
-  accent-color: #f0c965;
+.energyPicker b {
+  color: #ffe08a;
+  font-size: 15px;
 }
 
-.boost {
-  grid-template-columns: auto 1fr;
+.energyButtons {
+  display: grid;
+  grid-template-columns: 24px repeat(12, minmax(8px, 1fr));
+  gap: 4px;
   align-items: center;
-  min-width: 176px;
 }
 
-.boost input {
-  width: 20px;
-  height: 20px;
-  accent-color: #e9503f;
+.energyButtons button {
+  height: 17px;
+  border: 1px solid rgba(0, 0, 0, 0.32);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  cursor: pointer;
 }
 
-.formula {
-  display: none;
+.energyButtons button:first-child {
+  height: 25px;
+  color: #ffe8a0;
+  background: rgba(0, 0, 0, 0.34);
+  font-size: 11px;
+  font-weight: 1000;
+}
+
+.energyButtons button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.energyButtons .energySelected,
+.energyButtons .energyZeroOn {
+  background: linear-gradient(180deg, #ffe889, #d99a22);
+  box-shadow: 0 0 10px rgba(255, 208, 87, 0.54);
+}
+
+.boostButton {
+  display: grid;
+  gap: 2px;
+  min-height: 44px;
+  border: 2px solid rgba(255, 224, 138, 0.62);
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: #f9edc8;
+  background: rgba(0, 0, 0, 0.28);
+  font-weight: 1000;
+  cursor: pointer;
+}
+
+.boostButton span,
+.boostButton small {
+  line-height: 1;
+}
+
+.boostButton small {
+  color: #d8bd82;
+  font-size: 11px;
+}
+
+.boostOn {
+  color: #190f0f;
+  background: linear-gradient(180deg, #ffe08a, #e9503f);
+}
+
+.boostButton:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.combatPreview {
+  display: grid;
+  gap: 5px;
+}
+
+.combatPreview b {
+  min-width: 78px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.32);
+  color: #fff8df;
+  font-size: 13px;
+  text-align: center;
 }
 
 .play:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+@media (max-width: 960px) {
+  .command {
+    grid-template-columns: minmax(210px, 232px) minmax(0, 1fr);
+  }
+
+  .controls {
+    grid-template-columns: minmax(94px, 118px) minmax(150px, 1fr) minmax(98px, 116px) 82px;
+  }
+
+  .combatPreview {
+    display: none;
+  }
 }
 
 .log {
@@ -544,31 +698,42 @@
   line-height: 1.2;
 }
 
-@keyframes toss {
+@keyframes throwPlayer {
   0% {
-    transform: translateX(-170px) rotate(-18deg) scale(0.8);
+    transform: translateX(174px) rotate(18deg) scale(0.78);
     opacity: 0;
   }
   22% {
     opacity: 1;
   }
   100% {
-    transform: translateX(170px) rotate(28deg) scale(1.08);
+    transform: translateX(-174px) rotate(-28deg) scale(1.08);
     opacity: 0;
   }
 }
 
-@keyframes tossBack {
+@keyframes throwEnemy {
   0% {
-    transform: translateX(170px) rotate(18deg) scale(0.8);
+    transform: translateX(-174px) rotate(-18deg) scale(0.78);
     opacity: 0;
   }
   22% {
     opacity: 1;
   }
   100% {
-    transform: translateX(-170px) rotate(-28deg) scale(1.08);
+    transform: translateX(174px) rotate(28deg) scale(1.08);
     opacity: 0;
+  }
+}
+
+@keyframes captionPop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
   }
 }
 

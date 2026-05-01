@@ -1,7 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import styles from "./page.module.css";
+
+const MAX_HEALTH = 12;
+const MAX_ENERGY = 12;
+const EXCHANGE_THROWS = 6;
+
+type Side = "player" | "enemy";
+type Phase = "ready" | "exchange" | "damage" | "summary";
 
 type Card = {
   id: string;
@@ -27,6 +34,7 @@ type Fighter = {
 
 type Clash = {
   round: number;
+  first: Side;
   playerCard: Card;
   enemyCard: Card;
   playerAttack: number;
@@ -34,9 +42,15 @@ type Clash = {
   playerEnergy: number;
   enemyEnergy: number;
   boostedDamage: boolean;
-  winner: "player" | "enemy";
+  winner: Side;
   damage: number;
   text: string;
+};
+
+type Outcome = {
+  clash: Clash;
+  nextPlayer: Fighter;
+  nextEnemy: Fighter;
 };
 
 const cards: Card[] = [
@@ -49,7 +63,8 @@ const cards: Card[] = [
     ability: "благо 1",
     bonus: "+2 силы",
     rarity: "Legend",
-    portrait: "radial-gradient(circle at 48% 20%, #fff6d1 0 9%, transparent 10%), linear-gradient(155deg, #f7d36a, #b44334 45%, #2b1414)",
+    portrait:
+      "radial-gradient(circle at 48% 20%, #fff6d1 0 9%, transparent 10%), linear-gradient(155deg, #f7d36a, #b44334 45%, #2b1414)",
     accent: "#f3c44f",
   },
   {
@@ -61,7 +76,8 @@ const cards: Card[] = [
     ability: "+8 атаки",
     bonus: "+8 атаки",
     rarity: "Rare",
-    portrait: "radial-gradient(circle at 55% 22%, #ffe2cb 0 8%, transparent 9%), linear-gradient(145deg, #ff7d4b, #8f1f2e 52%, #1d0b10)",
+    portrait:
+      "radial-gradient(circle at 55% 22%, #ffe2cb 0 8%, transparent 9%), linear-gradient(145deg, #ff7d4b, #8f1f2e 52%, #1d0b10)",
     accent: "#f05b3d",
   },
   {
@@ -73,7 +89,8 @@ const cards: Card[] = [
     ability: "гнев: +2 урон",
     bonus: "+2 урона",
     rarity: "Uniq",
-    portrait: "radial-gradient(circle at 45% 21%, #dffeff 0 8%, transparent 9%), linear-gradient(145deg, #68f0d2, #1b837d 48%, #101c2a)",
+    portrait:
+      "radial-gradient(circle at 45% 21%, #dffeff 0 8%, transparent 9%), linear-gradient(145deg, #68f0d2, #1b837d 48%, #101c2a)",
     accent: "#41d6c0",
   },
   {
@@ -85,7 +102,8 @@ const cards: Card[] = [
     ability: "- способность",
     bonus: "-4 атаки соп.",
     rarity: "Uniq",
-    portrait: "radial-gradient(circle at 52% 20%, #f1e9ff 0 8%, transparent 9%), linear-gradient(150deg, #a891ff, #4c338f 52%, #130d27)",
+    portrait:
+      "radial-gradient(circle at 52% 20%, #f1e9ff 0 8%, transparent 9%), linear-gradient(150deg, #a891ff, #4c338f 52%, #130d27)",
     accent: "#9277ff",
   },
   {
@@ -97,7 +115,8 @@ const cards: Card[] = [
     ability: "урон = урону соп.",
     bonus: "- бонус",
     rarity: "Legend",
-    portrait: "radial-gradient(circle at 48% 21%, #efffc1 0 8%, transparent 9%), linear-gradient(145deg, #b4e34d, #55762b 48%, #172211)",
+    portrait:
+      "radial-gradient(circle at 48% 21%, #efffc1 0 8%, transparent 9%), linear-gradient(145deg, #b4e34d, #55762b 48%, #172211)",
     accent: "#a7d94a",
   },
   {
@@ -109,7 +128,8 @@ const cards: Card[] = [
     ability: "крах: +1 жизнь",
     bonus: "-2 энергии",
     rarity: "Rare",
-    portrait: "radial-gradient(circle at 50% 20%, #d9faff 0 8%, transparent 9%), linear-gradient(145deg, #4fd9ff, #255c8d 52%, #111927)",
+    portrait:
+      "radial-gradient(circle at 50% 20%, #d9faff 0 8%, transparent 9%), linear-gradient(145deg, #4fd9ff, #255c8d 52%, #111927)",
     accent: "#49bfe8",
   },
   {
@@ -121,7 +141,8 @@ const cards: Card[] = [
     ability: "хамелеон",
     bonus: "ничья: шанс выше",
     rarity: "Rare",
-    portrait: "radial-gradient(circle at 47% 21%, #ffe7f6 0 8%, transparent 9%), linear-gradient(145deg, #ef82b8, #80335e 52%, #23101d)",
+    portrait:
+      "radial-gradient(circle at 47% 21%, #ffe7f6 0 8%, transparent 9%), linear-gradient(145deg, #ef82b8, #80335e 52%, #23101d)",
     accent: "#df6aa5",
   },
   {
@@ -133,7 +154,8 @@ const cards: Card[] = [
     ability: "крах: +1 эн",
     bonus: "-13 атаки",
     rarity: "Common",
-    portrait: "radial-gradient(circle at 52% 20%, #fff3bd 0 8%, transparent 9%), linear-gradient(145deg, #ffd45c, #c17d28 52%, #2a180c)",
+    portrait:
+      "radial-gradient(circle at 52% 20%, #fff3bd 0 8%, transparent 9%), linear-gradient(145deg, #ffd45c, #c17d28 52%, #2a180c)",
     accent: "#ffbf3d",
   },
 ];
@@ -145,8 +167,8 @@ function makeFighter(name: string, title: string, ids: string[]): Fighter {
   return {
     name,
     title,
-    health: 12,
-    energy: 12,
+    health: MAX_HEALTH,
+    energy: MAX_ENERGY,
     hand: ids.map((id) => cards.find((card) => card.id === id)!),
     used: [],
   };
@@ -155,11 +177,14 @@ function makeFighter(name: string, title: string, ids: string[]): Fighter {
 function score(card: Card, energy: number, first: boolean) {
   let power = card.power;
   let attack = power * (energy + 1);
+
   if (card.id === "alpha" && energy >= 2) {
     power += 2;
     attack = power * (energy + 1);
   }
+
   if (card.id === "fury" && first) attack += 8;
+
   return { attack, damage: card.damage };
 }
 
@@ -168,17 +193,19 @@ function enemyMove(enemy: Fighter, playerHealth: number) {
   const card =
     available.find((item) => item.damage >= playerHealth) ??
     [...available].sort((a, b) => b.power + b.damage - (a.power + a.damage))[0];
-  return { card, energy: Math.min(enemy.energy, Math.max(0, 2 + Math.floor(Math.random() * 3))) };
+  const energy = Math.min(enemy.energy, Math.max(0, 2 + Math.floor(Math.random() * 3)));
+
+  return { card, energy };
 }
 
-function resolve(
+function resolveRound(
   player: Fighter,
   enemy: Fighter,
   playerCard: Card,
   playerEnergy: number,
   damageBoost: boolean,
-  first: "player" | "enemy",
-) {
+  first: Side,
+): Outcome {
   const enemyChoice = enemyMove(enemy, player.health);
   const playerScore = score(playerCard, playerEnergy, first === "player");
   const enemyScore = score(enemyChoice.card, enemyChoice.energy, first === "enemy");
@@ -188,7 +215,7 @@ function resolve(
   if (playerCard.id === "dahack") enemyAttack = Math.max(0, enemyAttack - 4);
   if (enemyChoice.card.id === "dahack") playerAttack = Math.max(0, playerAttack - 4);
 
-  let winner: "player" | "enemy";
+  let winner: Side;
   if (playerAttack === enemyAttack) {
     const bias = playerCard.id === "enigma" ? 0.65 : enemyChoice.card.id === "enigma" ? 0.35 : 0.5;
     winner = Math.random() < bias ? "player" : "enemy";
@@ -218,11 +245,18 @@ function resolve(
 
   if (winner === "enemy" && playerCard.id === "toyz") nextPlayer.energy += 1;
   if (winner === "player" && enemyChoice.card.id === "toyz") nextEnemy.energy += 1;
-  if (winner === "enemy" && playerCard.id === "metro") nextPlayer.health = Math.min(12, nextPlayer.health + 1);
-  if (winner === "player" && enemyChoice.card.id === "metro") nextEnemy.health = Math.min(12, nextEnemy.health + 1);
+  if (winner === "enemy" && playerCard.id === "metro") {
+    nextPlayer.health = Math.min(MAX_HEALTH, nextPlayer.health + 1);
+  }
+  if (winner === "player" && enemyChoice.card.id === "metro") {
+    nextEnemy.health = Math.min(MAX_HEALTH, nextEnemy.health + 1);
+  }
 
+  const winnerCard = winner === "player" ? playerCard : enemyChoice.card;
+  const loserName = winner === "player" ? enemy.name : player.name;
   const clash: Clash = {
     round: nextPlayer.used.length,
+    first,
     playerCard,
     enemyCard: enemyChoice.card,
     playerAttack,
@@ -232,13 +266,14 @@ function resolve(
     boostedDamage: damageBoost,
     winner,
     damage,
-    text:
-      winner === "player"
-        ? `${playerCard.name} попадает по лидеру соперника: ${damage} урона`
-        : `${enemyChoice.card.name} пробивает защиту: ${damage} урона`,
+    text: `${winnerCard.name} пробивает ${loserName}: ${damage} урона нанесено`,
   };
 
-  return { nextPlayer, nextEnemy, clash };
+  return { clash, nextPlayer, nextEnemy };
+}
+
+function otherSide(side: Side): Side {
+  return side === "player" ? "enemy" : "player";
 }
 
 export default function Home() {
@@ -247,16 +282,23 @@ export default function Home() {
   const [selectedId, setSelectedId] = useState(playerIds[0]);
   const [energy, setEnergy] = useState(1);
   const [damageBoost, setDamageBoost] = useState(false);
-  const [first, setFirst] = useState<"player" | "enemy">("player");
+  const [first, setFirst] = useState<Side>("player");
   const [history, setHistory] = useState<Clash[]>([]);
   const [lastClash, setLastClash] = useState<Clash | null>(null);
+  const [pending, setPending] = useState<Outcome | null>(null);
+  const [phase, setPhase] = useState<Phase>("ready");
 
-  const round = player.used.length + 1;
   const selected = player.hand.find((card) => card.id === selectedId)!;
   const boostCost = damageBoost ? 3 : 0;
-  const canBoost = player.energy >= energy + 3;
-  const finished = player.health <= 0 || enemy.health <= 0 || round > 4;
-  const preview = score(selected, energy, first === "player");
+  const maxEnergyForCard = Math.max(0, player.energy - boostCost);
+  const selectedEnergy = Math.min(energy, maxEnergyForCard);
+  const canBoost = !damageBoost ? player.energy >= selectedEnergy + 3 : true;
+  const busy = pending !== null;
+  const finished = player.health <= 0 || enemy.health <= 0 || player.used.length >= 4;
+  const activeClash = pending?.clash ?? lastClash;
+  const preview = score(selected, selectedEnergy, first === "player");
+  const previewDamage = selected.damage + (damageBoost ? 2 : 0);
+  const roundLabel = Math.min(player.used.length + 1, 4);
 
   const verdict = useMemo(() => {
     if (!finished) return "";
@@ -264,20 +306,41 @@ export default function Home() {
     return player.health > enemy.health ? "Победа игрока" : "Победа соперника";
   }, [enemy.health, finished, player.health]);
 
-  function play() {
-    if (finished || player.used.includes(selected.id)) return;
-    const effectiveBoost = damageBoost && player.energy >= energy + 3;
-    const { nextPlayer, nextEnemy, clash } = resolve(player, enemy, selected, energy, effectiveBoost, first);
-    setPlayer(nextPlayer);
-    setEnemy(nextEnemy);
-    setHistory((items) => [clash, ...items]);
-    setLastClash(clash);
-    setFirst((value) => (value === "player" ? "enemy" : "player"));
+  useEffect(() => {
+    if (!pending) return;
 
-    const next = nextPlayer.hand.find((card) => !nextPlayer.used.includes(card.id));
-    if (next) setSelectedId(next.id);
-    setEnergy(Math.min(1, nextPlayer.energy));
-    setDamageBoost(false);
+    if (phase === "exchange") {
+      const timer = window.setTimeout(() => setPhase("damage"), 1900);
+      return () => window.clearTimeout(timer);
+    }
+
+    if (phase === "damage") {
+      const timer = window.setTimeout(() => {
+        setPlayer(pending.nextPlayer);
+        setEnemy(pending.nextEnemy);
+        setHistory((items) => [pending.clash, ...items]);
+        setLastClash(pending.clash);
+        setFirst((value) => otherSide(value));
+
+        const nextCard = pending.nextPlayer.hand.find((card) => !pending.nextPlayer.used.includes(card.id));
+        if (nextCard) setSelectedId(nextCard.id);
+        setEnergy(Math.min(1, pending.nextPlayer.energy));
+        setDamageBoost(false);
+        setPending(null);
+        setPhase("summary");
+      }, 1100 + pending.clash.damage * 220);
+
+      return () => window.clearTimeout(timer);
+    }
+  }, [pending, phase]);
+
+  function play() {
+    if (busy || finished || player.used.includes(selected.id)) return;
+    const effectiveBoost = damageBoost && player.energy >= selectedEnergy + 3;
+    const outcome = resolveRound(player, enemy, selected, selectedEnergy, effectiveBoost, first);
+    setPending(outcome);
+    setLastClash(outcome.clash);
+    setPhase("exchange");
   }
 
   function reset() {
@@ -289,78 +352,96 @@ export default function Home() {
     setFirst(Math.random() > 0.5 ? "player" : "enemy");
     setHistory([]);
     setLastClash(null);
+    setPending(null);
+    setPhase("ready");
   }
+
+  function toggleBoost() {
+    if (busy || finished) return;
+    if (!damageBoost) {
+      if (!canBoost) return;
+      setEnergy((value) => Math.min(value, Math.max(0, player.energy - 3)));
+      setDamageBoost(true);
+    } else {
+      setDamageBoost(false);
+    }
+  }
+
+  const arenaText = getArenaText(phase, activeClash, finished, verdict);
 
   return (
     <main className={styles.scene}>
       <div className={styles.city} />
       <section className={styles.topbar}>
-        <FighterHud fighter={enemy} side="enemy" active={first === "enemy"} />
+        <FighterHud fighter={enemy} side="enemy" active={first === "enemy" && !finished} />
         <div className={styles.roundPlate}>
-          <span>Раунд {Math.min(round, 4)}/4</span>
-          <strong>{verdict || (first === "player" ? "Твой ход первый" : "Соперник первый")}</strong>
+          <span>Раунд {roundLabel}/4</span>
+          <strong data-testid="round-status">
+            {verdict || (first === "player" ? "Твой ход первый" : "Соперник первый")}
+          </strong>
         </div>
-        <button className={styles.reset} onClick={reset}>Новый бой</button>
+        <button className={styles.reset} onClick={reset}>
+          Новый бой
+        </button>
       </section>
 
-      <Hand cards={enemy.hand} used={enemy.used} owner="enemy" selectedId={lastClash?.enemyCard.id} />
+      <Hand cards={enemy.hand} used={enemy.used} owner="enemy" selectedId={activeClash?.enemyCard.id} />
 
       <section className={styles.arena}>
         <div className={styles.activeSlot}>
-          {lastClash ? <BattleCard card={lastClash.enemyCard} compact /> : <div className={styles.emptyCard}>?</div>}
+          {activeClash ? <BattleCard card={activeClash.enemyCard} compact /> : <div className={styles.emptyCard}>?</div>}
         </div>
 
-        <div className={styles.exchange}>
+        <div className={styles.exchange} data-phase={phase}>
           <div className={styles.scoreLine}>
-            <span>{lastClash?.enemyAttack ?? "?"}</span>
+            <span>{activeClash?.enemyAttack ?? "?"}</span>
             <b>атака</b>
-            <span>{lastClash?.playerAttack ?? preview.attack}</span>
+            <span>{activeClash?.playerAttack ?? preview.attack}</span>
           </div>
-          <div className={styles.projectiles} data-winner={lastClash?.winner ?? "idle"}>
-            {Array.from({ length: Math.max(3, Math.min(8, lastClash?.damage ?? selected.damage)) }).map((_, index) => (
-              <i key={index} style={{ "--i": index } as React.CSSProperties} />
-            ))}
-          </div>
-          <p>{lastClash ? lastClash.text : "Выбери бойца, вложи энергию и выпусти его на улицу."}</p>
+
+          <AttackAnimation clash={activeClash} phase={phase} first={activeClash?.first ?? first} />
+
+          <p>{arenaText}</p>
         </div>
 
         <div className={styles.activeSlot}>
-          <BattleCard card={selected} compact />
+          <BattleCard card={activeClash?.playerCard ?? selected} compact />
         </div>
       </section>
 
       <section className={styles.command}>
-        <FighterHud fighter={player} side="player" active={first === "player"} />
+        <FighterHud fighter={player} side="player" active={first === "player" && !finished} />
         <div className={styles.controls}>
           <div className={styles.selectedTitle}>
             <span>{selected.clan}</span>
             <strong>{selected.name}</strong>
           </div>
-          <label>
-            <span>Энергия: {energy}</span>
-            <input
-              type="range"
-              min="0"
-              max={Math.max(0, player.energy - boostCost)}
-              value={Math.min(energy, Math.max(0, player.energy - boostCost))}
-              onChange={(event) => setEnergy(Number(event.target.value))}
-              disabled={finished}
-            />
-          </label>
-          <label className={styles.boost}>
-            <input
-              type="checkbox"
-              checked={damageBoost && canBoost}
-              onChange={(event) => setDamageBoost(event.target.checked)}
-              disabled={!canBoost || finished}
-            />
-            <span>+2 урона за 3 энергии</span>
-          </label>
-          <div className={styles.formula}>
-            <span>Атака {preview.attack}</span>
-            <span>Урон {selected.damage + (damageBoost && canBoost ? 2 : 0)}</span>
+
+          <EnergyPicker
+            value={selectedEnergy}
+            max={maxEnergyForCard}
+            disabled={busy || finished}
+            onChange={(value) => setEnergy(value)}
+          />
+
+          <button
+            type="button"
+            className={`${styles.boostButton} ${damageBoost ? styles.boostOn : ""}`}
+            disabled={busy || finished || (!damageBoost && !canBoost)}
+            onClick={toggleBoost}
+          >
+            <span>+2 урона</span>
+            <small>3 энергии</small>
+          </button>
+
+          <div className={styles.combatPreview}>
+            <b>Атака {preview.attack}</b>
+            <b>Урон {previewDamage}</b>
           </div>
-          <button className={styles.play} onClick={play} disabled={finished}>Сыграть</button>
+
+          <button className={styles.play} onClick={play} disabled={busy || finished}>
+            {busy ? "Бой..." : "Сыграть"}
+          </button>
         </div>
       </section>
 
@@ -369,8 +450,10 @@ export default function Home() {
         used={player.used}
         owner="player"
         selectedId={selectedId}
-        onPick={(card) => setSelectedId(card.id)}
-        disabled={finished}
+        onPick={(card) => {
+          if (!busy) setSelectedId(card.id);
+        }}
+        disabled={busy || finished}
       />
 
       <section className={styles.log}>
@@ -392,7 +475,20 @@ export default function Home() {
   );
 }
 
-function FighterHud({ fighter, side, active }: { fighter: Fighter; side: "player" | "enemy"; active: boolean }) {
+function getArenaText(phase: Phase, clash: Clash | null, finished: boolean, verdict: string) {
+  if (!clash) return "Выбери бойца, вложи энергию и выпусти его на улицу.";
+  if (phase === "exchange") {
+    return `Обмен ударами: ${clash.playerCard.name} ${clash.playerAttack} против ${clash.enemyCard.name} ${clash.enemyAttack}.`;
+  }
+  if (phase === "damage") {
+    const winner = clash.winner === "player" ? clash.playerCard.name : clash.enemyCard.name;
+    return `${winner} победил. ${clash.damage} урона нанесено.`;
+  }
+  if (finished) return `${verdict}. ${clash.damage} урона нанесено.`;
+  return `${clash.damage} урона нанесено. Выбирай следующую карту.`;
+}
+
+function FighterHud({ fighter, side, active }: { fighter: Fighter; side: Side; active: boolean }) {
   return (
     <article className={`${styles.hud} ${styles[side]} ${active ? styles.active : ""}`}>
       <div className={styles.avatar}>
@@ -403,10 +499,112 @@ function FighterHud({ fighter, side, active }: { fighter: Fighter; side: "player
         <strong>{fighter.name}</strong>
       </div>
       <div className={styles.meters}>
-        <b>Жизни {fighter.health}</b>
-        <b>Энергия {fighter.energy}</b>
+        <PillMeter label="Жизни" value={fighter.health} max={MAX_HEALTH} tone="health" />
+        <PillMeter label="Энергия" value={fighter.energy} max={MAX_ENERGY} tone="energy" />
       </div>
     </article>
+  );
+}
+
+function PillMeter({
+  label,
+  value,
+  max,
+  tone,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  tone: "health" | "energy";
+}) {
+  return (
+    <div className={`${styles.pillMeter} ${styles[tone]}`}>
+      <span>
+        {label} {value}
+      </span>
+      <div>
+        {Array.from({ length: max }).map((_, index) => (
+          <i key={index} className={index < value ? styles.pillOn : ""} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EnergyPicker({
+  value,
+  max,
+  disabled,
+  onChange,
+}: {
+  value: number;
+  max: number;
+  disabled: boolean;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className={styles.energyPicker}>
+      <span>
+        Энергия в карту: <b>{value}</b>
+      </span>
+      <div className={styles.energyButtons}>
+        <button type="button" disabled={disabled} onClick={() => onChange(0)} className={value === 0 ? styles.energyZeroOn : ""}>
+          0
+        </button>
+        {Array.from({ length: MAX_ENERGY }).map((_, index) => {
+          const amount = index + 1;
+          return (
+            <button
+              key={amount}
+              type="button"
+              disabled={disabled || amount > max}
+              className={amount <= value ? styles.energySelected : ""}
+              onClick={() => onChange(amount)}
+              aria-label={`${amount} энергии`}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AttackAnimation({ clash, phase, first }: { clash: Clash | null; phase: Phase; first: Side }) {
+  if (!clash || phase === "ready" || phase === "summary") {
+    return (
+      <div className={styles.attackTrack} data-phase="idle">
+        <span className={styles.trackHint}>готово</span>
+      </div>
+    );
+  }
+
+  if (phase === "exchange") {
+    return (
+      <div className={styles.attackTrack} data-phase="exchange">
+        {Array.from({ length: EXCHANGE_THROWS }).map((_, index) => {
+          const from = index % 2 === 0 ? first : otherSide(first);
+          return <Projectile key={`${clash.round}-exchange-${index}`} from={from} index={index} mode="exchange" />;
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.attackTrack} data-phase="damage">
+      <strong className={styles.damageCaption}>{clash.damage} урона нанесено</strong>
+      {Array.from({ length: clash.damage }).map((_, index) => (
+        <Projectile key={`${clash.round}-damage-${index}`} from={clash.winner} index={index} mode="damage" />
+      ))}
+    </div>
+  );
+}
+
+function Projectile({ from, index, mode }: { from: Side; index: number; mode: "exchange" | "damage" }) {
+  return (
+    <i
+      className={`${styles.projectile} ${styles[mode]} ${from === "player" ? styles.fromPlayer : styles.fromEnemy}`}
+      style={{ "--i": index } as React.CSSProperties}
+    />
   );
 }
 
@@ -420,7 +618,7 @@ function Hand({
 }: {
   cards: Card[];
   used: string[];
-  owner: "player" | "enemy";
+  owner: Side;
   selectedId?: string;
   onPick?: (card: Card) => void;
   disabled?: boolean;
@@ -452,7 +650,10 @@ function Hand({
 
 function BattleCard({ card, compact = false }: { card: Card; compact?: boolean }) {
   return (
-    <article className={`${styles.battleCard} ${compact ? styles.compact : ""}`} style={{ "--accent": card.accent } as React.CSSProperties}>
+    <article
+      className={`${styles.battleCard} ${compact ? styles.compact : ""}`}
+      style={{ "--accent": card.accent } as React.CSSProperties}
+    >
       <div className={styles.cardTop}>
         <span>{card.rarity}</span>
         <b>{card.clan}</b>
