@@ -420,6 +420,8 @@ export default function Home() {
           <EnergyPicker
             value={selectedEnergy}
             max={maxEnergyForCard}
+            total={player.energy}
+            boostReserved={boostCost}
             disabled={busy || finished}
             onChange={(value) => setEnergy(value)}
           />
@@ -534,33 +536,46 @@ function PillMeter({
 function EnergyPicker({
   value,
   max,
+  total,
+  boostReserved,
   disabled,
   onChange,
 }: {
   value: number;
   max: number;
+  total: number;
+  boostReserved: number;
   disabled: boolean;
   onChange: (value: number) => void;
 }) {
   return (
     <div className={styles.energyPicker}>
-      <span>
-        Энергия в карту: <b>{value}</b>
-      </span>
+      <div className={styles.energyHeader}>
+        <span>
+          Энергия в карту: <b>{value}</b>
+        </span>
+        <small>
+          доступно {max} / всего {total}
+          {boostReserved > 0 ? `, урон держит ${boostReserved}` : ""}
+        </small>
+      </div>
       <div className={styles.energyButtons}>
         <button type="button" disabled={disabled} onClick={() => onChange(0)} className={value === 0 ? styles.energyZeroOn : ""}>
           0
         </button>
         {Array.from({ length: MAX_ENERGY }).map((_, index) => {
           const amount = index + 1;
+          const state =
+            amount <= value ? styles.energySelected : amount <= max ? styles.energyAvailable : styles.energyUnavailable;
           return (
             <button
               key={amount}
               type="button"
               disabled={disabled || amount > max}
-              className={amount <= value ? styles.energySelected : ""}
+              className={state}
               onClick={() => onChange(amount)}
               aria-label={`${amount} энергии`}
+              title={amount <= max ? `${amount} энергии` : `Недоступно: всего ${total}`}
             />
           );
         })}
