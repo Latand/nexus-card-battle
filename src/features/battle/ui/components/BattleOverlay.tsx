@@ -4,6 +4,7 @@ import { DAMAGE_THROWS_CAP, EXCHANGE_THROWS, MAX_ENERGY, MAX_HEALTH } from "../.
 import { otherSide } from "../../model/game";
 import type { Clash, Fighter, Outcome, Phase, Side } from "../../model/types";
 import { BattleCard } from "./BattleCard";
+import { ResourcePills } from "./ResourceCounter";
 
 export function BattleOverlay({
   outcome,
@@ -110,7 +111,7 @@ function DuelBar({ label, value, max, tone }: { label: string; value: number; ma
   return (
     <div className="relative grid min-h-[18px] grid-cols-[54px_minmax(0,1fr)_28px] items-center gap-1.5 max-[760px]:grid-cols-[38px_minmax(0,1fr)_22px] max-[620px]:grid-cols-[minmax(0,1fr)_20px]">
       <span className="text-[10px] font-black uppercase text-[#fff7d6] [text-shadow:0_1px_0_#000] max-[620px]:hidden">{label}</span>
-      <i className="relative h-3 overflow-hidden rounded-full border-2 border-[#0d1411] bg-black/60 shadow-[inset_0_2px_4px_rgba(0,0,0,0.55)] before:absolute before:inset-y-0 before:left-0 before:w-[var(--value)] before:rounded-full before:transition-[width] before:duration-500 before:content-[''] data-[tone=energy]:before:bg-[linear-gradient(180deg,#fff1a2,#e7ae2d_48%,#a96318)] data-[tone=energy]:before:shadow-[0_0_10px_rgba(255,215,83,0.62)] data-[tone=health]:before:bg-[linear-gradient(180deg,#cffd93,#53ca5a_45%,#24823c)] data-[tone=health]:before:shadow-[0_0_10px_rgba(99,230,85,0.68)]" data-tone={tone} style={{ "--value": `${Math.max(0, Math.min(100, (value / max) * 100))}%` } as CSSProperties} />
+      <ResourcePills value={value} max={max} tone={tone} dense />
       <b className="text-[10px] font-black uppercase text-[#fff7d6] [text-shadow:0_1px_0_#000]">{value}</b>
     </div>
   );

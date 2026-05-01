@@ -21,7 +21,6 @@ export function BattleGame() {
   const [energy, setEnergy] = useState(1);
   const [damageBoost, setDamageBoost] = useState(false);
   const [first, setFirst] = useState<Side>("player");
-  const [history, setHistory] = useState<Clash[]>([]);
   const [lastClash, setLastClash] = useState<Clash | null>(null);
   const [pending, setPending] = useState<Outcome | null>(null);
   const [phase, setPhase] = useState<Phase>("ready");
@@ -58,7 +57,6 @@ export function BattleGame() {
       const timer = window.setTimeout(() => {
         setPlayer(pending.nextPlayer);
         setEnemy(pending.nextEnemy);
-        setHistory((items) => [pending.clash, ...items]);
         setLastClash(pending.clash);
         setFirst((value) => otherSide(value));
 
@@ -91,7 +89,6 @@ export function BattleGame() {
     setEnergy(1);
     setDamageBoost(false);
     setFirst(Math.random() > 0.5 ? "player" : "enemy");
-    setHistory([]);
     setLastClash(null);
     setPending(null);
     setPhase("ready");
@@ -191,38 +188,6 @@ export function BattleGame() {
         </button>
       </section>
 
-      <section className="mx-auto mt-2 block w-[min(1240px,100%)]">
-        <div className="grid grid-cols-[minmax(160px,220px)_minmax(160px,1fr)_112px] items-center gap-3 rounded-lg border-2 border-[rgba(244,190,77,0.5)] bg-[linear-gradient(135deg,rgba(41,32,29,0.96),rgba(18,17,20,0.94)),repeating-linear-gradient(135deg,rgba(255,255,255,0.06)_0_1px,transparent_1px_8px)] p-3 shadow-[0_14px_36px_rgba(0,0,0,0.42),inset_0_0_0_1px_rgba(255,255,255,0.08)] max-[960px]:grid-cols-[minmax(140px,190px)_minmax(150px,1fr)_96px] max-[760px]:grid-cols-1">
-          <div>
-            <span className="text-[11px] font-black uppercase tracking-[0.08em] text-[#d8bd82]">{selected.clan}</span>
-            <strong className="mt-0.5 block text-[22px]">{selected.name}</strong>
-          </div>
-          <div className="grid gap-[5px] max-[960px]:hidden">
-            <b className="min-w-[78px] rounded-md bg-black/30 px-2 py-1.5 text-center text-[13px] text-[#fff8df]">Атака {preview.attack}</b>
-            <b className="min-w-[78px] rounded-md bg-black/30 px-2 py-1.5 text-center text-[13px] text-[#fff8df]">Урон {previewDamage}</b>
-          </div>
-          <button className="min-h-11 cursor-pointer rounded-lg border-2 border-[#ffe08a] bg-[linear-gradient(180deg,#ffe08a,#c98326)] px-[18px] font-black text-[#18100d] shadow-[0_10px_24px_rgba(0,0,0,0.36)] disabled:cursor-not-allowed disabled:opacity-45" onClick={() => setSelectionOpen(true)} disabled={busy || finished}>
-            Выбор
-          </button>
-        </div>
-      </section>
-
-      <section className="mx-auto mt-2 grid w-[min(1240px,100%)] origin-top scale-[0.92] grid-cols-4 gap-2 rounded-lg border-2 border-[rgba(244,190,77,0.5)] bg-[linear-gradient(135deg,rgba(41,32,29,0.96),rgba(18,17,20,0.94)),repeating-linear-gradient(135deg,rgba(255,255,255,0.06)_0_1px,transparent_1px_8px)] p-2.5 shadow-[0_14px_36px_rgba(0,0,0,0.42),inset_0_0_0_1px_rgba(255,255,255,0.08)] max-[760px]:grid-cols-1">
-        {history.length === 0 ? (
-          <span className="min-h-[58px] rounded-md bg-black/30 p-2 text-[#e4d8bf]">Лог пуст. Первый бросок решит темп боя.</span>
-        ) : (
-          history.map((item) => (
-            <article key={item.round} className="min-h-[58px] rounded-md bg-black/30 p-2">
-              <b className="block text-[#ffe08a]">Раунд {item.round}</b>
-              <span className="block leading-tight text-[#e4d8bf]">
-                {item.playerCard.name} [{item.playerAttack}] против {item.enemyCard.name} [{item.enemyAttack}]
-              </span>
-              <small className="block leading-tight text-[#e4d8bf]">{item.text}</small>
-            </article>
-          ))
-        )}
-      </section>
-
       {selectionOpen && !busy && !finished ? (
         <SelectionOverlay
           selected={selected}
@@ -264,16 +229,16 @@ function getArenaText(phase: Phase, clash: Clash | null, finished: boolean, verd
 function topBarClass() {
   return cn(
     barShellClass(),
-    "mt-0.5 grid-cols-[120px_84px_minmax(190px,1fr)_84px_94px]",
-    "max-[960px]:grid-cols-[92px_72px_minmax(150px,1fr)_72px_72px] max-[760px]:grid-cols-[74px_58px_minmax(0,1fr)_58px_68px] max-[620px]:grid-cols-[58px_48px_minmax(0,1fr)_48px_56px]",
+    "mt-0.5 grid-cols-[120px_178px_minmax(190px,1fr)_178px_94px]",
+    "max-[960px]:grid-cols-[92px_142px_minmax(150px,1fr)_142px_72px] max-[760px]:grid-cols-[74px_96px_minmax(0,1fr)_96px_68px] max-[620px]:grid-cols-[58px_78px_minmax(0,1fr)_78px_56px]",
   );
 }
 
 function bottomBarClass() {
   return cn(
     barShellClass(),
-    "mt-[-20px] grid-cols-[112px_84px_minmax(190px,1fr)_84px_112px] border-[rgba(244,190,77,0.68)]",
-    "max-[960px]:grid-cols-[92px_72px_minmax(150px,1fr)_72px_72px] max-[760px]:grid-cols-[74px_58px_minmax(0,1fr)_58px_68px] max-[620px]:grid-cols-[58px_48px_minmax(0,1fr)_48px_56px]",
+    "mt-[-20px] grid-cols-[112px_178px_minmax(190px,1fr)_178px_112px] border-[rgba(244,190,77,0.68)]",
+    "max-[960px]:grid-cols-[92px_142px_minmax(150px,1fr)_142px_72px] max-[760px]:grid-cols-[74px_96px_minmax(0,1fr)_96px_68px] max-[620px]:grid-cols-[58px_78px_minmax(0,1fr)_78px_56px]",
   );
 }
 
