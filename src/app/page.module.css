@@ -9,12 +9,20 @@
 }
 
 .city {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: -2;
-  background:
+  min-height: 100%;
+  background-image:
     linear-gradient(180deg, rgba(18, 15, 18, 0.18), rgba(18, 15, 18, 0.64) 62%, #120f12),
-    url("/generated/klanz-battle-bg.png") center / cover no-repeat;
+    url("/generated/klanz-battle-bg.png");
+  background-position:
+    center,
+    center top;
+  background-repeat: no-repeat;
+  background-size:
+    100% 100%,
+    cover;
 }
 
 .city::before {
@@ -691,6 +699,12 @@
 }
 
 @media (max-width: 960px) {
+  .city {
+    background-size:
+      100% 100%,
+      100% 100%;
+  }
+
   .command {
     grid-template-columns: minmax(210px, 232px) minmax(0, 1fr);
   }
