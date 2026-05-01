@@ -48,7 +48,8 @@
   transform: skewY(-4deg);
 }
 
-.topbar,
+.matchBar,
+.playerBar,
 .hand,
 .arena,
 .command,
@@ -57,11 +58,142 @@
   margin-inline: auto;
 }
 
-.topbar {
+.matchBar,
+.playerBar {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto auto;
-  gap: 12px;
+  grid-template-columns: 120px 84px minmax(190px, 1fr) 84px 94px;
+  gap: 0;
   align-items: center;
+  min-height: 58px;
+  border: 2px solid rgba(73, 210, 231, 0.58);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(16, 24, 30, 0.94), rgba(11, 13, 17, 0.94)),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px 9px);
+  box-shadow:
+    0 16px 34px rgba(0, 0, 0, 0.42),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.matchBar {
+  margin-top: 2px;
+}
+
+.playerBar {
+  grid-template-columns: 112px 84px minmax(190px, 1fr) 84px 112px;
+  margin-top: -20px;
+  border-color: rgba(244, 190, 77, 0.68);
+}
+
+.timerPlate,
+.menuButton,
+.resetMini,
+.roundMarker,
+.resourceCounter,
+.namePlate {
+  min-height: 58px;
+  display: grid;
+  place-items: center;
+}
+
+.timerPlate,
+.menuButton,
+.resetMini,
+.roundMarker {
+  color: #fff8d8;
+  background: rgba(0, 0, 0, 0.34);
+  font-size: 14px;
+  font-weight: 1000;
+  text-transform: uppercase;
+}
+
+.menuButton,
+.resetMini {
+  border: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+}
+
+.menuButton:hover,
+.resetMini:hover {
+  color: #15100a;
+  background: linear-gradient(180deg, #ffe08a, #c98326);
+}
+
+.resourceCounter {
+  gap: 2px;
+  border-inline: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.resourceCounter span {
+  color: #c6d5d8;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.resourceCounter strong {
+  position: relative;
+  min-width: 46px;
+  min-height: 26px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: #111;
+  font-size: 20px;
+  line-height: 1;
+  box-shadow:
+    inset 0 -4px 0 rgba(0, 0, 0, 0.18),
+    0 0 14px rgba(255, 255, 255, 0.18);
+}
+
+.resourceCounter.energy strong {
+  background: linear-gradient(180deg, #ffe889, #d99a22);
+}
+
+.resourceCounter.health strong {
+  background: linear-gradient(180deg, #b9f56c, #3fad48);
+}
+
+.namePlate {
+  position: relative;
+  background:
+    linear-gradient(90deg, rgba(73, 210, 231, 0.16), rgba(0, 0, 0, 0.42), rgba(73, 210, 231, 0.16));
+}
+
+.playerName {
+  background:
+    linear-gradient(90deg, rgba(244, 190, 77, 0.2), rgba(0, 0, 0, 0.42), rgba(244, 190, 77, 0.2));
+}
+
+.namePlate::before,
+.namePlate::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 34px;
+  height: 100%;
+  background: linear-gradient(135deg, transparent 0 48%, rgba(73, 210, 231, 0.72) 49% 55%, transparent 56%);
+}
+
+.namePlate::before {
+  left: -10px;
+}
+
+.namePlate::after {
+  right: -10px;
+  transform: scaleX(-1);
+}
+
+.namePlate strong {
+  z-index: 1;
+  color: #f4fbff;
+  font-size: 24px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .hud,
@@ -221,7 +353,7 @@
 }
 
 .playerHand {
-  margin-top: 8px;
+  margin-top: -20px;
   transform: scale(0.86);
   transform-origin: top center;
 }
@@ -402,6 +534,21 @@
   padding: 0;
 }
 
+.readyArena {
+  grid-template-columns: minmax(260px, 760px);
+  justify-content: center;
+  min-height: 178px;
+  margin-top: -20px;
+}
+
+.readyArena .exchange {
+  width: min(760px, 100%);
+}
+
+.duelArena {
+  grid-template-columns: minmax(170px, 230px) minmax(260px, 1fr) minmax(170px, 230px);
+}
+
 .activeSlot {
   display: grid;
   place-items: center;
@@ -454,6 +601,20 @@
   color: #fff8d4;
   font-size: 13px;
   letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.turnBanner {
+  min-width: 210px;
+  padding: 0 18px;
+  color: #49ff38;
+  font-size: clamp(26px, 3.2vw, 42px);
+  font-weight: 1000;
+  line-height: 1;
+  text-align: center;
+  text-shadow:
+    0 0 12px rgba(73, 255, 56, 0.8),
+    0 2px 0 rgba(0, 0, 0, 0.55);
   text-transform: uppercase;
 }
 
@@ -540,19 +701,8 @@
 }
 
 .command {
-  display: grid;
-  grid-template-columns: minmax(218px, 236px) minmax(0, 1fr);
-  gap: 12px;
-  align-items: stretch;
-  margin-top: -8px;
-}
-
-.command .hud {
-  grid-template-columns: 54px minmax(0, 1fr);
-}
-
-.command .meters {
-  grid-column: 1 / -1;
+  display: block;
+  margin-top: 8px;
 }
 
 .controls {
@@ -705,8 +855,29 @@
       100% 100%;
   }
 
-  .command {
-    grid-template-columns: minmax(210px, 232px) minmax(0, 1fr);
+  .matchBar,
+  .playerBar {
+    grid-template-columns: 92px 72px minmax(150px, 1fr) 72px 72px;
+  }
+
+  .timerPlate,
+  .menuButton,
+  .resetMini,
+  .roundMarker,
+  .resourceCounter,
+  .namePlate {
+    min-height: 52px;
+  }
+
+  .namePlate strong {
+    font-size: 20px;
+  }
+
+  .timerPlate,
+  .menuButton,
+  .resetMini,
+  .roundMarker {
+    font-size: 12px;
   }
 
   .controls {
@@ -722,7 +893,7 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-  margin-top: -18px;
+  margin-top: 8px;
   padding: 10px;
   border-radius: 8px;
   transform: scale(0.92);
@@ -789,8 +960,46 @@
 }
 
 @media (max-width: 760px) {
-  .topbar,
-  .command,
+  .matchBar,
+  .playerBar {
+    grid-template-columns: 74px 58px minmax(0, 1fr) 58px 68px;
+    border-radius: 6px;
+  }
+
+  .timerPlate,
+  .menuButton,
+  .resetMini,
+  .roundMarker,
+  .resourceCounter,
+  .namePlate {
+    min-height: 46px;
+  }
+
+  .timerPlate,
+  .menuButton,
+  .resetMini,
+  .roundMarker {
+    font-size: 10px;
+  }
+
+  .resourceCounter {
+    gap: 0;
+  }
+
+  .resourceCounter span {
+    display: none;
+  }
+
+  .resourceCounter strong {
+    min-width: 36px;
+    min-height: 24px;
+    font-size: 17px;
+  }
+
+  .namePlate strong {
+    font-size: 16px;
+  }
+
   .arena {
     grid-template-columns: 1fr;
   }
@@ -804,6 +1013,11 @@
   }
 
   .enemyHand {
+    transform: none;
+  }
+
+  .playerHand {
+    margin-top: 8px;
     transform: none;
   }
 
@@ -834,19 +1048,33 @@
 
 @media (max-width: 620px) {
   .scene {
-    padding: 12px;
+    padding: 8px;
+  }
+
+  .matchBar,
+  .playerBar {
+    grid-template-columns: 58px 48px minmax(0, 1fr) 48px 56px;
+  }
+
+  .timerPlate,
+  .menuButton,
+  .resetMini,
+  .roundMarker {
+    font-size: 9px;
+  }
+
+  .namePlate strong {
+    font-size: 13px;
+  }
+
+  .resourceCounter strong {
+    min-width: 31px;
+    min-height: 22px;
+    font-size: 15px;
   }
 
   .hand {
     grid-template-columns: 1fr;
-  }
-
-  .hud {
-    grid-template-columns: 52px 1fr;
-  }
-
-  .meters {
-    grid-column: 1 / -1;
   }
 
   .compact,

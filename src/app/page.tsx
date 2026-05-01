@@ -6,6 +6,7 @@ import styles from "./page.module.css";
 const MAX_HEALTH = 12;
 const MAX_ENERGY = 12;
 const EXCHANGE_THROWS = 6;
+const TURN_SECONDS = 75;
 
 type Side = "player" | "enemy";
 type Phase = "ready" | "exchange" | "damage" | "summary";
@@ -299,6 +300,7 @@ export default function Home() {
   const preview = score(selected, selectedEnergy, first === "player");
   const previewDamage = selected.damage + (damageBoost ? 2 : 0);
   const roundLabel = Math.min(player.used.length + 1, 4);
+  const showDuel = pending !== null;
 
   const verdict = useMemo(() => {
     if (!finished) return "";
@@ -372,27 +374,31 @@ export default function Home() {
   return (
     <main className={styles.scene}>
       <div className={styles.city} />
-      <section className={styles.topbar}>
-        <FighterHud fighter={enemy} side="enemy" active={first === "enemy" && !finished} />
-        <div className={styles.roundPlate}>
-          <span>Раунд {roundLabel}/4</span>
-          <strong data-testid="round-status">
-            {verdict || (first === "player" ? "Твой ход первый" : "Соперник первый")}
-          </strong>
+      <section className={styles.matchBar}>
+        <div className={styles.timerPlate}>⌛ {TURN_SECONDS} сек</div>
+        <ResourceCounter label="Энергия" value={enemy.energy} tone="energy" />
+        <div className={styles.namePlate}>
+          <strong>{enemy.name}</strong>
         </div>
-        <button className={styles.reset} onClick={reset}>
-          Новый бой
+        <ResourceCounter label="Жизни" value={enemy.health} tone="health" />
+        <button className={styles.menuButton} type="button">
+          Меню
         </button>
       </section>
 
       <Hand cards={enemy.hand} used={enemy.used} owner="enemy" selectedId={activeClash?.enemyCard.id} />
 
-      <section className={styles.arena}>
-        <div className={styles.activeSlot}>
-          {activeClash ? <BattleCard card={activeClash.enemyCard} compact /> : <div className={styles.emptyCard}>?</div>}
-        </div>
+      <section className={`${styles.arena} ${showDuel ? styles.duelArena : styles.readyArena}`}>
+        {showDuel ? (
+          <div className={styles.activeSlot}>
+            <BattleCard card={pending.clash.enemyCard} compact />
+          </div>
+        ) : null}
 
         <div className={styles.exchange} data-phase={phase}>
+          <strong className={styles.turnBanner} data-testid="round-status">
+            {verdict || (first === "player" ? "Твой ход" : "Ход соперника")}
+          </strong>
           <div className={styles.scoreLine}>
             <span>{activeClash?.enemyAttack ?? "?"}</span>
             <b>атака</b>
@@ -404,13 +410,37 @@ export default function Home() {
           <p>{arenaText}</p>
         </div>
 
-        <div className={styles.activeSlot}>
-          <BattleCard card={activeClash?.playerCard ?? selected} compact />
+        {showDuel ? (
+          <div className={styles.activeSlot}>
+            <BattleCard card={pending.clash.playerCard} compact />
+          </div>
+        ) : null}
+      </section>
+
+      <Hand
+        cards={player.hand}
+        used={player.used}
+        owner="player"
+        selectedId={selectedId}
+        onPick={(card) => {
+          if (!busy) setSelectedId(card.id);
+        }}
+        disabled={busy || finished}
+      />
+
+      <section className={styles.playerBar}>
+        <div className={styles.roundMarker}>Раунд {roundLabel}</div>
+        <ResourceCounter label="Энергия" value={player.energy} tone="energy" />
+        <div className={`${styles.namePlate} ${styles.playerName}`}>
+          <strong>{player.name}</strong>
         </div>
+        <ResourceCounter label="Жизни" value={player.health} tone="health" />
+        <button className={styles.resetMini} onClick={reset} type="button">
+          Новый бой
+        </button>
       </section>
 
       <section className={styles.command}>
-        <FighterHud fighter={player} side="player" active={first === "player" && !finished} />
         <div className={styles.controls}>
           <div className={styles.selectedTitle}>
             <span>{selected.clan}</span>
@@ -447,17 +477,6 @@ export default function Home() {
         </div>
       </section>
 
-      <Hand
-        cards={player.hand}
-        used={player.used}
-        owner="player"
-        selectedId={selectedId}
-        onPick={(card) => {
-          if (!busy) setSelectedId(card.id);
-        }}
-        disabled={busy || finished}
-      />
-
       <section className={styles.log}>
         {history.length === 0 ? (
           <span>Лог пуст. Первый бросок решит темп боя.</span>
@@ -477,6 +496,23 @@ export default function Home() {
   );
 }
 
+function ResourceCounter({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "health" | "energy";
+}) {
+  return (
+    <div className={`${styles.resourceCounter} ${styles[tone]}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
 function getArenaText(phase: Phase, clash: Clash | null, finished: boolean, verdict: string) {
   if (!clash) return "Выбери бойца, вложи энергию и выпусти его на улицу.";
   if (phase === "exchange") {
@@ -488,49 +524,6 @@ function getArenaText(phase: Phase, clash: Clash | null, finished: boolean, verd
   }
   if (finished) return `${verdict}. ${clash.damage} урона нанесено.`;
   return `${clash.damage} урона нанесено. Выбирай следующую карту.`;
-}
-
-function FighterHud({ fighter, side, active }: { fighter: Fighter; side: Side; active: boolean }) {
-  return (
-    <article className={`${styles.hud} ${styles[side]} ${active ? styles.active : ""}`}>
-      <div className={styles.avatar}>
-        <span>{side === "player" ? "Л" : "В"}</span>
-      </div>
-      <div>
-        <span>{fighter.title}</span>
-        <strong>{fighter.name}</strong>
-      </div>
-      <div className={styles.meters}>
-        <PillMeter label="Жизни" value={fighter.health} max={MAX_HEALTH} tone="health" />
-        <PillMeter label="Энергия" value={fighter.energy} max={MAX_ENERGY} tone="energy" />
-      </div>
-    </article>
-  );
-}
-
-function PillMeter({
-  label,
-  value,
-  max,
-  tone,
-}: {
-  label: string;
-  value: number;
-  max: number;
-  tone: "health" | "energy";
-}) {
-  return (
-    <div className={`${styles.pillMeter} ${styles[tone]}`}>
-      <span>
-        {label} {value}
-      </span>
-      <div>
-        {Array.from({ length: max }).map((_, index) => (
-          <i key={index} className={index < value ? styles.pillOn : ""} />
-        ))}
-      </div>
-    </div>
-  );
 }
 
 function EnergyPicker({

@@ -4,7 +4,10 @@ test("plays a complete staged battle", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.getByText("Соперник", { exact: true })).toBeVisible();
-  await expect(page.getByText("Раунд 1/4")).toBeVisible();
+  await expect(page.getByText("75 сек")).toBeVisible();
+  await expect(page.getByText("Меню")).toBeVisible();
+  await expect(page.getByText("Раунд 1")).toBeVisible();
+  await expect(page.getByTestId("round-status")).toContainText(/Твой ход|Ход соперника/);
   await expect(page.getByText("Выбери бойца, вложи энергию и выпусти его на улицу.")).toBeVisible();
   await expect(page.getByText("Энергия в карту:")).toBeVisible();
   const threeEnergy = page.getByRole("button", { exact: true, name: "3 энергии" });
