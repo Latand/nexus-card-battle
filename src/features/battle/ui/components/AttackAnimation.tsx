@@ -3,6 +3,7 @@ import { cn } from "@/shared/lib/cn";
 import { EXCHANGE_THROWS } from "../../model/constants";
 import { otherSide } from "../../model/game";
 import type { Clash, Phase, Side } from "../../model/types";
+import { ProjectileSprite } from "./ProjectileSprite";
 
 export function AttackAnimation({ clash, phase, first }: { clash: Clash | null; phase: Phase; first: Side }) {
   if (!clash || phase === "ready" || phase === "summary") {
@@ -20,7 +21,7 @@ export function AttackAnimation({ clash, phase, first }: { clash: Clash | null; 
       <div className="relative h-[78px] w-[min(420px,100%)] overflow-visible" data-phase="exchange">
         {Array.from({ length: EXCHANGE_THROWS }).map((_, index) => {
           const from = index % 2 === 0 ? first : otherSide(first);
-          return <Projectile key={`${clash.round}-exchange-${index}`} from={from} index={index} mode="exchange" />;
+          return <Projectile key={`${clash.round}-exchange-${index}`} from={from} index={index} kind={index} mode="exchange" />;
         })}
       </div>
     );
@@ -32,30 +33,45 @@ export function AttackAnimation({ clash, phase, first }: { clash: Clash | null; 
         {clash.damage} урона нанесено
       </strong>
       {Array.from({ length: clash.damage }).map((_, index) => (
-        <Projectile key={`${clash.round}-damage-${index}`} from={clash.winner} index={index} mode="damage" />
+        <Projectile key={`${clash.round}-damage-${index}`} from={clash.winner} index={index} kind={index + 1} mode="damage" />
       ))}
     </div>
   );
 }
 
-function Projectile({ from, index, mode }: { from: Side; index: number; mode: "exchange" | "damage" }) {
+function Projectile({
+  from,
+  index,
+  kind,
+  mode,
+}: {
+  from: Side;
+  index: number;
+  kind: number;
+  mode: "exchange" | "damage";
+}) {
+  const size = mode === "damage" ? 42 + (index % 3) * 8 : 46 + (index % 4) * 7;
+  const direction = from === "player" ? -1 : 1;
+
   return (
     <i
       className={cn(
-        "absolute h-[19px] w-8 rounded-[50%_50%_45%_45%] border-2 border-[rgba(255,245,204,0.82)] bg-[linear-gradient(90deg,#ffe08a,#d34b38)] opacity-0 shadow-[0_0_14px_rgba(255,196,79,0.58)] [animation-fill-mode:both] [animation-iteration-count:1] [animation-timing-function:cubic-bezier(0.2,0.8,0.35,1)]",
+        "absolute opacity-0 [animation-fill-mode:both] [animation-iteration-count:1] [animation-timing-function:cubic-bezier(0.2,0.8,0.35,1)]",
         from === "player" ? "animate-[klanz-throw-player_var(--duration)_var(--delay)_both]" : "animate-[klanz-throw-enemy_var(--duration)_var(--delay)_both]",
-        mode === "damage" &&
-          "top-[calc(12px+var(--i)*10px)] h-6 w-6 rounded-full bg-[radial-gradient(circle_at_35%_28%,#fff9cf_0_18%,#ffe08a_20%_48%,#df533f_50%_100%)]",
       )}
       style={
         {
           "--i": index % (mode === "damage" ? 5 : 4),
           "--duration": mode === "damage" ? "820ms" : "520ms",
           "--delay": mode === "damage" ? `${index * 220}ms` : `${index * 260}ms`,
+          width: `${size}px`,
+          height: `${size}px`,
           left: "calc(50% - 16px)",
           top: mode === "damage" ? `${12 + (index % 5) * 10}px` : `${14 + (index % 4) * 13}px`,
         } as CSSProperties
       }
-    />
+    >
+      <ProjectileSprite kind={kind} direction={direction} scale={mode === "damage" ? 1.12 : 1} />
+    </i>
   );
 }

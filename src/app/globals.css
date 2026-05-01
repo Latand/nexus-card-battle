@@ -71,6 +71,21 @@ a {
   }
 }
 
+@keyframes klanz-projectile-spin {
+  0% {
+    filter: brightness(1.02) saturate(1.08);
+    transform: scaleX(var(--sprite-flip)) rotate(0deg) scale(var(--sprite-scale));
+  }
+  48% {
+    filter: brightness(1.38) saturate(1.28);
+    transform: scaleX(var(--sprite-flip)) rotate(calc(var(--sprite-turn) / 2)) scale(calc(var(--sprite-scale) * 1.12));
+  }
+  100% {
+    filter: brightness(1.02) saturate(1.08);
+    transform: scaleX(var(--sprite-flip)) rotate(var(--sprite-turn)) scale(var(--sprite-scale));
+  }
+}
+
 @keyframes klanz-duel-throw-player {
   0% {
     opacity: 0;

@@ -4,6 +4,7 @@ import { DAMAGE_THROWS_CAP, EXCHANGE_THROWS, MAX_ENERGY } from "../../model/cons
 import { otherSide } from "../../model/game";
 import type { Clash, Fighter, Outcome, Phase, Side } from "../../model/types";
 import { BattleCard } from "./BattleCard";
+import { ProjectileSprite } from "./ProjectileSprite";
 import { ResourcePills } from "./ResourceCounter";
 
 export function BattleOverlay({
@@ -201,38 +202,28 @@ function DuelProjectile({
   kind: number;
   mode: "exchange" | "damage" | "finish";
 }) {
+  const size = mode === "finish" ? 104 : mode === "damage" ? 58 + (index % 3) * 12 : 52 + (index % 4) * 9;
+  const direction = from === "player" ? 1 : -1;
+
   return (
     <i
       className={cn(
         "absolute block opacity-0 drop-shadow-[0_7px_6px_rgba(0,0,0,0.55)] [animation-fill-mode:both] [animation-iteration-count:1] [animation-timing-function:cubic-bezier(0.18,0.86,0.26,1)]",
         from === "player" ? "animate-[klanz-duel-throw-player_var(--duration)_var(--delay)_both]" : "animate-[klanz-duel-throw-enemy_var(--duration)_var(--delay)_both]",
         mode === "finish" && "z-[2]",
-        kindClass(kind),
       )}
       style={
         {
           "--duration": mode === "exchange" ? "580ms" : mode === "damage" ? "820ms" : "1120ms",
           "--delay": mode === "exchange" ? `${index * 190}ms` : mode === "damage" ? `${index * 240}ms` : "420ms",
+          width: `${size}px`,
+          height: `${size}px`,
           top: `calc(34% + ${(index % 5) * 18}px)`,
           left: "calc(50% - 20px)",
         } as CSSProperties
       }
-    />
+    >
+      <ProjectileSprite kind={kind} direction={direction} scale={mode === "finish" ? 1.18 : 1} />
+    </i>
   );
-}
-
-function kindClass(kind: number) {
-  if (kind === 0) {
-    return "h-[18px] w-[46px] rounded-[6px_999px_999px_6px] border-2 border-[#30201a] bg-[radial-gradient(circle_at_78%_50%,#ffef80_0_16%,transparent_18%),linear-gradient(90deg,#70756e_0_18%,#e73e35_19%_48%,#f1c536_49%_70%,#4fae6a_71%)]";
-  }
-  if (kind === 1) {
-    return "h-[34px] w-[34px] rounded-full border-[3px] border-[#25302b] bg-[radial-gradient(circle_at_center,#262b2b_0_20%,transparent_22%),conic-gradient(from_20deg,#ffdd68,#d24f3e,#45bb78,#ffdd68)]";
-  }
-  if (kind === 2) {
-    return "h-[30px] w-[42px] bg-[linear-gradient(135deg,#fff8bb,#eac240_42%,#de563e)] [clip-path:polygon(0_55%,44%_0,34%_39%,100%_28%,48%_100%,58%_58%)]";
-  }
-  if (kind === 3) {
-    return "h-3 w-14 rounded-full bg-[linear-gradient(90deg,#6d7679_0_18%,#fff8d4_19%_58%,#61d4ea_59%_100%)] shadow-[inset_0_-3px_0_rgba(0,0,0,0.22),0_0_12px_rgba(97,212,234,0.58)]";
-  }
-  return "h-[86px] w-[86px] rounded-full bg-[radial-gradient(circle,#fff8c5_0_16%,#ffd24d_17%_32%,#ed5a3f_33%_52%,transparent_54%),conic-gradient(from_0deg,transparent_0_10%,rgba(255,232,94,0.9)_11%_16%,transparent_17%_27%,rgba(255,95,64,0.92)_28%_35%,transparent_36%)]";
 }
