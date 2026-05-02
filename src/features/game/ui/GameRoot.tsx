@@ -296,14 +296,9 @@ function TelegramLandscapeOverlay({ active }: { active: boolean }) {
   if (!active) return null;
 
   return (
-    <section className="fixed inset-0 z-[100] grid place-items-center bg-[#05080b] px-5 text-center text-[#f8eed8]">
-      <div className="grid max-w-[420px] gap-3">
-        <strong className="text-3xl font-black uppercase leading-none text-[#ffe08a] [font-family:Impact,Arial_Narrow,sans-serif]">
-          Поверни екран
-        </strong>
-        <p className="text-sm font-black uppercase tracking-[0.04em] text-[#d9ceb2]">
-          Арена відкривається на весь екран і найкраще працює горизонтально.
-        </p>
+    <section className="pointer-events-none fixed inset-x-2 top-2 z-[100] flex justify-center text-center text-[#f8eed8]">
+      <div className="max-w-[340px] rounded border border-[#ffe08a]/40 bg-[#05080b]/82 px-3 py-2 text-[10px] font-black uppercase tracking-[0.05em] text-[#ffe08a] shadow-[0_10px_28px_rgba(0,0,0,0.48)]">
+        Горизонтально зручніше, але портретний режим теж працює.
       </div>
     </section>
   );

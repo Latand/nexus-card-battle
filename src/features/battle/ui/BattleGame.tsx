@@ -34,7 +34,7 @@ type BattleGameProps = {
   onOpenCollection?: () => void;
 };
 
-type HumanMatchStatus = "idle" | "connecting" | "queued" | "matched" | "opponent_left" | "error" | "closed";
+type HumanMatchStatus = "idle" | "connecting" | "queued" | "matched" | "opponent_left" | "forfeit" | "error" | "closed";
 
 type HumanMove = {
   cardId: string;
@@ -81,6 +81,15 @@ type HumanRoundResolvedMessage = HumanSocketMessage & {
   firstPlayerId: string;
   nextFirstPlayerId: string;
   moves: Record<string, HumanMove>;
+};
+
+type HumanForfeitMessage = HumanSocketMessage & {
+  type: "match_forfeit";
+  matchId: string;
+  round: number;
+  loserId: string;
+  winnerId: string;
+  reason?: string;
 };
 
 export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, telegramPlayer, mode = "ai", onOpenCollection }: BattleGameProps = {}) {
@@ -458,6 +467,11 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, tel
       return;
     }
 
+    if (message.type === "match_forfeit") {
+      handleHumanForfeit(message as HumanForfeitMessage);
+      return;
+    }
+
     if (message.type === "opponent_left") {
       setHumanStatus("opponent_left");
       setHumanMessage("Суперник вийшов з матчу.");
@@ -561,6 +575,29 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, tel
     }));
   }
 
+  function handleHumanForfeit(message: HumanForfeitMessage) {
+    const currentMatch = matchInfoRef.current;
+    if (!currentMatch || message.matchId !== currentMatch.matchId) return;
+
+    const won = message.winnerId === currentMatch.playerId;
+    const loserName = message.loserId === currentMatch.playerId ? gameRef.current.player.name : gameRef.current.enemy.name;
+    const winnerName = message.winnerId === currentMatch.playerId ? gameRef.current.player.name : gameRef.current.enemy.name;
+
+    setHumanStatus("forfeit");
+    setHumanMessage(
+      won
+        ? `Перемога: ${loserName} не встиг зробити хід.`
+        : `Поразка: ${winnerName} перемагає, бо твій час ходу вийшов.`,
+    );
+    setMatchInfo(null);
+    setPending(null);
+    setEnemyLockedMove(null);
+    setSelectionOpen(false);
+    setTurnSeconds(0);
+    clearHumanMessageBuffers();
+  }
+
+
   function restartHumanQueue() {
     const socket = socketRef.current;
 
@@ -610,8 +647,22 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, tel
 
   useEffect(() => {
     autoSubmitRef.current = () => {
-      if (isHumanMatch) return;
       if (pending || !["player_turn", "card_preview"].includes(game.phase)) return;
+
+      if (isHumanMatch) {
+        const currentMatch = matchInfoRef.current;
+        const socket = socketRef.current;
+        if (!currentMatch || !isSocketOpen(socket)) return;
+
+        sendSocketMessage(socket, {
+          type: "turn_timeout",
+          matchId: currentMatch.matchId,
+          round: game.round.round,
+        });
+        setSelectionOpen(false);
+        setTurnSeconds(0);
+        return;
+      }
 
       const availableCards = getAvailableCards(game.player);
       if (availableCards.length === 0) return;
@@ -659,7 +710,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, tel
   }
 
   return (
-    <main className="relative isolate min-h-screen w-screen overflow-hidden bg-[#05080b] px-[min(14px,1.4vw)] py-2 text-[#f8eed8] max-[620px]:overflow-y-auto max-[620px]:p-2">
+    <main className="battle-screen relative isolate min-h-screen w-screen overflow-hidden bg-[#05080b] px-[min(14px,1.4vw)] py-2 text-[#f8eed8]">
       <SceneBackground />
 
       {humanBlockingOverlay ? (
@@ -667,7 +718,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, tel
       ) : null}
 
       {!humanBlockingOverlay && !boardHidden ? (
-      <div className="relative z-10">
+      <div className="battle-board relative z-10">
       <section className={topBarClass()}>
         <div className={barButtonClass()} data-testid="turn-timer">⌛ {turnSeconds} сек</div>
         <NamePlate name={game.enemy.name} energy={game.enemy.energy} health={game.enemy.hp} statuses={game.enemy.statuses} />
@@ -688,12 +739,13 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, tel
 
       <section
         className={cn(
+          "battle-arena-panel",
           "relative z-10 mx-auto grid w-[min(980px,100%)] items-center gap-3 p-0",
           "mt-1 min-h-[132px] grid-cols-[minmax(260px,680px)] justify-center",
           "max-[760px]:mt-3 max-[760px]:grid-cols-1",
         )}
       >
-        <div className="relative grid min-h-[132px] place-items-center gap-3 overflow-hidden border-y-2 border-[#c98b27]/55 bg-[linear-gradient(90deg,transparent,rgba(0,0,0,0.68)_12%_88%,transparent),radial-gradient(circle_at_center,rgba(255,214,73,0.16),transparent_44%)] shadow-[0_0_26px_rgba(0,0,0,0.58),inset_0_0_0_1px_rgba(255,231,151,0.12)] max-[760px]:order-2">
+        <div className="battle-arena-strip relative grid min-h-[132px] place-items-center gap-3 overflow-hidden border-y-2 border-[#c98b27]/55 bg-[linear-gradient(90deg,transparent,rgba(0,0,0,0.68)_12%_88%,transparent),radial-gradient(circle_at_center,rgba(255,214,73,0.16),transparent_44%)] shadow-[0_0_26px_rgba(0,0,0,0.58),inset_0_0_0_1px_rgba(255,231,151,0.12)] max-[760px]:order-2">
           <strong className="relative z-[1] min-w-[210px] px-[18px] text-center text-[clamp(30px,4.1vw,56px)] font-black uppercase leading-none text-[#ffd742] [font-family:Impact,Arial_Narrow,sans-serif] [text-shadow:0_0_16px_rgba(255,204,51,0.8),0_4px_0_rgba(0,0,0,0.75)]" data-testid="round-status">
             {getPhaseTitle(game.phase, game.first, verdict)}
           </strong>
@@ -924,6 +976,7 @@ function getHumanOverlayTitle(status: HumanMatchStatus) {
   if (status === "connecting") return "Підключення";
   if (status === "queued") return "Пошук суперника";
   if (status === "opponent_left") return "Суперник вийшов";
+  if (status === "forfeit") return "Матч завершено";
   if (status === "error") return "PvP помилка";
   if (status === "closed") return "З'єднання закрите";
   return "PvP";
@@ -933,6 +986,7 @@ function getHumanOverlaySubtitle(status: HumanMatchStatus) {
   if (status === "connecting") return "Підключаємося до живого матчу.";
   if (status === "queued") return "Чекаємо іншого гравця.";
   if (status === "opponent_left") return "Матч зупинено, бо другий гравець залишив арену.";
+  if (status === "forfeit") return "Час ходу вийшов, результат зафіксовано для обох гравців.";
   if (status === "error") return "Спробуй повернутися до колоди й запустити PvP ще раз.";
   if (status === "closed") return "Сервер закрив з'єднання з матчем.";
   return "";

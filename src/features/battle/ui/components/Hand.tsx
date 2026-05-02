@@ -30,6 +30,8 @@ export function Hand({
   return (
     <section
       className={cn(
+        "battle-hand",
+        owner === "enemy" ? "battle-hand--enemy" : "battle-hand--player",
         "relative z-10 mx-auto grid grid-cols-4 items-start justify-center gap-2 rounded-md border-2 py-2 transition-[border-color,background-color,box-shadow,filter,transform] duration-500 max-[760px]:gap-1.5",
         "before:pointer-events-none before:absolute before:inset-1 before:rounded before:border before:border-white/5 before:content-['']",
         owner === "enemy"

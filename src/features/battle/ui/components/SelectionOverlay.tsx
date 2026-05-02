@@ -72,7 +72,7 @@ export function SelectionOverlay({
     >
       <button className="absolute inset-0 cursor-default border-0 bg-transparent" type="button" aria-label="Закрити вибір" onClick={onClose} />
 
-      <div className="relative z-[1] grid min-h-[360px] w-[min(760px,94vw)] grid-cols-[minmax(170px,238px)_188px_minmax(138px,188px)] items-center gap-[18px] rounded-lg border-2 border-[rgba(225,231,224,0.62)] bg-[linear-gradient(180deg,rgba(31,34,35,0.92),rgba(8,9,10,0.9)),repeating-linear-gradient(135deg,rgba(255,255,255,0.08)_0_1px,transparent_1px_8px)] px-[22px] py-5 shadow-[0_24px_70px_rgba(0,0,0,0.72),inset_0_0_0_2px_rgba(255,255,255,0.08)] max-[960px]:grid-cols-[minmax(160px,210px)_180px_minmax(122px,160px)] max-[960px]:gap-3 max-[760px]:w-[min(520px,94vw)] max-[760px]:grid-cols-[minmax(148px,200px)_minmax(164px,1fr)] max-[620px]:w-[min(360px,94vw)] max-[620px]:grid-cols-1 max-[620px]:gap-2.5 max-[620px]:p-3.5">
+      <div className="selection-dialog relative z-[1] grid min-h-[360px] w-[min(760px,94vw)] grid-cols-[minmax(170px,238px)_188px_minmax(138px,188px)] items-center gap-[18px] rounded-lg border-2 border-[rgba(225,231,224,0.62)] bg-[linear-gradient(180deg,rgba(31,34,35,0.92),rgba(8,9,10,0.9)),repeating-linear-gradient(135deg,rgba(255,255,255,0.08)_0_1px,transparent_1px_8px)] px-[22px] py-5 shadow-[0_24px_70px_rgba(0,0,0,0.72),inset_0_0_0_2px_rgba(255,255,255,0.08)] max-[960px]:grid-cols-[minmax(160px,210px)_180px_minmax(122px,160px)] max-[960px]:gap-3 max-[760px]:w-[min(520px,94vw)] max-[760px]:grid-cols-[minmax(148px,200px)_minmax(164px,1fr)] max-[620px]:w-[min(360px,94vw)] max-[620px]:grid-cols-1 max-[620px]:gap-2.5 max-[620px]:p-3.5">
         <button
           className="absolute right-2.5 top-2 z-[4] h-7 w-7 cursor-pointer rounded-full border border-white/25 bg-black/45 text-xl leading-none text-[#fff7d8]"
           type="button"
@@ -82,7 +82,7 @@ export function SelectionOverlay({
           ×
         </button>
 
-        <div className="grid justify-items-center [&_.compact]:min-h-[328px] [&_.compact]:w-[min(236px,31vw)] max-[620px]:[&_.compact]:min-h-[296px] max-[620px]:[&_.compact]:w-[min(220px,68vw)]">
+        <div className="selection-card grid justify-items-center [&_.compact]:min-h-[328px] [&_.compact]:w-[min(236px,31vw)] max-[620px]:[&_.compact]:min-h-[296px] max-[620px]:[&_.compact]:w-[min(220px,68vw)]">
           <BattleCard
             card={selected}
             compact
@@ -92,7 +92,7 @@ export function SelectionOverlay({
           />
         </div>
 
-        <div className="relative z-[2] grid gap-2 rounded-[7px] border-2 border-[#1e2527] bg-[linear-gradient(180deg,#6c6b65_0_6%,#2d3032_7%_54%,#151719_55%),repeating-linear-gradient(135deg,rgba(255,255,255,0.1)_0_1px,transparent_1px_7px)] p-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.18),0_16px_30px_rgba(0,0,0,0.44)] max-[620px]:w-[min(260px,100%)] max-[620px]:justify-self-center">
+        <div className="selection-controls relative z-[2] grid gap-2 rounded-[7px] border-2 border-[#1e2527] bg-[linear-gradient(180deg,#6c6b65_0_6%,#2d3032_7%_54%,#151719_55%),repeating-linear-gradient(135deg,rgba(255,255,255,0.1)_0_1px,transparent_1px_7px)] p-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.18),0_16px_30px_rgba(0,0,0,0.44)] max-[620px]:w-[min(260px,100%)] max-[620px]:justify-self-center">
           <div className="grid min-h-[42px] content-center border border-white/20 bg-black/35 px-2.5 py-[5px]">
             <span className="text-[10px] font-black uppercase text-[#d8bd82]">{selected.clan}</span>
             <strong className="text-lg font-black leading-none text-[#fff7d7]">{selected.name}</strong>
@@ -184,7 +184,7 @@ export function SelectionOverlay({
 
         {knownEnemyCard ? (
           <div
-            className="grid translate-y-3.5 rotate-1 justify-items-center gap-2 brightness-[1.06] max-[760px]:col-span-full max-[760px]:translate-y-0 max-[760px]:[&_.compact]:min-h-[238px] max-[760px]:[&_.compact]:w-[min(170px,42vw)] [&_.compact]:min-h-[258px] [&_.compact]:w-[min(178px,22vw)]"
+            className="selection-enemy grid translate-y-3.5 rotate-1 justify-items-center gap-2 brightness-[1.06] max-[760px]:col-span-full max-[760px]:translate-y-0 max-[760px]:[&_.compact]:min-h-[238px] max-[760px]:[&_.compact]:w-[min(170px,42vw)] [&_.compact]:min-h-[258px] [&_.compact]:w-[min(178px,22vw)]"
             data-testid="known-enemy-card"
           >
             <BattleCard
@@ -202,7 +202,7 @@ export function SelectionOverlay({
           </div>
         ) : (
           <div
-            className="grid min-h-[258px] translate-y-3.5 rotate-1 place-items-center rounded-md border-2 border-[#6e7782]/70 bg-[linear-gradient(180deg,rgba(34,42,49,0.78),rgba(5,7,10,0.94)),repeating-linear-gradient(135deg,rgba(255,255,255,0.06)_0_1px,transparent_1px_9px)] shadow-[inset_0_0_38px_rgba(72,115,143,0.18),0_18px_34px_rgba(0,0,0,0.5)] max-[760px]:col-span-full max-[760px]:min-h-[188px] max-[760px]:translate-y-0"
+            className="selection-enemy grid min-h-[258px] translate-y-3.5 rotate-1 place-items-center rounded-md border-2 border-[#6e7782]/70 bg-[linear-gradient(180deg,rgba(34,42,49,0.78),rgba(5,7,10,0.94)),repeating-linear-gradient(135deg,rgba(255,255,255,0.06)_0_1px,transparent_1px_9px)] shadow-[inset_0_0_38px_rgba(72,115,143,0.18),0_18px_34px_rgba(0,0,0,0.5)] max-[760px]:col-span-full max-[760px]:min-h-[188px] max-[760px]:translate-y-0"
             data-testid="enemy-card-hidden"
           >
             <div className="grid h-[78%] w-[72%] place-items-center rounded border border-white/10 bg-[radial-gradient(circle_at_center,rgba(85,212,255,0.16),transparent_44%),linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0))] text-5xl font-black text-[#d8e8f2]/70 [text-shadow:0_0_18px_rgba(80,207,255,0.4)]">

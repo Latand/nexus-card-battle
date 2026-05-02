@@ -150,3 +150,271 @@ a {
     transform: translateX(12px) rotate(2deg);
   }
 }
+
+.battle-screen {
+  min-height: 100dvh;
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+.battle-board {
+  height: 100%;
+  max-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto minmax(0, auto) minmax(84px, 1fr) minmax(0, auto) auto;
+  align-content: stretch;
+  gap: clamp(4px, 0.7dvh, 8px);
+}
+
+.battle-hand {
+  margin-block: 0 !important;
+  align-self: stretch;
+  width: min(790px, 100%) !important;
+  max-width: 100%;
+}
+
+.battle-hand .battle-card-face {
+  min-height: clamp(132px, 22dvh, 220px) !important;
+}
+
+.battle-hand--enemy .battle-card-face {
+  min-height: clamp(118px, 20dvh, 196px) !important;
+}
+
+.battle-arena-panel {
+  margin-top: 0 !important;
+  min-height: 0 !important;
+  align-self: stretch;
+}
+
+.battle-arena-strip {
+  min-height: clamp(80px, 15dvh, 132px) !important;
+  gap: clamp(4px, 1dvh, 12px) !important;
+}
+
+.battle-arena-strip [data-testid="round-status"] {
+  font-size: clamp(24px, 6.8dvw, 54px);
+}
+
+@media (max-width: 620px) and (orientation: portrait) {
+  .battle-screen {
+    padding: 6px !important;
+    overflow: hidden !important;
+  }
+
+  .battle-board {
+    grid-template-rows: auto minmax(0, auto) minmax(92px, 1fr) minmax(0, auto) auto;
+    gap: 6px;
+  }
+
+  .battle-hand {
+    gap: 4px !important;
+    padding: 5px !important;
+  }
+
+  .battle-hand .battle-card-face {
+    min-height: clamp(142px, 20dvh, 174px) !important;
+    border-width: 2px !important;
+    border-radius: 7px !important;
+  }
+
+  .battle-hand--enemy .battle-card-face {
+    min-height: clamp(128px, 18dvh, 158px) !important;
+  }
+
+  .battle-card-face::before {
+    inset: 5px !important;
+  }
+
+  .battle-arena-strip {
+    min-height: clamp(94px, 15dvh, 116px) !important;
+    padding-inline: 4px;
+  }
+
+  .battle-arena-strip p {
+    max-width: 320px;
+    font-size: 11px;
+    line-height: 1.25;
+  }
+
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .battle-screen {
+    padding: 4px 8px !important;
+    overflow: hidden !important;
+  }
+
+  .battle-board {
+    grid-template-rows: 40px 116px minmax(38px, 1fr) 118px 40px;
+    gap: 3px;
+  }
+
+  .battle-hand {
+    gap: 6px !important;
+    padding: 4px 8px !important;
+  }
+
+  .battle-hand .battle-card-face {
+    min-height: 112px !important;
+    border-width: 2px !important;
+    border-radius: 6px !important;
+  }
+
+  .battle-hand--enemy .battle-card-face {
+    min-height: 108px !important;
+  }
+
+  .battle-card-face::before {
+    inset: 4px !important;
+    border-radius: 4px !important;
+  }
+
+  .battle-board > section:first-child,
+  .battle-board > section:last-child,
+  .battle-board > section:first-child > *,
+  .battle-board > section:last-child > * {
+    min-height: 40px !important;
+  }
+
+  .battle-board > section:last-child {
+    margin-top: 0 !important;
+  }
+
+  .battle-nameplate {
+    padding-block: 2px !important;
+  }
+
+  .battle-nameplate > strong {
+    font-size: 14px !important;
+    line-height: 1 !important;
+    transform: translateY(1px);
+  }
+
+  .battle-arena-strip {
+    min-height: 38px !important;
+    gap: 2px !important;
+  }
+
+  .battle-arena-strip [data-testid="round-status"] {
+    min-width: 0 !important;
+    padding-inline: 8px !important;
+    font-size: clamp(22px, 5.2dvw, 34px);
+  }
+
+  .battle-arena-strip p {
+    max-width: min(560px, 82dvw);
+    font-size: 10px;
+    line-height: 1.15;
+  }
+
+  [data-testid="battle-overlay"] {
+    padding: 6px !important;
+  }
+
+  .battle-overlay-stage {
+    min-height: calc(100dvh - 12px) !important;
+    width: min(980px, calc(100dvw - 12px)) !important;
+  }
+
+  .duel-grid {
+    inset: 76px 22px 86px !important;
+    grid-template-columns: minmax(106px, 138px) minmax(180px, 1fr) minmax(106px, 138px) !important;
+  }
+
+  .duel-grid .battle-card-face--compact {
+    width: min(108px, 14dvw) !important;
+    min-height: 142px !important;
+  }
+
+  .duel-grid > :first-child,
+  .duel-grid > :last-child {
+    transform: translateY(-86px) !important;
+  }
+
+  .duel-caption {
+    bottom: 12px !important;
+    min-width: min(430px, 62dvw) !important;
+    padding: 8px 14px !important;
+  }
+
+  .duel-caption > span {
+    font-size: 18px !important;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 430px) {
+  .battle-board {
+    grid-template-rows: 38px 110px minmax(36px, 1fr) 114px 38px;
+    gap: 2px;
+  }
+
+  .battle-hand {
+    padding-block: 3px !important;
+  }
+
+  .battle-arena-strip {
+    min-height: 38px !important;
+  }
+
+  .battle-arena-strip p {
+    display: none;
+  }
+
+  .duel-grid {
+    inset: 70px 20px 82px !important;
+  }
+
+  .duel-grid .battle-card-face--compact {
+    width: min(102px, 13dvw) !important;
+    min-height: 134px !important;
+  }
+
+  .duel-grid > :first-child,
+  .duel-grid > :last-child {
+    transform: translateY(-92px) !important;
+  }
+}
+
+@media (max-width: 620px) and (orientation: portrait) {
+  :is(.selection-dialog) {
+    max-height: calc(100dvh - 16px);
+    min-height: 0 !important;
+    grid-template-rows: auto auto minmax(92px, 1fr);
+    align-items: center;
+    gap: 7px !important;
+    overflow: hidden;
+    padding: 10px !important;
+  }
+
+  :is(.selection-card) :is(.battle-card-face) {
+    width: min(132px, 42dvw) !important;
+    min-height: 178px !important;
+  }
+
+  :is(.selection-controls) {
+    width: min(270px, 100%) !important;
+    gap: 5px !important;
+    padding: 8px !important;
+  }
+
+  :is(.selection-controls) > div:first-child {
+    min-height: 34px !important;
+  }
+
+  :is(.selection-controls) button[data-testid="selection-ok"] {
+    min-height: 36px !important;
+    font-size: 18px !important;
+  }
+
+  :is(.selection-enemy) {
+    min-height: 104px !important;
+    width: min(260px, 100%);
+    justify-self: center;
+  }
+
+  :is(.selection-enemy) :is(.battle-card-face) {
+    width: min(118px, 34dvw) !important;
+    min-height: 150px !important;
+  }
+}

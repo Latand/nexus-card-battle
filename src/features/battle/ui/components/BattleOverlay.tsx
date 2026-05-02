@@ -1,12 +1,12 @@
 import Image from "next/image";
 import type { CSSProperties } from "react";
 import { cn } from "@/shared/lib/cn";
-import { DAMAGE_THROWS_CAP, MAX_ENERGY } from "../../model/constants";
+import { DAMAGE_THROWS_CAP, MAX_ENERGY, MAX_HEALTH } from "../../model/constants";
 import { hasApplicableAbilityEffect, isAbilityBlocked } from "../../model/game";
 import type { Clash, Fighter, Outcome, Phase, ResolvedEffect, Side } from "../../model/types";
 import { BattleCard } from "./BattleCard";
 import { ProjectileSprite } from "./ProjectileSprite";
-import { ResourcePills, StatusBadges } from "./ResourceCounter";
+import { ResourcePills } from "./ResourceCounter";
 
 export function BattleOverlay({
   outcome,
@@ -23,11 +23,7 @@ export function BattleOverlay({
   const isDamage = phase === "damage_apply";
   const playerHp = isDamage ? outcome.nextPlayer.hp : player.hp;
   const enemyHp = isDamage ? outcome.nextEnemy.hp : enemy.hp;
-  const playerStatuses = isDamage ? outcome.nextPlayer.statuses : player.statuses;
-  const enemyStatuses = isDamage ? outcome.nextEnemy.statuses : enemy.statuses;
-  const virtualLifeMax = Math.max(clash.playerAttack, clash.enemyAttack, 1);
-  const playerCardLife = getVirtualCardLife(clash, phase, "player");
-  const enemyCardLife = getVirtualCardLife(clash, phase, "enemy");
+  const attackMax = Math.max(clash.playerAttack, clash.enemyAttack, 1);
   const loser: Side = clash.loser;
   const isFinisher = isDamage && (loser === "player" ? outcome.nextPlayer.hp <= 0 : outcome.nextEnemy.hp <= 0);
   const loserCard = loser === "player" ? clash.playerCard : clash.enemyCard;
@@ -35,6 +31,8 @@ export function BattleOverlay({
   const statusText = getStatusText(phase, clash, isFinisher, loserCard.name, damageTarget);
   const phaseLabel = getPhaseLabel(phase, isFinisher);
   const revealAttack = phase === "damage_apply";
+  const playerTakesRealDamage = isDamage && loser === "player";
+  const enemyTakesRealDamage = isDamage && loser === "enemy";
   const playerAbilityBlocked = isAbilityBlocked(clash.playerCard, hasControlEffect(clash.effects, "player"), {
     owner: player,
     opponent: enemy,
@@ -69,31 +67,21 @@ export function BattleOverlay({
       data-phase={phase}
       data-winner={clash.winner}
     >
-      <div className="relative min-h-[min(640px,94vh)] w-[min(980px,96vw)] overflow-hidden rounded-md border-2 border-[#d6a03b]/75 bg-[linear-gradient(180deg,rgba(5,8,11,0.1),rgba(5,8,11,0.4)),url('/nexus-assets/backgrounds/arena-bar-1024x576.png')] bg-cover bg-center shadow-[0_0_0_1px_rgba(0,0,0,0.9),0_28px_90px_rgba(0,0,0,0.78),inset_0_0_90px_rgba(0,0,0,0.48)] before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_50%_48%,transparent_0_32%,rgba(0,0,0,0.48)_76%),linear-gradient(90deg,rgba(255,55,55,0.12),transparent_28%_72%,rgba(255,212,86,0.12))] before:content-[''] max-[960px]:min-h-[min(580px,94vh)] max-[760px]:min-h-[min(560px,94vh)]">
+      <div className="battle-overlay-stage relative min-h-[min(640px,94vh)] w-[min(980px,96vw)] overflow-hidden rounded-md border-2 border-[#d6a03b]/75 bg-[linear-gradient(180deg,rgba(5,8,11,0.1),rgba(5,8,11,0.4)),url('/nexus-assets/backgrounds/arena-bar-1024x576.png')] bg-cover bg-center shadow-[0_0_0_1px_rgba(0,0,0,0.9),0_28px_90px_rgba(0,0,0,0.78),inset_0_0_90px_rgba(0,0,0,0.48)] before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_50%_48%,transparent_0_32%,rgba(0,0,0,0.48)_76%),linear-gradient(90deg,rgba(255,55,55,0.12),transparent_28%_72%,rgba(255,212,86,0.12))] before:content-[''] max-[960px]:min-h-[min(580px,94vh)] max-[760px]:min-h-[min(560px,94vh)]">
         <div className="absolute left-[18px] top-[18px] z-[3] w-[min(390px,42%)] max-[960px]:w-[calc(50%_-_28px)] max-[760px]:top-2.5 max-[620px]:w-[calc(50%_-_16px)]">
           <DuelStatus
-            fighter={player}
-            cardName={clash.playerCard.name}
-            cardLife={playerCardLife}
-            cardLifeMax={virtualLifeMax}
             cardEnergy={clash.playerEnergy}
             attack={clash.playerAttack}
+            attackMax={attackMax}
             revealAttack={revealAttack}
-            humanHp={playerHp}
-            statuses={playerStatuses}
           />
         </div>
         <div className="absolute right-[18px] top-[18px] z-[3] w-[min(390px,42%)] max-[960px]:w-[calc(50%_-_28px)] max-[760px]:top-2.5 max-[620px]:w-[calc(50%_-_16px)]">
           <DuelStatus
-            fighter={enemy}
-            cardName={clash.enemyCard.name}
-            cardLife={enemyCardLife}
-            cardLifeMax={virtualLifeMax}
             cardEnergy={clash.enemyEnergy}
             attack={clash.enemyAttack}
+            attackMax={attackMax}
             revealAttack={revealAttack}
-            humanHp={enemyHp}
-            statuses={enemyStatuses}
           />
         </div>
 
@@ -103,16 +91,18 @@ export function BattleOverlay({
           </div>
         ) : null}
 
-        <div className="absolute inset-[100px_26px_82px] z-[2] grid grid-cols-[minmax(150px,220px)_minmax(220px,1fr)_minmax(150px,220px)] items-end gap-[18px] max-[960px]:inset-[102px_18px_82px] max-[960px]:grid-cols-[minmax(132px,190px)_minmax(180px,1fr)_minmax(132px,190px)] max-[760px]:inset-[112px_10px_78px] max-[760px]:grid-cols-[minmax(96px,140px)_minmax(110px,1fr)_minmax(96px,140px)] max-[760px]:gap-2 max-[620px]:grid-cols-[92px_minmax(86px,1fr)_92px]">
+        <div className="duel-grid absolute inset-[100px_26px_82px] z-[2] grid grid-cols-[minmax(150px,220px)_minmax(220px,1fr)_minmax(150px,220px)] items-end gap-[18px] max-[960px]:inset-[102px_18px_82px] max-[960px]:grid-cols-[minmax(132px,190px)_minmax(180px,1fr)_minmax(132px,190px)] max-[760px]:inset-[112px_10px_78px] max-[760px]:grid-cols-[minmax(96px,140px)_minmax(110px,1fr)_minmax(96px,140px)] max-[760px]:gap-2 max-[620px]:grid-cols-[92px_minmax(86px,1fr)_92px]">
           <div
             className={cn(
               "grid origin-bottom justify-items-center self-end justify-self-start animate-[nexus-duel-enter-left_320ms_ease_both] [&_.compact]:min-h-[292px] [&_.compact]:w-[min(214px,22vw)] max-[960px]:[&_.compact]:min-h-[270px] max-[960px]:[&_.compact]:w-[min(184px,21vw)] max-[760px]:[&_.compact]:min-h-[230px] max-[760px]:[&_.compact]:w-[min(136px,27vw)] max-[620px]:[&_.compact]:min-h-[184px] max-[620px]:[&_.compact]:w-[92px]",
               loser === "player" && isDamage && "animate-[nexus-taking-hit_620ms_ease_both]",
             )}
           >
-            <BattleCard
+            <DuelCombatant
+              fighter={player}
+              health={playerHp}
               card={clash.playerCard}
-              compact
+              showAvatar={playerTakesRealDamage}
               abilityActive={playerAbilityActive}
               bonusVisible={playerBonusVisible}
             />
@@ -126,16 +116,18 @@ export function BattleOverlay({
               loser === "enemy" && isDamage && "animate-[nexus-taking-hit_620ms_ease_both]",
             )}
           >
-            <BattleCard
+            <DuelCombatant
+              fighter={enemy}
+              health={enemyHp}
               card={clash.enemyCard}
-              compact
+              showAvatar={enemyTakesRealDamage}
               abilityActive={enemyAbilityActive}
               bonusVisible={enemyBonusVisible}
             />
           </div>
         </div>
 
-        <div className="absolute bottom-[22px] left-1/2 z-[3] grid min-w-[min(460px,78vw)] -translate-x-1/2 gap-1 rounded border-2 border-[#d6a03b]/60 bg-black/78 px-[18px] py-[11px] text-center shadow-[0_8px_24px_rgba(0,0,0,0.58)] max-[620px]:bottom-3.5 max-[620px]:px-2.5 max-[620px]:py-2">
+        <div className="duel-caption absolute bottom-[22px] left-1/2 z-[3] grid min-w-[min(460px,78vw)] -translate-x-1/2 gap-1 rounded border-2 border-[#d6a03b]/60 bg-black/78 px-[18px] py-[11px] text-center shadow-[0_8px_24px_rgba(0,0,0,0.58)] max-[620px]:bottom-3.5 max-[620px]:px-2.5 max-[620px]:py-2">
           {phaseLabel ? <strong className="text-sm uppercase text-[#ffe08a]">{phaseLabel}</strong> : null}
           <span className="text-2xl font-black leading-none text-[#fff8df] max-[960px]:text-xl max-[620px]:text-[17px]">{statusText}</span>
           <EffectList effects={clash.effects} />

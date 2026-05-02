@@ -23,6 +23,8 @@ const matches = new Map();
 let waitingSessionId = null;
 const BATTLE_HAND_SIZE = 4;
 const MIN_DECK_SIZE = 8;
+const TURN_SECONDS = Number.parseInt(process.env.PVP_TURN_SECONDS || "75", 10);
+const TURN_TIMEOUT_GRACE_SECONDS = Number.parseInt(process.env.PVP_TURN_TIMEOUT_GRACE_SECONDS || "10", 10);
 
 app.prepare().then(() => {
   requestHandler = (request, response) => {
@@ -126,6 +128,11 @@ function handleSocketMessage(session, message) {
     return;
   }
 
+  if (message.type === "turn_timeout") {
+    submitTurnTimeout(session, message);
+    return;
+  }
+
   if (message.type === "leave_match") {
     leaveMatch(session);
     return;
@@ -187,6 +194,9 @@ function createMatch(left, right) {
     firstPlayerId: left.id,
     round: 1,
     moves: {},
+    expectedPlayerId: left.id,
+    turnTimer: null,
+    turnTimerToken: 0,
     players: {
       [left.id]: {
         id: left.id,
@@ -216,6 +226,7 @@ function createMatch(left, right) {
   left.queuedCollectionIds = [];
   right.queuedCollectionIds = [];
   matches.set(match.id, match);
+  startTurnTimer(match, match.firstPlayerId);
 
   for (const playerId of match.playerIds) {
     const player = sessions.get(playerId);
@@ -255,6 +266,11 @@ function submitMove(session, message) {
   const opponentId = getOpponentId(match, session.id);
   const hasFirstMove = Boolean(match.moves[match.firstPlayerId]);
 
+  if (match.expectedPlayerId && session.id !== match.expectedPlayerId) {
+    sendError(session, "It is not your turn.");
+    return;
+  }
+
   if (!player.handIds.includes(move.cardId)) {
     sendError(session, "Card is not in the battle hand.");
     return;
@@ -278,6 +294,7 @@ function submitMove(session, message) {
   match.moves[session.id] = move;
 
   if (session.id === match.firstPlayerId) {
+    startTurnTimer(match, opponentId);
     broadcast(match, {
       type: "first_move",
       matchId: match.id,
@@ -308,6 +325,7 @@ function submitMove(session, message) {
 
   match.round += 1;
   match.firstPlayerId = nextFirstPlayerId;
+  match.expectedPlayerId = nextFirstPlayerId;
   match.moves = {};
 
   broadcast(match, {
@@ -318,6 +336,27 @@ function submitMove(session, message) {
     nextFirstPlayerId,
     moves,
   });
+  startTurnTimer(match, nextFirstPlayerId);
+}
+
+function submitTurnTimeout(session, message) {
+  const match = getSessionMatch(session);
+  if (!match) {
+    sendError(session, "No active match.");
+    return;
+  }
+
+  if (message.matchId !== match.id || message.round !== match.round) {
+    sendError(session, "Timeout is for a stale match or round.");
+    return;
+  }
+
+  if (session.id !== match.expectedPlayerId) {
+    sendError(session, "Timeout can only be submitted by the active player.");
+    return;
+  }
+
+  forfeitMatch(match, session.id, "timeout");
 }
 
 function leaveMatch(session) {
@@ -333,6 +372,51 @@ function leaveMatch(session) {
   }
 
   session.matchId = null;
+  clearTurnTimer(match);
+  matches.delete(match.id);
+}
+
+function startTurnTimer(match, expectedPlayerId) {
+  clearTurnTimer(match);
+  match.expectedPlayerId = expectedPlayerId;
+  const timeoutMs = Math.max(1, TURN_SECONDS + TURN_TIMEOUT_GRACE_SECONDS) * 1000;
+  const token = match.turnTimerToken + 1;
+  match.turnTimerToken = token;
+  match.turnTimer = setTimeout(() => {
+    const current = matches.get(match.id);
+    if (!current || current.turnTimerToken !== token || current.expectedPlayerId !== expectedPlayerId) return;
+
+    forfeitMatch(current, expectedPlayerId, "timeout");
+  }, timeoutMs);
+}
+
+function clearTurnTimer(match) {
+  if (match?.turnTimer) {
+    clearTimeout(match.turnTimer);
+    match.turnTimer = null;
+  }
+}
+
+function forfeitMatch(match, loserId, reason) {
+  const winnerId = getOpponentId(match, loserId);
+  clearTurnTimer(match);
+
+  broadcast(match, {
+    type: "match_forfeit",
+    matchId: match.id,
+    round: match.round,
+    loserId,
+    winnerId,
+    reason,
+  });
+
+  for (const playerId of match.playerIds) {
+    const player = sessions.get(playerId);
+    if (player?.matchId === match.id) {
+      player.matchId = null;
+    }
+  }
+
   matches.delete(match.id);
 }
 

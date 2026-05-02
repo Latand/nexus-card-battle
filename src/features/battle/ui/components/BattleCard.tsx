@@ -17,12 +17,14 @@ export function BattleCard({
   clanBonusActive,
   abilityActive,
   bonusVisible = true,
+  className,
 }: {
   card: Card;
   compact?: boolean;
   clanBonusActive?: boolean;
   abilityActive?: boolean;
   bonusVisible?: boolean;
+  className?: string;
 }) {
   const abilityName = card.ability.name;
   const abilityDescription = card.ability.description;
@@ -47,9 +49,11 @@ export function BattleCard({
   return (
     <article
       className={cn(
+        "battle-card-face",
         "relative min-h-[292px] overflow-hidden rounded-[10px] border-[3px] border-[#1f1510] text-left",
         "before:pointer-events-none before:absolute before:inset-[10px] before:rounded-md before:border before:border-[rgba(255,238,184,0.35)] before:content-['']",
-        compact && "w-[min(216px,24vw)] min-h-[298px]",
+        compact && "compact battle-card-face--compact w-[min(216px,24vw)] min-h-[298px]",
+        className,
       )}
       style={style}
     >

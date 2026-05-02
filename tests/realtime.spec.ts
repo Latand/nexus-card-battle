@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { cards } from "../src/features/battle/model/cards";
 
 test("pairs two tabs and resolves the first human round", async ({ context, page }) => {
   const first = page;
@@ -30,6 +31,36 @@ test("pairs two tabs and resolves the first human round", async ({ context, page
   await expect(firstMover.getByTestId(`player-card-${firstMoverCardId}`)).toHaveClass(/opacity-35/, { timeout: 12_000 });
 
   await second.close();
+});
+
+test("forfeits the active PvP player when their turn times out", async ({ baseURL }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const deckIds = cards.slice(0, 9).map((card) => card.id);
+  const first = await connectRealtimeClient(wsUrl, "Timer A", deckIds);
+  const second = await connectRealtimeClient(wsUrl, "Timer B", deckIds);
+
+  const firstReady = await first.waitFor("match_ready");
+  const secondReady = await second.waitFor("match_ready");
+  const firstMover = firstReady.firstPlayerId === firstReady.playerId ? first : second;
+  const firstMoverReady = firstMover === first ? firstReady : secondReady;
+  const otherReady = firstMover === first ? secondReady : firstReady;
+
+  firstMover.send({
+    type: "turn_timeout",
+    matchId: firstMoverReady.matchId,
+    round: firstMoverReady.round,
+  });
+
+  const firstResult = await first.waitFor("match_forfeit");
+  const secondResult = await second.waitFor("match_forfeit");
+
+  expect(firstResult.loserId).toBe(firstMoverReady.playerId);
+  expect(secondResult.loserId).toBe(firstMoverReady.playerId);
+  expect(firstResult.winnerId).toBe(otherReady.playerId);
+  expect(secondResult.winnerId).toBe(otherReady.playerId);
+
+  first.close();
+  second.close();
 });
 
 async function resolveFirstMover(first: Page, second: Page) {
@@ -89,4 +120,56 @@ async function countEnabledPlayerCards(page: Page) {
   }
 
   return enabled;
+}
+
+type RealtimeMessage = {
+  type: string;
+  [key: string]: unknown;
+};
+
+async function connectRealtimeClient(url: string, name: string, deckIds: string[]) {
+  const socket = new WebSocket(url);
+  const messages: RealtimeMessage[] = [];
+  const waiters = new Map<string, ((message: RealtimeMessage) => void)[]>();
+
+  socket.addEventListener("message", (event) => {
+    const message = JSON.parse(String(event.data)) as RealtimeMessage;
+    messages.push(message);
+    const handlers = waiters.get(message.type) ?? [];
+    waiters.delete(message.type);
+    handlers.forEach((handler) => handler(message));
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    socket.addEventListener("open", () => resolve(), { once: true });
+    socket.addEventListener("error", () => reject(new Error(`WebSocket failed for ${name}`)), { once: true });
+  });
+
+  socket.send(
+    JSON.stringify({
+      type: "join_human",
+      deckIds,
+      collectionIds: deckIds,
+      user: { name },
+    }),
+  );
+
+  return {
+    send(message: RealtimeMessage) {
+      socket.send(JSON.stringify(message));
+    },
+    close() {
+      socket.close();
+    },
+    waitFor(type: string) {
+      const existing = messages.find((message) => message.type === type);
+      if (existing) return Promise.resolve(existing);
+
+      return new Promise<RealtimeMessage>((resolve) => {
+        const handlers = waiters.get(type) ?? [];
+        handlers.push(resolve);
+        waiters.set(type, handlers);
+      });
+    },
+  };
 }
