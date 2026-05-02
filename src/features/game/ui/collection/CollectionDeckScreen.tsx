@@ -17,11 +17,13 @@ type Props = {
   profileOwnedCardCount: number;
   profileDeckCount: number;
   deckSource: "profile" | "starter-fallback";
+  deckSaveStatus: "idle" | "saving" | "saved" | "error";
   starterFreeBoostersRemaining: number;
   onDeckChange: (deckIds: string[]) => void;
   onPlay: (deckIds: string[], mode: "ai" | "human") => void;
 };
 
+type CollectionMode = "owned" | "base";
 type RarityFilter = Rarity | "all";
 type SortMode = "rarity" | "power" | "damage" | "name";
 
@@ -52,6 +54,10 @@ const sortModes: { id: SortMode; label: string }[] = [
   { id: "damage", label: "Урон" },
   { id: "name", label: "Ім’я" },
 ];
+const collectionModes: { id: CollectionMode; label: string }[] = [
+  { id: "owned", label: "Мої" },
+  { id: "base", label: "Уся база" },
+];
 
 export function CollectionDeckScreen({
   collectionIds,
@@ -61,29 +67,34 @@ export function CollectionDeckScreen({
   profileOwnedCardCount,
   profileDeckCount,
   deckSource,
+  deckSaveStatus,
   starterFreeBoostersRemaining,
   onDeckChange,
   onPlay,
 }: Props) {
-  const collectionSet = useMemo(() => new Set(collectionIds), [collectionIds]);
-  const collectionCards = useMemo(() => cards.filter((card) => collectionSet.has(card.id)), [collectionSet]);
+  const ownedSet = useMemo(() => new Set(collectionIds), [collectionIds]);
+  const ownedCards = useMemo(() => cards.filter((card) => ownedSet.has(card.id)), [ownedSet]);
+  const [collectionMode, setCollectionMode] = useState<CollectionMode>("owned");
+  const browsingCards = collectionMode === "owned" ? ownedCards : cards;
+  const canEditDeck = collectionMode === "owned";
   const deckIds = useMemo(
-    () => savedDeckIds.filter((cardId) => collectionSet.has(cardId)),
-    [collectionSet, savedDeckIds],
+    () => savedDeckIds.filter((cardId) => ownedSet.has(cardId)),
+    [ownedSet, savedDeckIds],
   );
-  const [selectedId, setSelectedId] = useState(() => deckIds[0] ?? collectionCards[0]?.id);
+  const [selectedId, setSelectedId] = useState(() => deckIds[0] ?? ownedCards[0]?.id);
   const [query, setQuery] = useState("");
   const [activeFaction, setActiveFaction] = useState("all");
   const [rarity, setRarity] = useState<RarityFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("rarity");
 
   const deckCards = useMemo(() => deckIds.map((cardId) => cards.find((card) => card.id === cardId)).filter(Boolean) as Card[], [deckIds]);
-  const activeSelectedId = selectedId && collectionSet.has(selectedId) ? selectedId : deckIds[0] ?? collectionCards[0]?.id;
-  const selectedCard = cards.find((card) => card.id === activeSelectedId) ?? deckCards[0] ?? collectionCards[0];
+  const browsingCardIds = useMemo(() => new Set(browsingCards.map((card) => card.id)), [browsingCards]);
+  const activeSelectedId = selectedId && browsingCardIds.has(selectedId) ? selectedId : deckIds[0] ?? browsingCards[0]?.id;
+  const selectedCard = activeSelectedId ? cards.find((card) => card.id === activeSelectedId) : undefined;
   const filteredCards = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
-    return collectionCards
+    return browsingCards
       .filter((card) => activeFaction === "all" || card.clan === activeFaction)
       .filter((card) => rarity === "all" || card.rarity === rarity)
       .filter((card) => {
@@ -93,34 +104,39 @@ export function CollectionDeckScreen({
         );
       })
       .sort((left, right) => sortCards(left, right, sortMode));
-  }, [activeFaction, collectionCards, query, rarity, sortMode]);
+  }, [activeFaction, browsingCards, query, rarity, sortMode]);
   const visibleCards = filteredCards.slice(0, GRID_LIMIT);
   const canPlay = deckIds.length >= PLAYER_DECK_SIZE;
-  const canRemoveCard = deckIds.length > PLAYER_DECK_SIZE;
+  const canRemoveCard = canEditDeck && deckIds.length > PLAYER_DECK_SIZE;
   const deckStats = getDeckStats(deckCards);
   const activeLinks = getActiveLinks(deckCards);
-  const ownedFactions = useMemo(
-    () => clanList.filter((faction) => collectionCards.some((card) => card.clan === faction.name)),
-    [collectionCards],
+  const browsingFactions = useMemo(
+    () => clanList.filter((faction) => browsingCards.some((card) => card.clan === faction.name)),
+    [browsingCards],
   );
 
   function addCard(card: Card) {
     setSelectedId(card.id);
+    if (!canEditDeck || !ownedSet.has(card.id)) return;
     if (deckIds.includes(card.id)) return;
     onDeckChange([...deckIds, card.id]);
   }
 
   function removeCard(cardId: string) {
+    if (!canEditDeck) return;
     if (!canRemoveCard) return;
     onDeckChange(deckIds.filter((item) => item !== cardId));
   }
 
   function trimDeckToMinimum() {
+    if (!canEditDeck) return;
     onDeckChange(deckIds.slice(0, PLAYER_DECK_SIZE));
     setSelectedId(deckIds[0] ?? selectedId);
   }
 
   function autofillDeck() {
+    if (!canEditDeck) return;
+
     const already = new Set(deckIds);
     const next = [...deckIds];
 
@@ -145,6 +161,7 @@ export function CollectionDeckScreen({
       data-profile-owned-card-count={profileOwnedCardCount}
       data-profile-deck-count={profileDeckCount}
       data-deck-source={deckSource}
+      data-collection-mode={collectionMode}
       data-starter-free-boosters-remaining={starterFreeBoostersRemaining}
     >
       <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,rgba(11,15,17,0.96),rgba(5,7,10,0.98)),url('/nexus-assets/backgrounds/arena-bar-1024x576.png')] bg-cover bg-center px-4 py-4 max-[760px]:px-2">
@@ -159,7 +176,18 @@ export function CollectionDeckScreen({
               </h1>
             </div>
 
-            <div className="grid min-w-0 grid-cols-[minmax(180px,1fr)_auto_auto] gap-2 max-[760px]:grid-cols-1">
+            <div className="grid min-w-0 grid-cols-[auto_minmax(180px,1fr)_auto_auto] gap-2 max-[1040px]:grid-cols-[auto_minmax(180px,1fr)] max-[760px]:grid-cols-1">
+              <Segmented
+                value={collectionMode}
+                items={collectionModes}
+                onChange={(value) => {
+                  setCollectionMode(value as CollectionMode);
+                  setActiveFaction("all");
+                }}
+                label="Режим"
+                testIdPrefix="collection-mode"
+              />
+
               <label className="grid min-h-[42px] grid-cols-[34px_minmax(0,1fr)] items-center rounded border border-white/10 bg-black/38 px-2">
                 <span className="text-center text-lg font-black text-[#65d7e9]">⌕</span>
                 <input
@@ -186,8 +214,8 @@ export function CollectionDeckScreen({
             </div>
 
             <div className="grid grid-cols-3 gap-2 text-center">
-              <Metric label="Карток" value={collectionCards.length} />
-              <Metric label="Фракцій" value={ownedFactions.length} />
+              <Metric label={collectionMode === "owned" ? "Мої" : "База"} value={browsingCards.length} />
+              <Metric label="Фракцій" value={browsingFactions.length} />
               <Metric label="У колоді" value={deckIds.length} />
             </div>
           </header>
@@ -203,6 +231,8 @@ export function CollectionDeckScreen({
             onSelect={setSelectedId}
             onRemove={removeCard}
             onAutofill={autofillDeck}
+            canEdit={canEditDeck}
+            deckSaveStatus={deckSaveStatus}
           />
 
           <div className="grid grid-cols-[220px_minmax(0,1fr)_312px] gap-3 max-[1120px]:grid-cols-[190px_minmax(0,1fr)] max-[860px]:grid-cols-1">
@@ -223,13 +253,13 @@ export function CollectionDeckScreen({
                 type="button"
                 onClick={() => setActiveFaction("all")}
               >
-                <span>Уся база</span>
-                <b>{collectionCards.length}</b>
+                <span>Усі фракції</span>
+                <b>{browsingCards.length}</b>
               </button>
 
               <div className="grid max-h-[calc(100vh-220px)] gap-1 overflow-y-auto pr-1 max-[860px]:max-h-[220px]">
-                {ownedFactions.map((faction) => {
-                  const count = collectionCards.filter((card) => card.clan === faction.name).length;
+                {browsingFactions.map((faction) => {
+                  const count = browsingCards.filter((card) => card.clan === faction.name).length;
                   return (
                     <button
                       key={faction.slug}
@@ -250,12 +280,12 @@ export function CollectionDeckScreen({
                 <div className="grid gap-1">
                   <strong className="text-xl font-black uppercase leading-none text-[#fff0ad]">Колекція</strong>
                   <span className="text-xs font-bold uppercase tracking-[0.08em] text-[#a99d85]">
-                    Показано {visibleCards.length} з {filteredCards.length}
+                    {collectionMode === "owned" ? "Мої карти" : "Уся база"} · показано {visibleCards.length} з {filteredCards.length}
                   </span>
                 </div>
 
                 <div className="flex gap-2">
-                  <button className={utilityButtonClass()} type="button" onClick={autofillDeck}>
+                  <button className={utilityButtonClass()} type="button" onClick={autofillDeck} disabled={!canEditDeck}>
                     Авто
                   </button>
                   <button className={utilityButtonClass()} type="button" onClick={trimDeckToMinimum} disabled={!canRemoveCard}>
@@ -265,8 +295,9 @@ export function CollectionDeckScreen({
               </div>
 
               <div className="collection-grid grid grid-cols-[repeat(auto-fill,minmax(138px,1fr))] gap-2 max-[420px]:grid-cols-3 max-[420px]:gap-1.5 max-[340px]:grid-cols-2">
-                {visibleCards.map((card) => {
+                {visibleCards.length > 0 ? visibleCards.map((card) => {
                   const inDeckIndex = deckIds.indexOf(card.id);
+                  const owned = ownedSet.has(card.id);
 
                   return (
                     <CollectionCardTile
@@ -274,17 +305,32 @@ export function CollectionDeckScreen({
                       card={card}
                       selected={selectedCard?.id === card.id}
                       inDeckIndex={inDeckIndex}
+                      owned={owned}
+                      editable={canEditDeck && owned}
                       canRemove={canRemoveCard}
                       onSelect={() => setSelectedId(card.id)}
                       onToggle={() => (inDeckIndex >= 0 ? removeCard(card.id) : addCard(card))}
                     />
                   );
-                })}
+                }) : (
+                  <div className="col-span-full grid min-h-[180px] place-items-center rounded-md border border-dashed border-white/14 bg-black/24 px-4 text-center text-sm font-black uppercase text-[#91866f]" data-testid="collection-empty">
+                    Немає карток
+                  </div>
+                )}
               </div>
             </section>
 
             <aside className="grid content-start gap-3 self-start max-[1120px]:order-1 max-[1120px]:col-span-2 max-[860px]:col-span-1">
-              {selectedCard ? <CardDetails card={selectedCard} inDeck={deckIds.includes(selectedCard.id)} canRemove={canRemoveCard} onToggle={() => (deckIds.includes(selectedCard.id) ? removeCard(selectedCard.id) : addCard(selectedCard))} /> : null}
+              {selectedCard ? (
+                <CardDetails
+                  card={selectedCard}
+                  inDeck={deckIds.includes(selectedCard.id)}
+                  owned={ownedSet.has(selectedCard.id)}
+                  editable={canEditDeck && ownedSet.has(selectedCard.id)}
+                  canRemove={canRemoveCard}
+                  onToggle={() => (deckIds.includes(selectedCard.id) ? removeCard(selectedCard.id) : addCard(selectedCard))}
+                />
+              ) : null}
               <DeckLinksPanel activeLinks={activeLinks} />
             </aside>
           </div>
@@ -298,6 +344,8 @@ function CollectionCardTile({
   card,
   selected,
   inDeckIndex,
+  owned,
+  editable,
   canRemove,
   onSelect,
   onToggle,
@@ -305,6 +353,8 @@ function CollectionCardTile({
   card: Card;
   selected: boolean;
   inDeckIndex: number;
+  owned: boolean;
+  editable: boolean;
   canRemove: boolean;
   onSelect: () => void;
   onToggle: () => void;
@@ -334,30 +384,50 @@ function CollectionCardTile({
         </b>
       ) : null}
 
-      <button
-        className={cn(
-          "absolute inset-0 z-[4] grid place-items-center rounded-md bg-black/54 opacity-0 backdrop-blur-[1px] transition group-hover:opacity-100 focus:opacity-100",
-          inDeck && !canRemove ? "cursor-not-allowed" : "cursor-pointer",
-        )}
-        type="button"
-        disabled={inDeck && !canRemove}
-        onClick={onToggle}
-        aria-label={inDeck ? `Прибрати ${card.name} з колоди` : `Додати ${card.name} до колоди`}
-        data-testid={`collection-toggle-${card.id}`}
-      >
-        <span
-          className={cn(
-            "grid aspect-square w-14 place-items-center rounded-full border-2 text-4xl font-black leading-none shadow-[0_12px_24px_rgba(0,0,0,0.45)]",
-            inDeck && !canRemove
-              ? "border-white/20 bg-[#3b3434] text-white/55"
-              : inDeck
-                ? "border-[#ffb39d] bg-[#df3f36] text-white"
-                : "border-[#fff0ad] bg-[#ffe05f] text-[#17100a]",
-          )}
+      {!owned ? (
+        <b
+          className="pointer-events-none absolute left-2 top-2 z-[3] rounded bg-black/70 px-2 py-1 text-[10px] font-black uppercase text-[#d7c5a3]"
+          data-testid={`collection-locked-${card.id}`}
         >
-          {inDeck ? "−" : "+"}
-        </span>
-      </button>
+          Закрито
+        </b>
+      ) : null}
+
+      {editable ? (
+        <button
+          className={cn(
+            "absolute inset-0 z-[4] grid place-items-center rounded-md bg-black/54 opacity-0 backdrop-blur-[1px] transition group-hover:opacity-100 focus:opacity-100",
+            inDeck && !canRemove ? "cursor-not-allowed" : "cursor-pointer",
+          )}
+          type="button"
+          disabled={inDeck && !canRemove}
+          onClick={onToggle}
+          aria-label={inDeck ? `Прибрати ${card.name} з колоди` : `Додати ${card.name} до колоди`}
+          data-testid={`collection-toggle-${card.id}`}
+        >
+          <span
+            className={cn(
+              "grid aspect-square w-14 place-items-center rounded-full border-2 text-4xl font-black leading-none shadow-[0_12px_24px_rgba(0,0,0,0.45)]",
+              inDeck && !canRemove
+                ? "border-white/20 bg-[#3b3434] text-white/55"
+                : inDeck
+                  ? "border-[#ffb39d] bg-[#df3f36] text-white"
+                  : "border-[#fff0ad] bg-[#ffe05f] text-[#17100a]",
+            )}
+          >
+            {inDeck ? "−" : "+"}
+          </span>
+        </button>
+      ) : (
+        <div
+          className="pointer-events-none absolute inset-0 z-[4] grid place-items-end rounded-md bg-black/0 p-2 opacity-0 transition group-hover:bg-black/38 group-hover:opacity-100"
+          data-testid={`collection-readonly-${card.id}`}
+        >
+          <span className="rounded border border-white/14 bg-black/72 px-2 py-1 text-[10px] font-black uppercase text-[#efe3c5]">
+            {owned ? "У вас" : "Довідник"}
+          </span>
+        </div>
+      )}
     </article>
   );
 }
@@ -368,6 +438,8 @@ function DeckDock({
   deckStats,
   canPlay,
   canRemove,
+  canEdit,
+  deckSaveStatus,
   onPlayAi,
   onPlayHuman,
   onSelect,
@@ -379,6 +451,8 @@ function DeckDock({
   deckStats: ReturnType<typeof getDeckStats>;
   canPlay: boolean;
   canRemove: boolean;
+  canEdit: boolean;
+  deckSaveStatus: "idle" | "saving" | "saved" | "error";
   onPlayAi: () => void;
   onPlayHuman: () => void;
   onSelect: (cardId: string) => void;
@@ -394,8 +468,20 @@ function DeckDock({
             <span className="text-xs font-bold uppercase tracking-[0.08em] text-[#a99d85]">
               Мінімум {PLAYER_DECK_SIZE}, у колоді {deckCards.length}
             </span>
+            {deckSaveStatus !== "idle" ? (
+              <span
+                className={cn(
+                  "mt-1 block text-[10px] font-black uppercase tracking-[0.1em]",
+                  deckSaveStatus === "error" ? "text-[#ffb39d]" : "text-[#9ed6e4]",
+                )}
+                data-testid="deck-save-status"
+                data-status={deckSaveStatus}
+              >
+                {deckSaveLabel(deckSaveStatus)}
+              </span>
+            ) : null}
           </div>
-          <button className={utilityButtonClass()} type="button" onClick={onAutofill}>
+          <button className={utilityButtonClass()} type="button" onClick={onAutofill} disabled={!canEdit}>
             Авто
           </button>
         </div>
@@ -410,15 +496,16 @@ function DeckDock({
                 selected={selectedId === card.id}
                 onSelect={() => onSelect(card.id)}
                 onRemove={() => onRemove(card.id)}
-                canRemove={canRemove}
+                canRemove={canEdit && canRemove}
               />
             ))}
             {Array.from({ length: Math.max(0, PLAYER_DECK_SIZE - deckCards.length) }, (_, index) => (
               <button
                 key={`empty-${index}`}
-                className="grid h-[118px] w-[82px] place-items-center rounded-md border border-dashed border-white/14 bg-white/[0.03] p-2 text-xs font-black uppercase text-[#746b5a] transition hover:border-[#ffe08a]/40 hover:text-[#efe3c5] max-[420px]:h-[106px] max-[420px]:w-[72px]"
+                className="grid h-[118px] w-[82px] place-items-center rounded-md border border-dashed border-white/14 bg-white/[0.03] p-2 text-xs font-black uppercase text-[#746b5a] transition hover:border-[#ffe08a]/40 hover:text-[#efe3c5] disabled:cursor-not-allowed disabled:opacity-45 max-[420px]:h-[106px] max-[420px]:w-[72px]"
                 type="button"
                 onClick={onAutofill}
+                disabled={!canEdit}
                 aria-label="Автозаповнити колоду"
               >
                 <span className="grid aspect-square w-9 place-items-center rounded-full border border-white/12 bg-black/30 text-lg">+</span>
@@ -547,15 +634,19 @@ function MiniBattleCard({ card, size }: { card: Card; size: "collection" | "deck
 function CardDetails({
   card,
   inDeck,
+  owned,
+  editable,
   canRemove,
   onToggle,
 }: {
   card: Card;
   inDeck: boolean;
+  owned: boolean;
+  editable: boolean;
   canRemove: boolean;
   onToggle: () => void;
 }) {
-  const disableRemove = inDeck && !canRemove;
+  const disableRemove = editable && inDeck && !canRemove;
 
   return (
     <section className="card-details rounded-md border border-white/10 bg-black/46 p-3 shadow-[inset_0_0_42px_rgba(0,0,0,0.32)] max-[860px]:grid max-[860px]:grid-cols-[minmax(190px,216px)_minmax(0,1fr)] max-[860px]:gap-3 max-[560px]:grid-cols-[minmax(112px,132px)_minmax(0,1fr)] max-[420px]:p-2">
@@ -571,9 +662,18 @@ function CardDetails({
             <strong className="block truncate text-2xl font-black uppercase leading-none text-[#fff0ad]">{card.name}</strong>
             <span className="mt-1 block text-xs font-black uppercase tracking-[0.1em] text-[#9ed6e4]">{card.clan} · {rarityLabels[card.rarity]}</span>
           </div>
-          <button className={utilityButtonClass()} type="button" onClick={onToggle} disabled={disableRemove}>
-            {inDeck ? "Прибрати" : "До колоди"}
-          </button>
+          {editable ? (
+            <button className={utilityButtonClass()} type="button" onClick={onToggle} disabled={disableRemove}>
+              {inDeck ? "Прибрати" : "До колоди"}
+            </button>
+          ) : (
+            <span
+              className="rounded border border-white/12 bg-white/[0.06] px-3 py-2 text-xs font-black uppercase text-[#efe3c5]"
+              data-testid={`selected-card-readonly-${card.id}`}
+            >
+              {owned ? "Є у вас" : "Закрито"}
+            </span>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-2">
@@ -627,11 +727,13 @@ function Segmented({
   items,
   onChange,
   label,
+  testIdPrefix,
 }: {
   value: string;
   items: { id: string; label: string }[];
   onChange: (value: string) => void;
   label: string;
+  testIdPrefix?: string;
 }) {
   return (
     <div className="grid min-w-0 gap-1">
@@ -646,6 +748,7 @@ function Segmented({
             )}
             type="button"
             onClick={() => onChange(item.id)}
+            data-testid={testIdPrefix ? `${testIdPrefix}-${item.id}` : undefined}
           >
             {item.label}
           </button>
@@ -697,6 +800,12 @@ function getActiveLinks(deckCards: Card[]) {
     }));
 }
 
+function deckSaveLabel(status: "saving" | "saved" | "error") {
+  if (status === "saving") return "Збереження";
+  if (status === "saved") return "Збережено";
+  return "Не збережено";
+}
+
 function factionButtonClass(active: boolean) {
   return cn(
     "grid min-h-[36px] grid-cols-[minmax(0,1fr)_42px] items-center gap-2 rounded px-2 text-left text-xs font-black uppercase transition",
@@ -707,5 +816,5 @@ function factionButtonClass(active: boolean) {
 }
 
 function utilityButtonClass() {
-  return "rounded border border-white/12 bg-white/[0.06] px-3 py-2 text-xs font-black uppercase text-[#efe3c5] transition hover:border-[#ffe08a]/45 hover:bg-[#ffe08a]/12";
+  return "rounded border border-white/12 bg-white/[0.06] px-3 py-2 text-xs font-black uppercase text-[#efe3c5] transition hover:border-[#ffe08a]/45 hover:bg-[#ffe08a]/12 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-white/12 disabled:hover:bg-white/[0.06]";
 }

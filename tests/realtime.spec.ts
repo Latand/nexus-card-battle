@@ -131,6 +131,19 @@ test("rejects removed PvP card ids before matchmaking", async ({ baseURL }) => {
   validClient.close();
 });
 
+test("rejects PvP decks below the nine-card minimum", async ({ baseURL }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const shortDeckIds = cards.slice(0, 8).map((card) => card.id);
+  const client = await connectRealtimeClient(wsUrl, "Short Deck", shortDeckIds);
+
+  const error = await client.waitFor("error", { timeoutMs: 2_000 });
+  expect(error.message).toBe("Deck must contain at least 9 cards.");
+  await expectNoRealtimeMessage(client, "queued");
+  await expectNoRealtimeMessage(client, "match_ready");
+
+  client.close();
+});
+
 async function resolveFirstMover(first: Page, second: Page) {
   await expect
     .poll(

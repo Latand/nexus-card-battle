@@ -58,4 +58,5 @@ export const enemyDeckIds = [
   "dahack",
   "alpha",
   "micron",
+  "alpha-nikolay",
 ];
