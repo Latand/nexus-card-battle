@@ -1,6 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import { cards } from "../src/features/battle/model/cards";
-import { mockDeckReadyProfile } from "./fixtures/playerProfile";
+import { mockDeckReadyProfile, PROFILE_DECK_IDS } from "./fixtures/playerProfile";
+
+const PROTOCOL_OWNED_COLLECTION_IDS = cards.slice(0, 10).map((card) => card.id);
+const PROTOCOL_OWNED_DECK_IDS = PROTOCOL_OWNED_COLLECTION_IDS.slice(0, 9);
 
 test("pairs two tabs and resolves the first human round", async ({ context, page }) => {
   const first = page;
@@ -11,14 +14,18 @@ test("pairs two tabs and resolves the first human round", async ({ context, page
   await first.goto("/");
   await second.goto("/");
 
-  await expect(first.getByTestId("play-human-match")).toBeEnabled();
-  await expect(second.getByTestId("play-human-match")).toBeEnabled();
+  await expect(first.getByTestId("player-profile-shell")).toHaveAttribute("data-deck-source", "profile", { timeout: 15_000 });
+  await expect(second.getByTestId("player-profile-shell")).toHaveAttribute("data-deck-source", "profile", { timeout: 15_000 });
+  await expect(first.getByTestId("play-human-match")).toBeEnabled({ timeout: 15_000 });
+  await expect(second.getByTestId("play-human-match")).toBeEnabled({ timeout: 15_000 });
 
   await first.getByTestId("play-human-match").click();
   await second.getByTestId("play-human-match").click();
 
   await expect(first.getByTestId("round-status")).toBeVisible({ timeout: 12_000 });
   await expect(second.getByTestId("round-status")).toBeVisible({ timeout: 12_000 });
+  await expectPlayerHandToUseDeck(first, PROFILE_DECK_IDS);
+  await expectPlayerHandToUseDeck(second, PROFILE_DECK_IDS);
 
   const firstMover = await resolveFirstMover(first, second);
   const secondMover = firstMover === first ? second : first;
@@ -38,7 +45,7 @@ test("pairs two tabs and resolves the first human round", async ({ context, page
 
 test("forfeits the active PvP player when their turn times out", async ({ baseURL }) => {
   const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
-  const deckIds = cards.slice(0, 9).map((card) => card.id);
+  const deckIds = PROTOCOL_OWNED_DECK_IDS;
   const first = await connectRealtimeClient(wsUrl, "Timer A", deckIds);
   const second = await connectRealtimeClient(wsUrl, "Timer B", deckIds);
 
@@ -68,7 +75,7 @@ test("forfeits the active PvP player when their turn times out", async ({ baseUR
 
 test("does not leak the first PvP mover energy before reveal", async ({ baseURL }) => {
   const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
-  const deckIds = cards.slice(0, 9).map((card) => card.id);
+  const deckIds = PROTOCOL_OWNED_DECK_IDS;
   const first = await connectRealtimeClient(wsUrl, "Secret A", deckIds);
   const second = await connectRealtimeClient(wsUrl, "Secret B", deckIds);
 
@@ -104,7 +111,7 @@ test("does not leak the first PvP mover energy before reveal", async ({ baseURL 
 
 test("rejects removed PvP card ids before matchmaking", async ({ baseURL }) => {
   const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
-  const deckIds = cards.slice(0, 9).map((card) => card.id);
+  const deckIds = PROTOCOL_OWNED_DECK_IDS;
   const staleDeckIds = ["corr-1285", ...deckIds.slice(0, 8)];
   const staleDeckClient = await connectRealtimeClient(wsUrl, "Stale Deck", staleDeckIds);
 
@@ -133,7 +140,7 @@ test("rejects removed PvP card ids before matchmaking", async ({ baseURL }) => {
 
 test("rejects PvP decks below the nine-card minimum", async ({ baseURL }) => {
   const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
-  const shortDeckIds = cards.slice(0, 8).map((card) => card.id);
+  const shortDeckIds = PROTOCOL_OWNED_DECK_IDS.slice(0, 8);
   const client = await connectRealtimeClient(wsUrl, "Short Deck", shortDeckIds);
 
   const error = await client.waitFor("error", { timeoutMs: 2_000 });
@@ -146,7 +153,7 @@ test("rejects PvP decks below the nine-card minimum", async ({ baseURL }) => {
 
 test("rejects PvP deck cards outside the provided collection", async ({ baseURL }) => {
   const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
-  const deckIds = cards.slice(0, 9).map((card) => card.id);
+  const deckIds = PROTOCOL_OWNED_DECK_IDS;
   const missingCollectionCardId = deckIds[8];
   const client = await connectRealtimeClient(wsUrl, "Non Owned Deck", deckIds, {
     collectionIds: deckIds.slice(0, 8),
@@ -297,4 +304,16 @@ async function connectRealtimeClient(url: string, name: string, deckIds: string[
 async function expectNoRealtimeMessage(client: RealtimeClient, type: string) {
   await new Promise((resolve) => setTimeout(resolve, 200));
   expect(client.messages().some((message) => message.type === type)).toBe(false);
+}
+
+async function expectPlayerHandToUseDeck(page: Page, deckIds: string[]) {
+  const playerCards = page.locator('[data-testid^="player-card-"]');
+  await expect(playerCards).toHaveCount(4);
+
+  const handIds = await playerCards.evaluateAll((elements) =>
+    elements.map((element) => element.getAttribute("data-testid")?.replace("player-card-", "")),
+  );
+
+  expect(handIds).toHaveLength(4);
+  expect(handIds.every((cardId) => Boolean(cardId) && deckIds.includes(cardId))).toBe(true);
 }
