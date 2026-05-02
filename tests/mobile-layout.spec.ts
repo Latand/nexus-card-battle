@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { mockDeckReadyProfile } from "./fixtures/playerProfile";
 
 const VIEWPORTS = [
   { name: "phone portrait", width: 350, height: 760 },
@@ -178,6 +179,7 @@ test("keeps the desktop board compact on tall screens", async ({ page }) => {
 for (const viewport of COLLECTION_VIEWPORTS) {
   test(`keeps the collection deck builder aligned on ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await mockDeckReadyProfile(page);
     await page.goto("/");
 
     await expect(page.getByTestId("collection-search")).toBeVisible();
@@ -303,6 +305,7 @@ for (const viewport of SELECTION_VIEWPORTS) {
 }
 
 async function openBattle(page: Page) {
+  await mockDeckReadyProfile(page);
   await page.goto("/");
   await page.getByTestId("play-selected-deck").click();
   await expect(page.getByTestId("phase-overlay")).toBeHidden({ timeout: 15_000 });

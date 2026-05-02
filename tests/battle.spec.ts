@@ -1,8 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
+import { mockDeckReadyProfile } from "./fixtures/playerProfile";
 
 const DECK_SESSION_STORAGE_KEY = "nexus:deck-session:v1";
 
 test("keeps the minimum deck locked", async ({ page }) => {
+  await mockDeckReadyProfile(page);
   await page.goto("/");
 
   const deckCards = page.locator('[data-testid^="deck-card-"]');
@@ -16,6 +18,7 @@ test("keeps the minimum deck locked", async ({ page }) => {
 });
 
 test("ignores legacy deck session storage without deleting it", async ({ page }) => {
+  await mockDeckReadyProfile(page);
   const legacyDeckIds = [
     "dahack-1645",
     "dahack-110",
@@ -43,6 +46,7 @@ test("ignores legacy deck session storage without deleting it", async ({ page })
 });
 
 test("plays a complete state-machine battle", async ({ page }) => {
+  await mockDeckReadyProfile(page);
   await page.goto("/");
 
   await expect(page.getByTestId("collection-search")).toBeVisible();
