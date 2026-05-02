@@ -158,6 +158,26 @@ describe("starter booster opening", () => {
     expect(store.openings).toHaveLength(1);
   });
 
+  test("appends a different second starter booster into the saved ten-card deck", async () => {
+    const store = new MemoryBoosterOpeningStore();
+    const first = await openBooster(store, "neon-breach");
+    const firstBody = (await first.json()) as OpenBoosterResponse;
+    const second = await openBooster(store, "factory-shift");
+    const secondBody = (await second.json()) as OpenBoosterResponse;
+    const firstCardIds = firstBody.cards.map((card) => card.id);
+    const secondCardIds = secondBody.cards.map((card) => card.id);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(secondBody.player.ownedCardIds).toEqual([...firstCardIds, ...secondCardIds]);
+    expect(secondBody.player.deckIds).toEqual([...firstCardIds, ...secondCardIds]);
+    expect(secondBody.player.deckIds).toHaveLength(10);
+    expect(new Set(secondBody.player.deckIds).size).toBe(10);
+    expect(secondBody.player.openedBoosterIds).toEqual(["neon-breach", "factory-shift"]);
+    expect(secondBody.player.starterFreeBoostersRemaining).toBe(0);
+    expect(store.openings).toHaveLength(2);
+  });
+
   test("does not advance player state when history insert fails", async () => {
     const store = new MemoryBoosterOpeningStore();
     await store.findOrCreateByIdentity(guestIdentity);

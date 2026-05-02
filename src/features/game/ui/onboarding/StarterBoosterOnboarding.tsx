@@ -2,15 +2,16 @@
 
 import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
+import { cards as cardCatalog } from "@/features/battle/model/cards";
 import { fetchStarterBoosterCatalog, openStarterBooster } from "@/features/boosters/client";
-import type { BoosterCatalogItem, BoosterResponse } from "@/features/boosters/types";
+import { STARTER_BOOSTER_CARD_COUNT, type BoosterCatalogItem, type BoosterResponse } from "@/features/boosters/types";
 import type { Card, Rarity } from "@/features/battle/model/types";
 import { BattleCard } from "@/features/battle/ui/components/BattleCard";
 import { STARTER_FREE_BOOSTERS, type PlayerIdentity, type PlayerProfile } from "@/features/player/profile/types";
 import { cn } from "@/shared/lib/cn";
 
 type ProfileStatus = "loading" | "ready" | "unavailable";
-type Phase = "catalog" | "opening" | "reveal";
+type Phase = "catalog" | "opening" | "reveal" | "deck-ready";
 type CatalogStatus = "loading" | "ready" | "error";
 
 type Props = {
@@ -20,6 +21,8 @@ type Props = {
   profileIdentityMode?: "telegram" | "guest";
   deckSource: "profile" | "starter-fallback";
   onProfileChange: (profile: PlayerProfile) => void;
+  onPlayDeck: (deckIds: string[]) => void;
+  onEditDeck: (deckIds: string[]) => void;
 };
 
 type RevealState = {
@@ -29,6 +32,7 @@ type RevealState = {
 };
 
 const REVEAL_STEP_MS = 460;
+const STARTER_KIT_CARD_COUNT = STARTER_FREE_BOOSTERS * STARTER_BOOSTER_CARD_COUNT;
 const boosterAccents = [
   ["#ffe08a", "#65d7e9"],
   ["#ef735a", "#a8df5a"],
@@ -51,6 +55,8 @@ export function StarterBoosterOnboarding({
   profileIdentityMode,
   deckSource,
   onProfileChange,
+  onPlayDeck,
+  onEditDeck,
 }: Props) {
   const [optimisticProfile, setOptimisticProfile] = useState<PlayerProfile | null>(null);
   const [phase, setPhase] = useState<Phase>("catalog");
@@ -136,10 +142,18 @@ export function StarterBoosterOnboarding({
     }
   }
 
-  function returnToCatalog() {
-    if (reveal) {
-      setOptimisticProfile(reveal.player);
-      onProfileChange(reveal.player);
+  function finishReveal() {
+    if (!reveal) return;
+
+    setOptimisticProfile(reveal.player);
+    onProfileChange(reveal.player);
+
+    if (isStarterKitReady(reveal.player)) {
+      setOpeningBoosterId(null);
+      setReveal(null);
+      setRevealedCount(0);
+      setPhase("deck-ready");
+      return;
     }
 
     setOpeningBoosterId(null);
@@ -191,8 +205,10 @@ export function StarterBoosterOnboarding({
             </div>
           </header>
 
-          {phase === "reveal" && reveal ? (
-            <StarterReveal reveal={reveal} revealedCount={revealedCount} onDone={returnToCatalog} />
+          {phase === "deck-ready" ? (
+            <StarterDeckReady profile={profileForDisplay} onPlayDeck={onPlayDeck} onEditDeck={onEditDeck} />
+          ) : phase === "reveal" && reveal ? (
+            <StarterReveal reveal={reveal} revealedCount={revealedCount} onDone={finishReveal} />
           ) : (
             <section className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-3">
               <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 max-[760px]:grid-cols-1">
@@ -271,6 +287,136 @@ export function StarterBoosterOnboarding({
         </section>
       </div>
     </main>
+  );
+}
+
+function StarterDeckReady({
+  profile,
+  onPlayDeck,
+  onEditDeck,
+}: {
+  profile: PlayerProfile;
+  onPlayDeck: (deckIds: string[]) => void;
+  onEditDeck: (deckIds: string[]) => void;
+}) {
+  const deckCards = profile.deckIds
+    .map((cardId) => cardCatalog.find((card) => card.id === cardId))
+    .filter(Boolean) as Card[];
+  const clans = new Set(deckCards.map((card) => card.clan));
+  const totalPower = deckCards.reduce((sum, card) => sum + card.power, 0);
+  const totalDamage = deckCards.reduce((sum, card) => sum + card.damage, 0);
+  const deckReady = deckCards.length >= STARTER_KIT_CARD_COUNT;
+
+  return (
+    <section
+      className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3"
+      data-testid="starter-deck-ready-shell"
+      data-card-count={deckCards.length}
+      data-profile-deck-count={profile.deckIds.length}
+      data-opened-booster-count={profile.openedBoosterIds.length}
+    >
+      <div className="grid grid-cols-[minmax(0,1fr)_280px] gap-3 rounded-md border border-[#d4aa4d]/45 bg-[linear-gradient(180deg,rgba(29,29,20,0.94),rgba(8,10,10,0.98))] p-4 shadow-[0_18px_42px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,242,181,0.12)] max-[860px]:grid-cols-1 max-[520px]:p-3">
+        <div className="min-w-0">
+          <b className="text-[11px] font-black uppercase tracking-[0.16em] text-[#65d7e9]">Стартовий комплект закрито</b>
+          <h2 className="mt-1 text-[clamp(28px,5vw,50px)] font-black uppercase leading-none text-[#fff0ad] [text-shadow:0_3px_0_rgba(0,0,0,0.72)]">
+            Колода готова
+          </h2>
+          <p className="mt-2 max-w-[760px] text-sm font-bold leading-snug text-[#cbbd99] max-[520px]:text-xs">
+            Два різні бустери вже записали карти в профіль. Можна одразу зіграти AI-бій або підкрутити склад.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Metric label="Карт" value={`${deckCards.length}/${STARTER_KIT_CARD_COUNT}`} />
+          <Metric label="Бустерів" value={`${profile.openedBoosterIds.length}/${STARTER_FREE_BOOSTERS}`} />
+          <Metric label="Фракцій" value={clans.size} />
+          <Metric label="Сила" value={totalPower} />
+        </div>
+      </div>
+
+      <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_260px] gap-3 max-[960px]:grid-cols-1">
+        <section className="grid min-h-0 content-start gap-2 overflow-y-auto rounded-md border border-[#d4aa4d]/32 bg-[rgba(5,8,10,0.74)] p-3 shadow-[inset_0_0_68px_rgba(0,0,0,0.3)] max-[520px]:p-2">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(142px,1fr))] gap-2 max-[430px]:grid-cols-2 max-[430px]:gap-1.5">
+            {deckCards.map((card, index) => (
+              <StarterDeckReadyCard key={`${card.id}-${index}`} card={card} index={index} />
+            ))}
+          </div>
+        </section>
+
+        <aside className="grid content-start gap-3 rounded-md border border-white/10 bg-black/42 p-3">
+          <div className="grid grid-cols-2 gap-2">
+            <Metric label="Урон" value={totalDamage} />
+            <Metric label="Легенд." value={deckCards.filter((card) => card.rarity === "Legend").length} />
+          </div>
+
+          <button
+            className={cn(
+              "min-h-[48px] rounded-md border-2 px-5 text-sm font-black uppercase transition",
+              deckReady
+                ? "border-black/60 bg-[linear-gradient(180deg,#fff26d,#e3b51e_54%,#a66d12)] text-[#1a1408] hover:brightness-110"
+                : "cursor-not-allowed border-white/10 bg-white/5 text-[#7e7668]",
+            )}
+            type="button"
+            disabled={!deckReady}
+            onClick={() => onPlayDeck(profile.deckIds)}
+            data-testid="starter-deck-ready-play"
+          >
+            Грати
+          </button>
+
+          <button
+            className="min-h-[48px] rounded-md border-2 border-[#65d7e9]/60 bg-[linear-gradient(180deg,#68e5f5,#218aa3_56%,#0d4151)] px-5 text-sm font-black uppercase text-[#061116] transition hover:brightness-110"
+            type="button"
+            onClick={() => onEditDeck(profile.deckIds)}
+            data-testid="starter-deck-ready-edit"
+          >
+            Редагувати колоду
+          </button>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function StarterDeckReadyCard({ card, index }: { card: Card; index: number }) {
+  const style = {
+    "--card-accent": card.accent,
+  } as CSSProperties;
+
+  return (
+    <article
+      className="grid min-h-[118px] grid-rows-[auto_1fr_auto] gap-2 rounded-md border border-[color-mix(in_srgb,var(--card-accent),#000_38%)] bg-[linear-gradient(160deg,color-mix(in_srgb,var(--card-accent),#101010_64%),rgba(6,8,10,0.95)_52%)] p-2 shadow-[0_12px_26px_rgba(0,0,0,0.32),inset_0_1px_0_rgba(255,255,255,0.08)] max-[430px]:min-h-[112px]"
+      style={style}
+      data-testid={`starter-deck-ready-card-${index + 1}`}
+      data-card-id={card.id}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <b className="grid aspect-square w-7 place-items-center rounded-sm border border-black/35 bg-[#fff0ad] text-xs font-black text-[#17100a]">
+          {index + 1}
+        </b>
+        <span className="truncate rounded-sm border border-white/12 bg-black/34 px-1.5 py-1 text-[10px] font-black uppercase text-[#9ed6e4]">
+          {rarityLabels[card.rarity]}
+        </span>
+      </div>
+
+      <div className="min-w-0 self-end">
+        <strong className="block truncate text-base font-black uppercase leading-tight text-[#fff4c4] max-[430px]:text-sm">
+          {card.name}
+        </strong>
+        <span className="mt-1 block truncate text-[10px] font-black uppercase tracking-[0.06em] text-[#cbbd99]">
+          {card.clan}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-1 text-center">
+        <span className="rounded-sm border border-white/10 bg-black/30 px-1 py-1 text-[10px] font-black uppercase text-[#ffe08a]">
+          С {card.power}
+        </span>
+        <span className="rounded-sm border border-white/10 bg-black/30 px-1 py-1 text-[10px] font-black uppercase text-[#efcf6f]">
+          У {card.damage}
+        </span>
+      </div>
+    </article>
   );
 }
 
@@ -411,6 +557,7 @@ function StarterReveal({
   const activeCard = reveal.cards[safeCount - 1];
   const visibleCards = reveal.cards.slice(0, revealedCount);
   const complete = revealedCount >= reveal.cards.length;
+  const deckReadyAfterReveal = isStarterKitReady(reveal.player);
 
   return (
     <section
@@ -485,7 +632,7 @@ function StarterReveal({
             onClick={onDone}
             data-testid="starter-reveal-continue"
           >
-            До каталогу
+            {deckReadyAfterReveal ? "До колоди" : "До каталогу"}
           </button>
         ) : null}
       </div>
@@ -509,5 +656,13 @@ function Metric({ label, value, testId }: { label: string; value: number | strin
       <b className="block text-xl font-black leading-none text-[#ffe08a]">{value}</b>
       <span className="mt-1 block text-[10px] font-black uppercase tracking-[0.1em] text-[#a99d85]">{label}</span>
     </div>
+  );
+}
+
+function isStarterKitReady(profile: PlayerProfile) {
+  return (
+    profile.starterFreeBoostersRemaining === 0 &&
+    profile.openedBoosterIds.length >= STARTER_FREE_BOOSTERS &&
+    profile.deckIds.length >= STARTER_KIT_CARD_COUNT
   );
 }
