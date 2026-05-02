@@ -70,6 +70,27 @@ test("matches direct PvP clients with saved profile decks", async ({ baseURL, re
   second.close();
 });
 
+test("matches valid saved decks while filtering stale owned cards out of PvP collection", async ({ baseURL, request }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const staleOwnedIdentity = testIdentity("stale-owned-valid-deck");
+  const opponentIdentity = testIdentity("stale-owned-opponent");
+  const staleOwnedProfile = await seedRealtimeProfile(request, staleOwnedIdentity, {
+    ownedCardIds: [...PROTOCOL_OWNED_COLLECTION_IDS, "corr-1285"],
+    deckIds: PROTOCOL_OWNED_DECK_IDS,
+  });
+  const opponentProfile = await seedRealtimeProfile(request, opponentIdentity);
+  const staleOwnedClient = await connectRealtimeClient(wsUrl, "Stale Owned", staleOwnedProfile.deckIds, { identity: staleOwnedIdentity });
+  const opponentClient = await connectRealtimeClient(wsUrl, "Opponent", opponentProfile.deckIds, { identity: opponentIdentity });
+
+  const staleOwnedReady = await staleOwnedClient.waitFor("match_ready");
+  const opponentReady = await opponentClient.waitFor("match_ready");
+  expectMatchReadyPlayerLoadout(staleOwnedReady, staleOwnedProfile.deckIds, PROTOCOL_OWNED_COLLECTION_IDS);
+  expectMatchReadyPlayerLoadout(opponentReady, opponentProfile.deckIds, opponentProfile.ownedCardIds);
+
+  staleOwnedClient.close();
+  opponentClient.close();
+});
+
 test("forfeits the active PvP player when their turn times out", async ({ baseURL, request }) => {
   const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
   const firstIdentity = testIdentity("timer-a");

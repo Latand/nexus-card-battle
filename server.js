@@ -527,7 +527,8 @@ function parseSocketPlayerIdentity(value) {
 
 function validateProfileBattleLoadout(profile) {
   const deckIds = getProfileCardIds(profile.deckIds);
-  const collectionIds = getProfileCardIds(profile.ownedCardIds);
+  const rawOwnedCardIds = getProfileCardIds(profile.ownedCardIds);
+  const collectionIds = unique(rawOwnedCardIds.filter((cardId) => activeCardIds.has(cardId)));
   const duplicateDeckIds = duplicateValues(deckIds);
 
   if (duplicateDeckIds.length > 0) {
@@ -539,16 +540,11 @@ function validateProfileBattleLoadout(profile) {
     return { error: deckError };
   }
 
-  const collectionError = validateKnownCardIds(collectionIds, "owned collection");
-  if (collectionError) {
-    return { error: collectionError };
-  }
-
   if (deckIds.length < MIN_DECK_SIZE) {
     return { error: `Saved deck must contain at least ${MIN_DECK_SIZE} cards.` };
   }
 
-  const missingOwnedIds = getMissingCollectionDeckIds(deckIds, collectionIds);
+  const missingOwnedIds = getMissingCollectionDeckIds(deckIds, rawOwnedCardIds);
   if (missingOwnedIds.length > 0) {
     return { error: `Saved deck contains non-owned card ids: ${missingOwnedIds.join(", ")}` };
   }
@@ -591,6 +587,10 @@ function duplicateValues(values) {
   }
 
   return [...duplicates];
+}
+
+function unique(values) {
+  return [...new Set(values)];
 }
 
 function sanitizeMove(value) {
