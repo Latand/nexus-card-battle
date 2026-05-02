@@ -235,6 +235,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const enemySelectedCardId = activeClash?.enemyCard.id ?? enemyLockedMove?.card.id;
   const enemyPlayedCardId = pending?.clash.enemyCard.id ?? game.round.enemyCardId;
   const playerDecisionActive = pending === null && ["player_turn", "card_preview"].includes(game.phase);
+  const turnWarningActive = playerDecisionActive && turnSeconds <= 10;
 
   useEffect(() => {
     if (isHumanMatch && humanStatus !== "matched") return;
@@ -688,9 +689,8 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       if (availableCards.length === 0) return;
 
       const randomCard = availableCards[Math.floor(Math.random() * availableCards.length)];
-      const randomEnergy = Math.floor(Math.random() * (game.player.energy + 1));
 
-      submitSelection(randomCard, randomEnergy, false);
+      submitSelection(randomCard, 0, false);
     };
   });
 
@@ -732,6 +732,14 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   return (
     <main className="battle-screen relative isolate min-h-screen w-screen overflow-hidden bg-[#05080b] px-[min(14px,1.4vw)] py-2 text-[#f8eed8]">
       <SceneBackground />
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_center,rgba(255,35,35,0.32),rgba(255,35,35,0.12)_42%,transparent_72%),linear-gradient(180deg,rgba(140,12,12,0.34),rgba(20,4,4,0.12))] opacity-0 mix-blend-screen transition-opacity duration-700",
+          turnWarningActive && "opacity-100",
+        )}
+        data-testid="turn-warning-overlay"
+        aria-hidden="true"
+      />
 
       {humanBlockingOverlay ? (
         <HumanMatchOverlay status={humanStatus} message={humanMessage} onOpenCollection={onOpenCollection} />
@@ -740,7 +748,16 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       {!humanBlockingOverlay && !boardHidden ? (
       <div className="battle-board relative z-10">
       <section className={topBarClass()}>
-        <div className={barButtonClass()} data-testid="turn-timer">⌛ {turnSeconds} сек</div>
+        <div
+          className={barButtonClass(
+            turnWarningActive
+              ? "bg-[linear-gradient(180deg,rgba(128,18,18,0.98),rgba(44,5,5,0.86))] text-[#ffe5df] shadow-[inset_0_0_22px_rgba(255,51,45,0.42),0_0_18px_rgba(255,51,45,0.28)]"
+              : undefined,
+          )}
+          data-testid="turn-timer"
+        >
+          ⌛ {turnSeconds} сек
+        </div>
         <NamePlate name={game.enemy.name} energy={game.enemy.energy} health={game.enemy.hp} statuses={game.enemy.statuses} />
         <button className={barButtonClass("border-l border-white/10 hover:bg-[linear-gradient(180deg,#ffe08a,#c98326)] hover:text-[#15100a]")} type="button" onClick={onOpenCollection}>
           Колоди

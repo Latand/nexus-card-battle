@@ -33,6 +33,20 @@ test("default battle data and validation do not keep C.O.R.R. fallbacks", () => 
   expect(() => createCardCollection("regression", ["corr-1285"])).toThrow(/Unknown collection card ids: corr-1285/);
 });
 
+test("default AI opponent uses a softer varied deck", () => {
+  const game = createInitialGame();
+  const enemyCards = game.enemy.deck.cardIds.map((cardId) => {
+    const card = cards.find((item) => item.id === cardId);
+    expect(card).toBeTruthy();
+    return card!;
+  });
+
+  expect(enemyCards).toHaveLength(12);
+  expect(new Set(enemyCards.map((card) => card.id)).size).toBe(12);
+  expect(new Set(enemyCards.map((card) => card.clan))).toEqual(new Set(["Metropolis", "Workers", "Toyz"]));
+  expect(enemyCards.every((card) => card.rarity === "Common" || card.rarity === "Rare")).toBe(true);
+});
+
 test("all active cards can be scored without copy-clan-bonus support", () => {
   for (const card of cards) {
     expect(() => score(card, 0, true)).not.toThrow();
