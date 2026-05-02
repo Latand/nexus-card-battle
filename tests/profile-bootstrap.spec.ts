@@ -1,18 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { fulfillPlayerProfile, PROFILE_DECK_IDS, PROFILE_OWNED_CARD_IDS } from "./fixtures/playerProfile";
 
 const GUEST_ID_STORAGE_KEY = "nexus:player-guest-id:v1";
-const PROFILE_DECK_IDS = [
-  "dahack-1645",
-  "dahack-110",
-  "dahack-820",
-  "dahack-167",
-  "dahack-1727",
-  "dahack-795",
-  "dahack-1383",
-  "dahack-658",
-  "dahack-108",
-];
-const PROFILE_OWNED_CARD_IDS = [...PROFILE_DECK_IDS, "dahack-363"];
 
 test("bootstraps a browser guest profile on first load", async ({ page }) => {
   const requests: unknown[] = [];
@@ -29,6 +18,7 @@ test("bootstraps a browser guest profile on first load", async ({ page }) => {
       ownedCardIds: [],
       deckIds: [],
       starterFreeBoostersRemaining: 2,
+      openedBoosterIds: [],
     });
   });
 
@@ -41,7 +31,11 @@ test("bootstraps a browser guest profile on first load", async ({ page }) => {
   await expect(profileShell).toHaveAttribute("data-profile-deck-count", "0");
   await expect(profileShell).toHaveAttribute("data-starter-free-boosters-remaining", "2");
   await expect(profileShell).toHaveAttribute("data-deck-source", "starter-fallback");
-  await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(9);
+  await expect(page.getByTestId("starter-onboarding-shell")).toBeVisible();
+  await expect(page.getByTestId("starter-onboarding-shell")).toHaveAttribute("data-opened-booster-count", "0");
+  await expect(page.locator('[data-testid^="starter-booster-card-"]')).toHaveCount(12);
+  await expect(page.getByTestId("collection-search")).toHaveCount(0);
+  await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(0);
 
   expect(requests).toHaveLength(1);
   const storedGuestId = await page.evaluate((key) => window.localStorage.getItem(key), GUEST_ID_STORAGE_KEY);
@@ -87,7 +81,8 @@ test("bootstraps the Telegram MVP identity from client-provided telegramId", asy
       identity: requestBody.identity,
       ownedCardIds: PROFILE_OWNED_CARD_IDS,
       deckIds: PROFILE_DECK_IDS,
-      starterFreeBoostersRemaining: 1,
+      starterFreeBoostersRemaining: 0,
+      openedBoosterIds: ["neon-breach", "factory-shift"],
     });
   });
 
@@ -105,7 +100,7 @@ test("bootstraps the Telegram MVP identity from client-provided telegramId", asy
   await expect(profileShell).toHaveAttribute("data-profile-identity-mode", "telegram");
   await expect(profileShell).toHaveAttribute("data-profile-owned-card-count", String(PROFILE_OWNED_CARD_IDS.length));
   await expect(profileShell).toHaveAttribute("data-profile-deck-count", String(PROFILE_DECK_IDS.length));
-  await expect(profileShell).toHaveAttribute("data-starter-free-boosters-remaining", "1");
+  await expect(profileShell).toHaveAttribute("data-starter-free-boosters-remaining", "0");
   await expect(profileShell).toHaveAttribute("data-deck-source", "profile");
   await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(PROFILE_DECK_IDS.length);
   await expect(page.locator('[data-testid^="collection-card-"]')).toHaveCount(PROFILE_OWNED_CARD_IDS.length);
@@ -113,32 +108,4 @@ test("bootstraps the Telegram MVP identity from client-provided telegramId", asy
 
 async function mockPlayerProfile(page: Page, handler: (route: Route) => Promise<void>) {
   await page.route("**/api/player", handler);
-}
-
-async function fulfillPlayerProfile(
-  route: Route,
-  profile: {
-    id: string;
-    identity: { mode: "guest"; guestId: string } | { mode: "telegram"; telegramId: string };
-    ownedCardIds: string[];
-    deckIds: string[];
-    starterFreeBoostersRemaining: number;
-  },
-) {
-  await route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify({
-      player: {
-        ...profile,
-        openedBoosterIds: [],
-        onboarding: {
-          starterBoostersAvailable: profile.starterFreeBoostersRemaining > 0,
-          collectionReady: profile.ownedCardIds.length > 0,
-          deckReady: profile.deckIds.length > 0,
-          completed: false,
-        },
-      },
-    }),
-  });
 }
