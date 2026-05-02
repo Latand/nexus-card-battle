@@ -44,7 +44,7 @@ const rarityFilters: { id: RarityFilter; label: string }[] = [
 const sortModes: { id: SortMode; label: string }[] = [
   { id: "rarity", label: "Рідкість" },
   { id: "power", label: "Сила" },
-  { id: "damage", label: "Шкода" },
+  { id: "damage", label: "Урон" },
   { id: "name", label: "Ім’я" },
 ];
 
@@ -436,7 +436,7 @@ function DeckDock({
 
         <div className="grid grid-cols-3 gap-2">
           <Metric label="Сила" value={deckStats.power} />
-          <Metric label="Шкода" value={deckStats.damage} />
+          <Metric label="Урон" value={deckStats.damage} />
           <Metric label="Легенд." value={deckStats.legends} />
         </div>
       </div>
@@ -544,7 +544,7 @@ function CardDetails({
 
       <div className="grid grid-cols-2 gap-2">
         <Metric label="Сила" value={card.power} />
-        <Metric label="Шкода" value={card.damage} />
+        <Metric label="Урон" value={card.damage} />
       </div>
 
       <dl className="mt-3 grid gap-2">

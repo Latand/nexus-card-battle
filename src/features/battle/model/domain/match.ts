@@ -9,6 +9,7 @@ export type CreateInitialGameOptions = {
   playerDeckIds?: string[];
   enemyCollectionIds?: string[];
   enemyDeckIds?: string[];
+  playerName?: string;
 };
 
 export function createInitialGame(options: CreateInitialGameOptions = {}): GameState {
@@ -16,10 +17,11 @@ export function createInitialGame(options: CreateInitialGameOptions = {}): GameS
   const nextPlayerDeckIds = options.playerDeckIds ?? playerDeckIds;
   const nextEnemyCollectionIds = options.enemyCollectionIds ?? enemyCollectionIds;
   const nextEnemyDeckIds = options.enemyDeckIds ?? enemyDeckIds;
+  const playerName = options.playerName?.trim() || "Гравець";
 
   return {
     phase: "match_intro",
-    player: makeFighter("player", "Гравець", "Лідер вулиці", nextPlayerCollectionIds, nextPlayerDeckIds),
+    player: makeFighter("player", playerName, "Лідер вулиці", nextPlayerCollectionIds, nextPlayerDeckIds),
     enemy: makeFighter("enemy", "Суперник", "Гість арени", nextEnemyCollectionIds, nextEnemyDeckIds),
     round: createRound(1),
     first: "player",

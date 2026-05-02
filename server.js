@@ -187,11 +187,15 @@ function createMatch(left, right) {
         id: left.id,
         deckIds: left.queuedDeckIds,
         collectionIds: left.queuedCollectionIds,
+        handIds: selectBattleHandIds(left.queuedDeckIds),
+        usedCardIds: [],
       },
       [right.id]: {
         id: right.id,
         deckIds: right.queuedDeckIds,
         collectionIds: right.queuedCollectionIds,
+        handIds: selectBattleHandIds(right.queuedDeckIds),
+        usedCardIds: [],
       },
     },
   };
@@ -238,8 +242,19 @@ function submitMove(session, message) {
     return;
   }
 
+  const player = match.players[session.id];
   const opponentId = getOpponentId(match, session.id);
   const hasFirstMove = Boolean(match.moves[match.firstPlayerId]);
+
+  if (!player.handIds.includes(move.cardId)) {
+    sendError(session, "Card is not in the battle hand.");
+    return;
+  }
+
+  if (player.usedCardIds.includes(move.cardId)) {
+    sendError(session, "Card was already used.");
+    return;
+  }
 
   if (session.id !== match.firstPlayerId && !hasFirstMove) {
     sendError(session, "Wait for the first player move.");
@@ -274,6 +289,13 @@ function submitMove(session, message) {
   const resolvedFirstPlayerId = match.firstPlayerId;
   const moves = { ...match.moves };
   const nextFirstPlayerId = getOpponentId(match, resolvedFirstPlayerId);
+
+  for (const [playerId, submittedMove] of Object.entries(moves)) {
+    const matchPlayer = match.players[playerId];
+    if (matchPlayer && !matchPlayer.usedCardIds.includes(submittedMove.cardId)) {
+      matchPlayer.usedCardIds.push(submittedMove.cardId);
+    }
+  }
 
   match.round += 1;
   match.firstPlayerId = nextFirstPlayerId;
@@ -355,6 +377,21 @@ function sanitizeMove(value) {
     energy: Math.max(0, Math.min(12, Number.parseInt(String(value.energy ?? 0), 10) || 0)),
     boosted: Boolean(value.boosted),
   };
+}
+
+function selectBattleHandIds(deckIds) {
+  return shuffle(deckIds).slice(0, 4);
+}
+
+function shuffle(items) {
+  const next = [...items];
+
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = crypto.randomInt(index + 1);
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+
+  return next;
 }
 
 function createId(prefix) {

@@ -9,6 +9,19 @@ import { CollectionDeckScreen } from "./collection/CollectionDeckScreen";
 
 const DECK_SESSION_STORAGE_KEY = "nexus:deck-session:v1";
 type BattleMode = "ai" | "human";
+type TelegramWindow = Window & {
+  Telegram?: {
+    WebApp?: {
+      initDataUnsafe?: {
+        user?: {
+          username?: string;
+          first_name?: string;
+          last_name?: string;
+        };
+      };
+    };
+  };
+};
 
 type PersistenceWindow = {
   requestIdleCallback?: Window["requestIdleCallback"];
@@ -22,6 +35,7 @@ export function GameRoot() {
   const [screen, setScreen] = useState<"collection" | "battle">("collection");
   const [battleMode, setBattleMode] = useState<BattleMode>("ai");
   const [deckIds, setDeckIds] = useState(() => createStarterDeckIds(collectionIds));
+  const [playerName] = useState(() => readCurrentUsername());
   const deckIdsRef = useRef(deckIds);
   const deckTouchedRef = useRef(false);
   const persistenceReadyRef = useRef(false);
@@ -68,6 +82,7 @@ export function GameRoot() {
         <RealtimeBattleGame
           playerCollectionIds={collectionIds}
           playerDeckIds={deckIds}
+          playerName={playerName}
           onOpenCollection={() => setScreen("collection")}
         />
       );
@@ -77,6 +92,7 @@ export function GameRoot() {
       <BattleGame
         playerCollectionIds={collectionIds}
         playerDeckIds={deckIds}
+        playerName={playerName}
         onOpenCollection={() => setScreen("collection")}
       />
     );
@@ -109,6 +125,31 @@ function readSavedDeckIds(collectionIds: string[]) {
     return sanitizeDeckIds(parsed, collectionIds);
   } catch {
     return null;
+  }
+}
+
+function readCurrentUsername() {
+  if (typeof window === "undefined") return undefined;
+
+  const telegramUser = (window as TelegramWindow).Telegram?.WebApp?.initDataUnsafe?.user;
+  const telegramName = [telegramUser?.first_name, telegramUser?.last_name].filter(Boolean).join(" ").trim();
+  const telegramUsername = telegramUser?.username ? `@${telegramUser.username}` : telegramName;
+  if (telegramUsername) return telegramUsername;
+
+  const storageKeys = ["nexus:username", "username", "userName", "playerName"];
+  for (const key of storageKeys) {
+    const value = readStorageString(key);
+    if (value) return value;
+  }
+
+  return undefined;
+}
+
+function readStorageString(key: string) {
+  try {
+    return window.localStorage.getItem(key)?.trim() || window.sessionStorage.getItem(key)?.trim() || undefined;
+  } catch {
+    return undefined;
   }
 }
 

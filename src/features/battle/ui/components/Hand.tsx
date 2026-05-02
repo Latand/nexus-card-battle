@@ -55,22 +55,33 @@ export function Hand({
           "relative z-[1] block border-0 bg-transparent p-0 text-left text-inherit transition-[filter,transform,opacity] duration-500",
           isSelected && owner === "player" && "-translate-y-2 drop-shadow-[0_0_18px_rgba(255,210,58,0.86)]",
           isSelected && owner === "enemy" && "drop-shadow-[0_0_18px_rgba(255,91,84,0.76)]",
-          isPlayed && owner === "enemy" && "z-[3] translate-y-8 scale-[1.075] drop-shadow-[0_18px_26px_rgba(255,74,66,0.56)] max-[760px]:translate-y-6",
+          isPlayed && owner === "enemy" && "z-[3] scale-[1.035] drop-shadow-[0_0_18px_rgba(255,74,66,0.62)]",
           card.used && "cursor-not-allowed opacity-35 grayscale",
           !card.used && "cursor-pointer hover:-translate-y-1 hover:drop-shadow-[0_0_12px_rgba(255,220,91,0.5)]",
         );
 
+        const cardDisabled = Boolean(disabled || card.used);
+
         return owner === "player" ? (
-          <button
+          <div
             key={card.id}
             data-testid={`player-card-${card.id}`}
             data-played={isPlayed ? "true" : "false"}
             className={state}
-            onClick={() => onPick?.(card)}
-            disabled={disabled || card.used}
+            role="button"
+            tabIndex={cardDisabled ? -1 : 0}
+            aria-disabled={cardDisabled}
+            onClick={() => {
+              if (!cardDisabled) onPick?.(card);
+            }}
+            onKeyDown={(event) => {
+              if (cardDisabled || (event.key !== "Enter" && event.key !== " ")) return;
+              event.preventDefault();
+              onPick?.(card);
+            }}
           >
             <BattleCard card={card} clanBonusActive={clanBonusActive} abilityActive={abilityActive} bonusVisible={bonusVisible} />
-          </button>
+          </div>
         ) : (
           <div
             key={card.id}

@@ -153,8 +153,8 @@ function getStatusText(phase: Phase, clash: Clash, isFinisher: boolean, loserCar
   const winnerAttack = clash.winner === "player" ? clash.playerAttack : clash.enemyAttack;
   const loserAttack = clash.winner === "player" ? clash.enemyAttack : clash.playerAttack;
   const damageText = isFinisher
-    ? `${visibleText(loserCardName)} вибуває: ${clash.damage} шкоди для ${damageTarget}`
-    : `${damageTarget} отримує ${clash.damage} шкоди`;
+    ? `${visibleText(loserCardName)} вибуває: ${clash.damage} урону для ${damageTarget}`
+    : `${damageTarget} отримує ${clash.damage} урону`;
 
   return `${visibleText(winnerCardName)} перемагає: ${winnerAttack} проти ${loserAttack}; ${damageText}`;
 }
@@ -173,7 +173,7 @@ function hasControlEffect(effects: ResolvedEffect[], target: Side) {
 function getPhaseLabel(phase: Phase, isFinisher: boolean) {
   if (phase === "battle_intro") return "";
   if (isFinisher) return "Останній удар";
-  return "Шкода";
+  return "Урон";
 }
 
 function getVirtualCardLife(clash: Clash, phase: Phase, side: Side) {

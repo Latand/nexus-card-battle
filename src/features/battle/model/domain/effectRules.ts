@@ -59,7 +59,7 @@ const effectTemplates: Record<string, EffectTemplate> = {
     target: "self",
   },
   "add-damage": {
-    label: "{amount:+} шкоди",
+    label: "{amount:+} урону",
     timing: "damage",
     stat: "damage",
     target: "self",
@@ -152,7 +152,7 @@ const effectTemplates: Record<string, EffectTemplate> = {
     condition: "owner_hp_below_opponent",
   },
   "rage-mirror-damage": {
-    label: "шкоду скопійовано",
+    label: "урон скопійовано",
     timing: "damage",
     stat: "damage",
     target: "self",
@@ -167,7 +167,7 @@ const effectTemplates: Record<string, EffectTemplate> = {
     mode: "reduce_with_min",
   },
   "reduce-damage": {
-    label: "{amount} шкоди суперника",
+    label: "{amount} урону суперника",
     timing: "damage",
     stat: "damage",
     target: "opponent",

@@ -115,7 +115,7 @@ export function NamePlate({
       <strong className="relative z-[1] col-span-full min-w-0 truncate text-center text-xl font-black uppercase tracking-[0.02em] text-[#f4fbff] max-[960px]:text-lg max-[760px]:text-base max-[620px]:text-[13px]">
         {name}
       </strong>
-      {withResources ? <CompactResource label="EN" value={energy} tone="energy" /> : null}
+      {withResources ? <CompactResource label="Енергія" value={energy} tone="energy" /> : null}
       {withResources ? <CompactResource label="HP" value={health} tone="health" align="right" /> : null}
       {withResources && statuses.length > 0 ? (
         <div className="relative z-[1] col-span-full min-w-0">
@@ -173,12 +173,23 @@ function CompactResource({
   return (
     <div className={cn("relative z-[1] grid w-full min-w-0 gap-0.5", align === "right" ? "justify-items-end" : "justify-items-start")}>
       <span className="flex h-5 max-w-full items-center gap-1 rounded-sm border border-white/10 bg-black/45 px-1.5 text-[11px] font-black leading-none shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] max-[620px]:h-4 max-[620px]:gap-0.5 max-[620px]:px-1 max-[620px]:text-[9px]">
-        <b className={cn(tone === "energy" ? "text-[#ffe371]" : "text-[#9dff63]")}>{label}</b>
+        {tone === "energy" ? <EnergyIcon label={label} /> : <b className="text-[#9dff63]">{label}</b>}
         <strong className="text-[#fff8df]">{Math.max(0, value)}</strong>
       </span>
       <div className="w-full min-w-[86px] max-w-[136px] max-[620px]:min-w-[72px] max-[620px]:max-w-[96px]">
         <ResourcePills value={value} max={tone === "energy" ? MAX_ENERGY : MAX_HEALTH} tone={tone} dense />
       </div>
     </div>
+  );
+}
+
+function EnergyIcon({ label }: { label: string }) {
+  return (
+    <b className="relative grid h-3.5 w-3 place-items-center" aria-label={label} title={label}>
+      <span
+        className="block h-3.5 w-2.5 bg-[#ffe371] shadow-[0_0_8px_rgba(255,227,113,0.75)] [clip-path:polygon(54%_0,100%_0,66%_42%,100%_42%,35%_100%,48%_55%,0_55%)]"
+        aria-hidden="true"
+      />
+    </b>
   );
 }

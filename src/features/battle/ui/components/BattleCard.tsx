@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { cn } from "@/shared/lib/cn";
 import { visibleText } from "@/shared/lib/visibleText";
 import type { Card } from "../../model/types";
+import { CardTooltip } from "./CardTooltip";
 
 export function BattleCard({
   card,
@@ -17,6 +18,10 @@ export function BattleCard({
   abilityActive?: boolean;
   bonusVisible?: boolean;
 }) {
+  const abilityName = visibleText(card.ability.name);
+  const abilityDescription = visibleText(card.ability.description);
+  const bonusName = visibleText(card.bonus.name);
+  const bonusDescription = visibleText(card.bonus.description);
   const style = {
     containerType: "inline-size",
     "--accent": card.accent,
@@ -73,30 +78,42 @@ export function BattleCard({
       </b>
 
       <div className="absolute inset-x-[30%] top-[72.9%] z-[2] grid gap-[4px]">
-        <span
-          className={cn(
-            "block min-h-[20px] truncate rounded px-[5px] py-[4px] text-center text-[clamp(8px,3.9cqw,11px)] leading-none",
-            abilityActive === false
-              ? "bg-[rgba(0,0,0,0.24)] text-transparent"
-              : "bg-[rgba(0,0,0,0.42)] text-[#eadfc5]",
-          )}
-          title={abilityActive === false ? "" : visibleText(card.ability.name)}
+        <CardTooltip
+          className="block min-w-0"
+          eyebrow="Уміння"
+          title={abilityName}
+          description={abilityDescription}
         >
-          {abilityActive === false ? "" : visibleText(card.ability.name)}
-        </span>
-        <span
-          className={cn(
-            "block min-h-[20px] truncate rounded border px-[5px] py-[4px] text-center text-[clamp(8px,3.9cqw,11px)] leading-none",
-            !bonusVisible
-              ? "border-white/5 bg-[rgba(0,0,0,0.24)] text-transparent"
-              : clanBonusActive === false
-              ? "border-white/5 bg-[rgba(0,0,0,0.28)] text-[#8c836f]"
-              : "border-[color-mix(in_srgb,var(--accent),#fff_18%)] bg-[rgba(0,0,0,0.5)] text-[#fff2c6] shadow-[0_0_9px_color-mix(in_srgb,var(--accent),transparent_56%)]",
-          )}
-          title={bonusVisible ? visibleText(card.bonus.name) : ""}
+          <span
+            className={cn(
+              "block min-h-[20px] w-full truncate rounded px-[5px] py-[4px] text-center text-[clamp(8px,3.9cqw,11px)] leading-none",
+              abilityActive === false
+                ? "bg-[rgba(0,0,0,0.3)] text-[#8c836f]"
+                : "bg-[rgba(0,0,0,0.42)] text-[#eadfc5]",
+            )}
+          >
+            {abilityName}
+          </span>
+        </CardTooltip>
+        <CardTooltip
+          className="block min-w-0"
+          eyebrow="Бонус"
+          title={bonusName}
+          description={bonusDescription}
         >
-          {bonusVisible ? visibleText(card.bonus.name) : ""}
-        </span>
+          <span
+            className={cn(
+              "block min-h-[20px] w-full truncate rounded border px-[5px] py-[4px] text-center text-[clamp(8px,3.9cqw,11px)] leading-none",
+              !bonusVisible
+                ? "border-white/5 bg-[rgba(0,0,0,0.3)] text-[#7f7869]"
+                : clanBonusActive === false
+                  ? "border-white/5 bg-[rgba(0,0,0,0.28)] text-[#8c836f]"
+                  : "border-[color-mix(in_srgb,var(--accent),#fff_18%)] bg-[rgba(0,0,0,0.5)] text-[#fff2c6] shadow-[0_0_9px_color-mix(in_srgb,var(--accent),transparent_56%)]",
+            )}
+          >
+            {bonusName}
+          </span>
+        </CardTooltip>
       </div>
     </article>
   );

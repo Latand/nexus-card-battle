@@ -114,7 +114,7 @@ export function resolveRound(
 
   if (winner === "player" && damageBoost) {
     damage += 2;
-    effects.push({ source: playerCard.name, label: "+2 шкоди за ривок", value: 2, target: "enemy" });
+    effects.push({ source: playerCard.name, label: "+2 урону за ривок", value: 2, target: "enemy" });
   }
 
   damage = applyQueuedNumberEffects(damage, loserScore.opponentDamageEffects, winner, effects);
@@ -148,7 +148,7 @@ export function resolveRound(
     damage,
     effects,
     tieBreaker: tie.tieBreaker,
-    text: `${winnerCard.name} пробиває ${winner === "player" ? enemy.name : player.name}: завдано ${damage} шкоди`,
+    text: `${winnerCard.name} пробиває ${winner === "player" ? enemy.name : player.name}: завдано ${damage} урону`,
   };
 
   const matchResult = getMatchResult(nextPlayer, nextEnemy, round);

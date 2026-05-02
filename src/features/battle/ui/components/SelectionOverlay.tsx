@@ -5,6 +5,7 @@ import { BASE_ATTACK_ENERGY } from "../../model/constants";
 import { hasApplicableAbilityEffect } from "../../model/game";
 import type { Card, Fighter } from "../../model/types";
 import { BattleCard } from "./BattleCard";
+import { CardTooltip } from "./CardTooltip";
 
 export function SelectionOverlay({
   selected,
@@ -136,22 +137,36 @@ export function SelectionOverlay({
             onClick={onToggleBoost}
             disabled={!damageBoost && !canBoost}
           >
-            <span>+2 шкоди</span>
+            <span>+2 урону</span>
             <b className="grid min-h-7 place-items-center rounded-md bg-[linear-gradient(180deg,#7656f0,#3e2bb1)] text-lg text-white">{boostCost}</b>
           </button>
 
           <div className="grid grid-cols-2 gap-[5px]">
             <span className="grid min-h-7 place-items-center border border-white/15 bg-black/35 text-[11px] font-black uppercase text-[#f5e9c8]">Атака {previewAttack}</span>
-            <span className="grid min-h-7 place-items-center border border-white/15 bg-black/35 text-[11px] font-black uppercase text-[#f5e9c8]">Шкода {previewDamage}</span>
+            <span className="grid min-h-7 place-items-center border border-white/15 bg-black/35 text-[11px] font-black uppercase text-[#f5e9c8]">Урон {previewDamage}</span>
           </div>
 
           <div className="grid gap-[5px] text-[10px] font-bold leading-tight text-[#d9ceb2]">
-            <span className={cn("truncate", !selectedAbilityActive && "text-transparent")}>
-              {selectedAbilityActive ? visibleText(selected.ability.name) : ""}
-            </span>
-            <span className={cn("truncate", !selectedBonusVisible && "text-transparent")}>
-              {selectedBonusVisible ? visibleText(selected.bonus.name) : ""}
-            </span>
+            <CardTooltip
+              className="block min-w-0"
+              eyebrow="Уміння"
+              title={visibleText(selected.ability.name)}
+              description={visibleText(selected.ability.description)}
+            >
+              <span className={cn("block truncate rounded px-1 py-0.5", !selectedAbilityActive && "text-[#8c836f]")}>
+                {visibleText(selected.ability.name)}
+              </span>
+            </CardTooltip>
+            <CardTooltip
+              className="block min-w-0"
+              eyebrow="Бонус"
+              title={visibleText(selected.bonus.name)}
+              description={visibleText(selected.bonus.description)}
+            >
+              <span className={cn("block truncate rounded px-1 py-0.5", !selectedBonusVisible && "text-[#8c836f]")}>
+                {visibleText(selected.bonus.name)}
+              </span>
+            </CardTooltip>
           </div>
 
           <button
