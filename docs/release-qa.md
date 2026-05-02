@@ -10,6 +10,7 @@ This checklist covers the owned-card booster onboarding release.
 - PvP ownership enforcement: `tests/realtime.spec.ts` covers server-side saved-profile WebSocket joins, direct deck bypass rejection, invalid saved deck rejection, stale owned-card filtering, and matched players' deck/collection payloads sourced from the saved profile.
 - Collection deck ownership: `tests/collection-deck.spec.ts` covers owned-only deck editing, read-only base-card browsing for non-owned cards, and rollback after failed deck saves.
 - Docker Compose startup: `docker-compose.yml` starts the app plus MongoDB, persists MongoDB in `nexus_mongodb_data`, and supports `MONGODB_URI` override for external databases.
+- Docker runtime image smoke: the production image must include runtime `src` modules and `tsconfig.json` because `server.js` imports TypeScript model/profile modules directly.
 
 ## Verification Commands
 
