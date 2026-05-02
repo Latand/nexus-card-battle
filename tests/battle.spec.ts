@@ -1,44 +1,188 @@
 import { expect, test } from "@playwright/test";
 
-test("plays a complete staged battle", async ({ page }) => {
+const DECK_SESSION_STORAGE_KEY = "nexus:deck-session:v1";
+
+test("does not allow fewer than nine deck cards", async ({ page }) => {
   await page.goto("/");
 
+  const deckCards = page.locator('[data-testid^="deck-card-"]');
+  await expect(deckCards).toHaveCount(9);
+  await expect.poll(async () => page.locator('[data-testid^="collection-card-"]').count()).toBeGreaterThan(9);
+
+  await expect.poll(() => readSavedDeckIds(page)).toHaveLength(9);
+  const savedDeckIds = await readSavedDeckIds(page);
+  const minimumCardId = savedDeckIds[0];
+
+  await expect(page.getByTestId(`deck-remove-${minimumCardId}`)).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Оставить 9" })).toBeDisabled();
+  await expect.poll(() => readSavedDeckIds(page)).toContain(minimumCardId);
+});
+
+test("allows adding more than nine cards to the deck", async ({ page }) => {
+  await page.goto("/");
+
+  const deckCards = page.locator('[data-testid^="deck-card-"]');
+  await expect(deckCards).toHaveCount(9);
+  await expect.poll(() => readSavedDeckIds(page)).toHaveLength(9);
+
+  const savedDeckIds = await readSavedDeckIds(page);
+  const extraCardId = await page.evaluate((currentDeckIds) => {
+    const currentDeck = new Set(currentDeckIds);
+    const toggles = [...document.querySelectorAll<HTMLElement>('[data-testid^="collection-toggle-"]')];
+    const extraToggle = toggles.find((toggle) => {
+      const cardId = toggle.dataset.testid?.replace("collection-toggle-", "");
+      return cardId && !currentDeck.has(cardId);
+    });
+
+    return extraToggle?.dataset.testid?.replace("collection-toggle-", "") ?? null;
+  }, savedDeckIds);
+
+  expect(extraCardId).not.toBeNull();
+  await page.getByTestId(`collection-toggle-${extraCardId}`).click({ force: true });
+
+  await expect(deckCards).toHaveCount(10);
+  await expect.poll(() => readSavedDeckIds(page)).toHaveLength(10);
+  await expect.poll(() => readSavedDeckIds(page)).toContain(extraCardId);
+
+  await page.reload();
+
+  await expect(deckCards).toHaveCount(10);
+  await expect.poll(() => readSavedDeckIds(page)).toContain(extraCardId);
+
+  await page.getByTestId(`deck-remove-${extraCardId}`).click({ force: true });
+
+  await expect(deckCards).toHaveCount(9);
+  await expect.poll(() => readSavedDeckIds(page)).toHaveLength(9);
+  await expect.poll(() => readSavedDeckIds(page)).not.toContain(extraCardId);
+});
+
+test("plays a complete state-machine battle", async ({ page }) => {
+  await page.goto("/");
+
+  await expect(page.getByText("Нексус", { exact: true })).toBeVisible();
+  await expect(page.getByText("Коллекция", { exact: true })).toBeVisible();
+  await expect(page.getByText("Фракции", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("collection-search")).toBeVisible();
+  await expect.poll(async () => page.locator('[data-testid^="collection-card-"]').count()).toBeGreaterThan(9);
+  await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(9);
+  await expect.poll(() => readSavedDeckIds(page)).toHaveLength(9);
+  await page.getByTestId("play-selected-deck").click();
+
+  await expect(page.getByTestId("round-status")).toContainText("Твой ход", { timeout: 10_000 });
   await expect(page.getByText("Соперник", { exact: true })).toBeVisible();
   await expect(page.getByText("75 сек")).toBeVisible();
-  await expect(page.getByText("Меню")).toBeVisible();
+  await expect(page.getByText("Деки")).toBeVisible();
   await expect(page.getByTestId("round-marker")).toHaveText("Раунд 1");
-  await expect(page.getByTestId("round-status")).toContainText(/Твой ход|Ход соперника/);
+  await expect(page.locator('[data-testid^="player-card-"]')).toHaveCount(4);
+  await expect(page.locator('[data-testid^="enemy-card-"]')).toHaveCount(4);
   await expect(page.getByText("Выбери бойца, вложи энергию и выпусти его на улицу.")).toBeVisible();
-  await page.getByTestId("player-card-alpha").click();
-  await expect(page.getByTestId("selection-overlay")).toBeVisible();
-  await expect(page.getByTestId("selection-energy")).toHaveText("x1");
 
-  await page.getByTestId("energy-plus").click();
-  await page.getByTestId("energy-plus").click();
-  await expect(page.getByTestId("selection-energy")).toHaveText("x3");
-  await page.getByTestId("selection-ok").click();
-  await expect(page.getByTestId("battle-overlay")).toBeVisible();
-  await expect(page.getByTestId("battle-overlay")).toBeHidden({ timeout: 10_000 });
-  await expect(page.getByTestId("round-marker")).toHaveText("Раунд 2");
+  await playFirstAvailableCard(page, 2, { knownEnemyCard: false });
 
-  const nextCards = ["fury", "micron", "dahack"];
-  for (const [index, cardId] of nextCards.entries()) {
-    const cardButton = page.getByTestId(`player-card-${cardId}`);
-    if (await cardButton.isDisabled()) break;
+  let knownEnemyCard = true;
+  for (let round = 2; round <= 4; round += 1) {
+    await expect
+      .poll(
+        async () => {
+          if (await page.getByTestId("reward-summary").isVisible().catch(() => false)) return "reward";
+          if ((await countEnabledPlayerCards(page)) > 0) return "card";
+          return "waiting";
+        },
+        { timeout: 30_000 },
+      )
+      .not.toBe("waiting");
 
-    await cardButton.scrollIntoViewIfNeeded();
-    await cardButton.click();
-    await expect(page.getByTestId("selection-overlay")).toBeVisible();
-    await page.getByTestId("selection-ok").click();
-    await expect(page.getByTestId("battle-overlay")).toBeVisible();
-    await expect(page.getByTestId("battle-overlay")).toBeHidden({ timeout: 10_000 });
-    await expect(page.getByTestId("round-marker")).toHaveText(`Раунд ${Math.min(index + 3, 4)}`);
+    if (await page.getByTestId("reward-summary").isVisible().catch(() => false)) break;
+
+    await playFirstAvailableCard(page, 0, { knownEnemyCard });
+    knownEnemyCard = !knownEnemyCard;
   }
 
-  await expect(page.getByTestId("round-status")).toContainText(/Победа|Ничья/, { timeout: 10_000 });
-  await expect(page.getByTestId("player-card-alpha")).toBeDisabled();
+  await expect(page.getByTestId("reward-summary")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("reward-summary").getByText(/Награды/)).toBeVisible();
 
-  await page.getByRole("button", { name: "Новый бой" }).click();
-  await expect(page.getByText("Выбери бойца, вложи энергию и выпусти его на улицу.")).toBeVisible();
-  await expect(page.getByTestId("player-card-alpha")).toBeEnabled();
+  await page.getByTestId("reward-summary").getByRole("button", { name: "Новый бой" }).click();
+  await expect(page.getByTestId("phase-overlay")).toHaveAttribute("data-phase", "match_intro");
+  await expect(page.getByTestId("round-status")).toContainText("Твой ход", { timeout: 5_000 });
+  await expect(page.locator('[data-testid^="player-card-"]')).toHaveCount(4);
+  await expect(page.locator('[data-testid^="enemy-card-"]')).toHaveCount(4);
 });
+
+async function playFirstAvailableCard(
+  page: import("@playwright/test").Page,
+  extraEnergyClicks: number,
+  options: { knownEnemyCard: boolean },
+) {
+  await expect(page.getByTestId("phase-overlay")).toBeHidden({ timeout: 12_000 });
+  await expect.poll(async () => countEnabledPlayerCards(page), { timeout: 12_000 }).toBeGreaterThan(0);
+
+  const cardButton = await getFirstEnabledPlayerCard(page);
+  await cardButton.scrollIntoViewIfNeeded();
+  await cardButton.click();
+
+  await expect(page.getByTestId("selection-overlay")).toBeVisible();
+  await expect(page.getByTestId("selection-energy")).toHaveText("1");
+  if (options.knownEnemyCard) {
+    await expect(page.getByTestId("known-enemy-card")).toBeVisible();
+  } else {
+    await expect(page.getByTestId("enemy-card-hidden")).toBeVisible();
+  }
+
+  for (let index = 0; index < extraEnergyClicks; index += 1) {
+    await page.getByTestId("energy-plus").click();
+  }
+  await expect(page.getByTestId("selection-energy")).toHaveText(`${extraEnergyClicks + 1}`);
+
+  await page.getByTestId("selection-ok").click();
+  if (options.knownEnemyCard) {
+    await expect(page.getByTestId("battle-overlay")).toHaveAttribute("data-phase", "battle_intro", { timeout: 5_000 });
+  } else {
+    await expect(page.getByTestId("phase-overlay")).toBeHidden();
+    await expect(page.getByTestId("round-status")).toContainText("Ход соперника");
+    await expect(page.getByTestId("opponent-thinking")).toBeVisible();
+    await expect(page.locator('[data-owner="enemy"] [data-played="true"]')).toHaveCount(1);
+  }
+  await expect(page.getByTestId("battle-overlay")).toHaveAttribute("data-phase", "battle_intro", { timeout: 8_000 });
+  await expect
+    .poll(
+      async () => {
+        const overlay = page.getByTestId("battle-overlay");
+        if (!(await overlay.isVisible().catch(() => false))) return "hidden";
+        return (await overlay.getAttribute("data-phase")) ?? "missing";
+      },
+      { timeout: 24_000 },
+    )
+    .toMatch(/^(damage_apply|hidden)$/);
+  await expect(page.getByTestId("battle-overlay")).toBeHidden({ timeout: 24_000 });
+}
+
+async function getFirstEnabledPlayerCard(page: import("@playwright/test").Page) {
+  const cardButtons = page.locator('[data-testid^="player-card-"]');
+  const count = await cardButtons.count();
+
+  for (let index = 0; index < count; index += 1) {
+    const cardButton = cardButtons.nth(index);
+    if (await cardButton.isEnabled()) return cardButton;
+  }
+
+  throw new Error("No enabled player cards found.");
+}
+
+async function countEnabledPlayerCards(page: import("@playwright/test").Page) {
+  const cardButtons = page.locator('[data-testid^="player-card-"]');
+  const count = await cardButtons.count();
+  let enabled = 0;
+
+  for (let index = 0; index < count; index += 1) {
+    if (await cardButtons.nth(index).isEnabled()) enabled += 1;
+  }
+
+  return enabled;
+}
+
+async function readSavedDeckIds(page: import("@playwright/test").Page) {
+  return page.evaluate((storageKey) => {
+    const raw = window.sessionStorage.getItem(storageKey);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  }, DECK_SESSION_STORAGE_KEY);
+}

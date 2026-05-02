@@ -34,7 +34,7 @@ export function ProjectileSprite({
   return (
     <span
       className={cn(
-        "absolute inset-0 bg-contain bg-center bg-no-repeat animate-[klanz-projectile-spin_var(--spin)_linear_infinite]",
+        "absolute inset-0 bg-contain bg-center bg-no-repeat animate-[nexus-projectile-spin_var(--spin)_linear_infinite]",
         asset.glow,
       )}
       style={

@@ -1,5 +1,5 @@
-import { BattleGame } from "@/features/battle/ui/BattleGame";
+import { GameRoot } from "@/features/game/ui/GameRoot";
 
 export default function Home() {
-  return <BattleGame />;
+  return <GameRoot />;
 }

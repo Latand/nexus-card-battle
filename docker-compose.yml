@@ -1,0 +1,14 @@
+services:
+  traitor:
+    build:
+      context: .
+    image: klanz-traitor:latest
+    container_name: klanz-traitor
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+    ports:
+      - "${APP_HOST:-127.0.0.1}:${APP_PORT:-3010}:3000"

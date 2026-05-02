@@ -1,5 +1,8 @@
 import { cn } from "@/shared/lib/cn";
-import { getEnemyPreview } from "../../model/game";
+import { visibleText } from "@/shared/lib/visibleText";
+import { isClanBonusActive } from "../../model/clans";
+import { BASE_ATTACK_ENERGY } from "../../model/constants";
+import { hasApplicableAbilityEffect } from "../../model/game";
 import type { Card, Fighter } from "../../model/types";
 import { BattleCard } from "./BattleCard";
 
@@ -7,6 +10,8 @@ export function SelectionOverlay({
   selected,
   enemy,
   player,
+  knownEnemyCard,
+  knownEnemyEnergy,
   energy,
   maxEnergy,
   damageBoost,
@@ -23,6 +28,8 @@ export function SelectionOverlay({
   selected: Card;
   enemy: Fighter;
   player: Fighter;
+  knownEnemyCard?: Card;
+  knownEnemyEnergy?: number;
   energy: number;
   maxEnergy: number;
   damageBoost: boolean;
@@ -36,7 +43,26 @@ export function SelectionOverlay({
   onToggleBoost: () => void;
   onConfirm: () => void;
 }) {
-  const enemyPreview = getEnemyPreview(enemy, player.health);
+  const selectedBonusVisible = isCopyClanBonusResolved(selected, player.hand);
+  const knownEnemyBonusVisible = knownEnemyCard ? isCopyClanBonusResolved(knownEnemyCard, enemy.hand) : false;
+  const selectedClanBonusActive = isClanBonusActive(player, selected) && selectedBonusVisible;
+  const knownEnemyClanBonusActive = knownEnemyCard ? isClanBonusActive(enemy, knownEnemyCard) && knownEnemyBonusVisible : false;
+  const selectedAbilityActive = hasApplicableAbilityEffect(selected, {
+    owner: player,
+    opponent: enemy,
+    opponentCard: knownEnemyCard,
+    opponentEnergyBid: knownEnemyEnergy,
+  });
+  const knownEnemyAbilityActive = knownEnemyCard
+    ? hasApplicableAbilityEffect(knownEnemyCard, {
+        owner: enemy,
+        opponent: player,
+        opponentCard: selected,
+        opponentEnergyBid: energy,
+      })
+    : false;
+  const effectiveEnergy = energy + BASE_ATTACK_ENERGY;
+  const maxEffectiveEnergy = maxEnergy + BASE_ATTACK_ENERGY;
 
   return (
     <section
@@ -57,27 +83,33 @@ export function SelectionOverlay({
         </button>
 
         <div className="grid justify-items-center [&_.compact]:min-h-[328px] [&_.compact]:w-[min(236px,31vw)] max-[620px]:[&_.compact]:min-h-[296px] max-[620px]:[&_.compact]:w-[min(220px,68vw)]">
-          <BattleCard card={selected} compact />
+          <BattleCard
+            card={selected}
+            compact
+            clanBonusActive={selectedClanBonusActive}
+            abilityActive={selectedAbilityActive}
+            bonusVisible={selectedBonusVisible}
+          />
         </div>
 
         <div className="relative z-[2] grid gap-2 rounded-[7px] border-2 border-[#1e2527] bg-[linear-gradient(180deg,#6c6b65_0_6%,#2d3032_7%_54%,#151719_55%),repeating-linear-gradient(135deg,rgba(255,255,255,0.1)_0_1px,transparent_1px_7px)] p-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.18),0_16px_30px_rgba(0,0,0,0.44)] max-[620px]:w-[min(260px,100%)] max-[620px]:justify-self-center">
           <div className="grid min-h-[42px] content-center border border-white/20 bg-black/35 px-2.5 py-[5px]">
-            <span className="text-[10px] font-black uppercase text-[#d8bd82]">{selected.clan}</span>
-            <strong className="text-lg font-black leading-none text-[#fff7d7]">{selected.name}</strong>
+            <span className="text-[10px] font-black uppercase text-[#d8bd82]">{visibleText(selected.clan)}</span>
+            <strong className="text-lg font-black leading-none text-[#fff7d7]">{visibleText(selected.name)}</strong>
           </div>
 
           <div className="grid grid-cols-[34px_minmax(0,1fr)_34px_34px] items-center gap-[5px]">
             <button className={stepButton("-")} type="button" data-testid="energy-minus" aria-label="Меньше энергии" onClick={onMinus} disabled={energy <= 0}>
               -
             </button>
-            <strong className="grid min-h-7 place-items-center border border-white/20 bg-black/50 text-base font-black uppercase text-[#f8f8f8]" data-testid="selection-energy">
-              x{energy}
+            <strong className="grid min-h-7 place-items-center border border-white/20 bg-black/50 text-center text-[12px] font-black leading-none text-[#f8f8f8]" data-testid="selection-energy">
+              {effectiveEnergy}
             </strong>
             <button className={stepButton("+")} type="button" data-testid="energy-plus" aria-label="Больше энергии" onClick={onPlus} disabled={energy >= maxEnergy}>
               +
             </button>
             <b className="grid min-h-7 place-items-center rounded-md bg-[linear-gradient(180deg,#7656f0,#3e2bb1)] text-lg font-black text-white shadow-[0_1px_0_rgba(0,0,0,0.52)]">
-              {maxEnergy}
+              {maxEffectiveEnergy}
             </b>
           </div>
 
@@ -87,7 +119,7 @@ export function SelectionOverlay({
                 key={index}
                 className={cn(
                   "h-5 w-5 rounded-full border-2 border-[#2b1607] bg-[linear-gradient(180deg,#29231c,#0d0b0a)]",
-                  index < Math.min(energy, 4) &&
+                  index < Math.min(effectiveEnergy, 4) &&
                     "bg-[radial-gradient(circle_at_35%_28%,#fff4ac_0_18%,#ffba2e_20%_58%,#8d4b11_60%)] shadow-[0_0_10px_rgba(255,198,51,0.58)]",
                 )}
               />
@@ -113,6 +145,15 @@ export function SelectionOverlay({
             <span className="grid min-h-7 place-items-center border border-white/15 bg-black/35 text-[11px] font-black uppercase text-[#f5e9c8]">Урон {previewDamage}</span>
           </div>
 
+          <div className="grid gap-[5px] text-[10px] font-bold leading-tight text-[#d9ceb2]">
+            <span className={cn("truncate", !selectedAbilityActive && "text-transparent")}>
+              {selectedAbilityActive ? visibleText(selected.ability.name) : ""}
+            </span>
+            <span className={cn("truncate", !selectedBonusVisible && "text-transparent")}>
+              {selectedBonusVisible ? visibleText(selected.bonus.name) : ""}
+            </span>
+          </div>
+
           <button
             className="min-h-[42px] cursor-pointer rounded-md border-2 border-black/60 bg-[linear-gradient(180deg,#fff26d,#e3b51e_54%,#a66d12)] text-xl font-black uppercase text-[#1a1408] shadow-[inset_0_-4px_0_rgba(0,0,0,0.2),0_6px_12px_rgba(0,0,0,0.32)]"
             type="button"
@@ -127,11 +168,34 @@ export function SelectionOverlay({
           VS
         </strong>
 
-        {enemyPreview ? (
-          <div className="grid translate-y-3.5 rotate-1 justify-items-center brightness-[1.06] max-[760px]:hidden [&_.compact]:min-h-[258px] [&_.compact]:w-[min(178px,22vw)]">
-            <BattleCard card={enemyPreview} compact />
+        {knownEnemyCard ? (
+          <div
+            className="grid translate-y-3.5 rotate-1 justify-items-center gap-2 brightness-[1.06] max-[760px]:col-span-full max-[760px]:translate-y-0 max-[760px]:[&_.compact]:min-h-[238px] max-[760px]:[&_.compact]:w-[min(170px,42vw)] [&_.compact]:min-h-[258px] [&_.compact]:w-[min(178px,22vw)]"
+            data-testid="known-enemy-card"
+          >
+            <BattleCard
+              card={knownEnemyCard}
+              compact
+              clanBonusActive={knownEnemyClanBonusActive}
+              abilityActive={knownEnemyAbilityActive}
+              bonusVisible={knownEnemyBonusVisible}
+            />
+            {knownEnemyEnergy !== undefined ? (
+              <span className="min-w-[112px] rounded border border-[#7656f0]/70 bg-black/70 px-2 py-1 text-center text-xs font-black uppercase text-[#fff8df] shadow-[0_0_12px_rgba(118,86,240,0.38)]">
+                энергия {knownEnemyEnergy + BASE_ATTACK_ENERGY}
+              </span>
+            ) : null}
           </div>
-        ) : null}
+        ) : (
+          <div
+            className="grid min-h-[258px] translate-y-3.5 rotate-1 place-items-center rounded-md border-2 border-[#6e7782]/70 bg-[linear-gradient(180deg,rgba(34,42,49,0.78),rgba(5,7,10,0.94)),repeating-linear-gradient(135deg,rgba(255,255,255,0.06)_0_1px,transparent_1px_9px)] shadow-[inset_0_0_38px_rgba(72,115,143,0.18),0_18px_34px_rgba(0,0,0,0.5)] max-[760px]:col-span-full max-[760px]:min-h-[188px] max-[760px]:translate-y-0"
+            data-testid="enemy-card-hidden"
+          >
+            <div className="grid h-[78%] w-[72%] place-items-center rounded border border-white/10 bg-[radial-gradient(circle_at_center,rgba(85,212,255,0.16),transparent_44%),linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0))] text-5xl font-black text-[#d8e8f2]/70 [text-shadow:0_0_18px_rgba(80,207,255,0.4)]">
+              ?
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -142,4 +206,11 @@ function stepButton(kind: "-" | "+") {
     "h-7 cursor-pointer rounded border-2 border-black/60 text-lg font-black uppercase text-[#fff8d8] shadow-[inset_0_-4px_0_rgba(0,0,0,0.2),0_6px_12px_rgba(0,0,0,0.32)] disabled:cursor-not-allowed disabled:opacity-45",
     kind === "+" ? "bg-[linear-gradient(180deg,#4de06f,#168e36)]" : "bg-[linear-gradient(180deg,#dfb44d,#8b5d18)]",
   );
+}
+
+function isCopyClanBonusResolved(card: Card, hand: Card[]) {
+  const copyEffects = card.bonus.effects.filter((effect) => effect.key === "copy-clan-bonus");
+  if (copyEffects.length === 0) return true;
+
+  return copyEffects.some((effect) => effect.copyClan && hand.some((handCard) => handCard.clan === effect.copyClan));
 }

@@ -1,0 +1,13 @@
+{
+  "characterPortraitChromakey": {
+    "useCase": "stylized-concept",
+    "assetType": "game character portrait cutout for card art",
+    "prompt": "Create one original Нексус-style cyberpunk/comic battle-card character bust on a perfectly flat solid #00ff00 chroma-key background. Opaque clean silhouette, bold ink outlines, cel shading, expressive face, readable at 128x160, no text, no watermark, no green in subject, no cast shadow.",
+    "postprocess": "Run C:/Users/latan/.codex/skills/.system/imagegen/scripts/remove_chroma_key.py with --auto-key border --soft-matte --despill, then crop to 256x320 for card portraits."
+  },
+  "battleVfxChromakey": {
+    "useCase": "stylized-concept",
+    "assetType": "single projectile or hit effect",
+    "prompt": "Create one isolated arcade battle VFX sprite on a perfectly flat solid #ff00ff chroma-key background: energetic projectile, hit burst, slash, or elemental effect. Keep the effect centered, crisp, high contrast, no text, no shadows, no magenta in the effect."
+  }
+}

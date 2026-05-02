@@ -1,0 +1,61 @@
+export const playerCollectionIds = [
+  "alpha",
+  "alpha-nikolay",
+  "fury",
+  "micron",
+  "dahack",
+  "dahack-110",
+  "aliens",
+  "aliens-392",
+  "fury-179",
+  "chasers-738",
+  "enigma-358",
+  "metropolis-465",
+  "metro",
+  "enigma",
+  "toyz",
+  "toyz-schelkunchik",
+];
+
+export const playerDeckIds = [
+  "alpha",
+  "alpha-nikolay",
+  "fury",
+  "micron",
+  "dahack",
+  "dahack-110",
+  "aliens",
+  "aliens-392",
+  "fury-179",
+  "chasers-738",
+  "enigma-358",
+  "metropolis-465",
+  "metro",
+  "enigma",
+  "toyz",
+  "toyz-schelkunchik",
+];
+
+export const enemyCollectionIds = [
+  "toyz",
+  "toyz-schelkunchik",
+  "metro",
+  "enigma",
+  "aliens",
+  "dahack",
+  "alpha",
+  "micron",
+  "alpha-nikolay",
+  "fury",
+];
+
+export const enemyDeckIds = [
+  "toyz",
+  "toyz-schelkunchik",
+  "metro",
+  "enigma",
+  "aliens",
+  "dahack",
+  "alpha",
+  "micron",
+];

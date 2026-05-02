@@ -1,18 +1,21 @@
 {
-  "name": "klanz-next-js-github-git-8",
+  "name": "nexus-next-js-github-git-8",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node server.js --dev",
+    "dev:next": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node server.js",
     "lint": "eslint",
     "test:e2e": "playwright test"
   },
   "dependencies": {
     "next": "16.2.4",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "sharp": "^0.34.5",
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "@playwright/mcp": "^0.0.72",

@@ -1,0 +1,326 @@
+{
+  "generatedAt": "2026-05-01T21:52:30.860Z",
+  "sourceVideo": "C:/Users/latan/Downloads/Нексус.mp4",
+  "notes": [
+    "UI, banners, card shells, bars, and VFX are deterministic transparent PNGs generated from SVG sources.",
+    "Character sample was generated with ImageGen on chroma key, then converted to alpha PNG locally.",
+    "Use /nexus-assets/prompts/imagegen-prompts.json to generate new card portraits and VFX variants."
+  ],
+  "assets": [
+    {
+      "id": "characters/cyber-brawler-chroma-source",
+      "path": "/nexus-assets/characters/cyber-brawler-chroma-source.png",
+      "width": 1024,
+      "height": 1536,
+      "kind": "imagegen-chromakey-source"
+    },
+    {
+      "id": "characters/cyber-brawler-cutout-full",
+      "path": "/nexus-assets/characters/cyber-brawler-cutout-full.png",
+      "width": 1024,
+      "height": 1536,
+      "kind": "imagegen-alpha-png"
+    },
+    {
+      "id": "characters/cyber-brawler-card-portrait",
+      "path": "/nexus-assets/characters/cyber-brawler-card-portrait.png",
+      "width": 256,
+      "height": 320,
+      "kind": "imagegen-alpha-png"
+    },
+    {
+      "id": "characters/cyber-brawler-thumb",
+      "path": "/nexus-assets/characters/cyber-brawler-thumb.png",
+      "width": 128,
+      "height": 160,
+      "kind": "imagegen-alpha-png"
+    },
+    {
+      "id": "characters/portrait-slot-silhouette",
+      "path": "/nexus-assets/characters/portrait-slot-silhouette.png",
+      "width": 256,
+      "height": 320,
+      "kind": "deterministic"
+    },
+    {
+      "id": "cards/card-frame-empty-192x288",
+      "path": "/nexus-assets/cards/card-frame-empty-192x288.png",
+      "width": 192,
+      "height": 288,
+      "kind": "deterministic"
+    },
+    {
+      "id": "cards/card-frame-empty-128x192",
+      "path": "/nexus-assets/cards/card-frame-empty-128x192.png",
+      "width": 128,
+      "height": 192,
+      "kind": "deterministic"
+    },
+    {
+      "id": "cards/card-frame-readable-192x288",
+      "path": "/nexus-assets/cards/card-frame-readable-192x288.png",
+      "width": 192,
+      "height": 288,
+      "kind": "deterministic"
+    },
+    {
+      "id": "cards/card-selection-glow-220x320",
+      "path": "/nexus-assets/cards/card-selection-glow-220x320.png",
+      "width": 220,
+      "height": 320,
+      "kind": "deterministic"
+    },
+    {
+      "id": "cards/card-used-dim-overlay-192x288",
+      "path": "/nexus-assets/cards/card-used-dim-overlay-192x288.png",
+      "width": 192,
+      "height": 288,
+      "kind": "deterministic"
+    },
+    {
+      "id": "cards/portrait-window-mask-150x120",
+      "path": "/nexus-assets/cards/portrait-window-mask-150x120.png",
+      "width": 150,
+      "height": 120,
+      "kind": "deterministic"
+    },
+    {
+      "id": "cards/card-sample-front-power-damage",
+      "path": "/nexus-assets/cards/card-sample-front-power-damage.png",
+      "width": 192,
+      "height": 288,
+      "kind": "composite"
+    },
+    {
+      "id": "cards/card-sample-mini",
+      "path": "/nexus-assets/cards/card-sample-mini.png",
+      "width": 96,
+      "height": 144,
+      "kind": "composite"
+    },
+    {
+      "id": "ui/duel-nameplate-left-260x34",
+      "path": "/nexus-assets/ui/duel-nameplate-left-260x34.png",
+      "width": 260,
+      "height": 34,
+      "kind": "deterministic"
+    },
+    {
+      "id": "ui/duel-nameplate-right-260x34",
+      "path": "/nexus-assets/ui/duel-nameplate-right-260x34.png",
+      "width": 260,
+      "height": 34,
+      "kind": "deterministic"
+    },
+    {
+      "id": "ui/hp-bar-empty-260x20",
+      "path": "/nexus-assets/ui/hp-bar-empty-260x20.png",
+      "width": 260,
+      "height": 20,
+      "kind": "deterministic"
+    },
+    {
+      "id": "ui/hp-bar-fill-green-240x14",
+      "path": "/nexus-assets/ui/hp-bar-fill-green-240x14.png",
+      "width": 240,
+      "height": 14,
+      "kind": "deterministic"
+    },
+    {
+      "id": "ui/energy-bar-fill-yellow-240x14",
+      "path": "/nexus-assets/ui/energy-bar-fill-yellow-240x14.png",
+      "width": 240,
+      "height": 14,
+      "kind": "deterministic"
+    },
+    {
+      "id": "ui/energy-pip-yellow-20x20",
+      "path": "/nexus-assets/ui/energy-pip-yellow-20x20.png",
+      "width": 20,
+      "height": 20,
+      "kind": "deterministic"
+    },
+    {
+      "id": "ui/power-badge-blue-42x42",
+      "path": "/nexus-assets/ui/power-badge-blue-42x42.png",
+      "width": 42,
+      "height": 42,
+      "kind": "deterministic"
+    },
+    {
+      "id": "ui/damage-badge-red-42x42",
+      "path": "/nexus-assets/ui/damage-badge-red-42x42.png",
+      "width": 42,
+      "height": 42,
+      "kind": "deterministic"
+    },
+    {
+      "id": "ui/ability-row-160x24",
+      "path": "/nexus-assets/ui/ability-row-160x24.png",
+      "width": 160,
+      "height": 24,
+      "kind": "deterministic"
+    },
+    {
+      "id": "ui/yellow-warning-marker-28x38",
+      "path": "/nexus-assets/ui/yellow-warning-marker-28x38.png",
+      "width": 28,
+      "height": 38,
+      "kind": "deterministic"
+    },
+    {
+      "id": "ui/ok-button-70x36",
+      "path": "/nexus-assets/ui/ok-button-70x36.png",
+      "width": 70,
+      "height": 36,
+      "kind": "deterministic"
+    },
+    {
+      "id": "banners/turn-yours",
+      "path": "/nexus-assets/banners/turn-yours.png",
+      "width": 360,
+      "height": 74,
+      "kind": "deterministic"
+    },
+    {
+      "id": "banners/turn-opponent",
+      "path": "/nexus-assets/banners/turn-opponent.png",
+      "width": 440,
+      "height": 74,
+      "kind": "deterministic"
+    },
+    {
+      "id": "banners/battle",
+      "path": "/nexus-assets/banners/battle.png",
+      "width": 240,
+      "height": 104,
+      "kind": "deterministic"
+    },
+    {
+      "id": "banners/vs",
+      "path": "/nexus-assets/banners/vs.png",
+      "width": 190,
+      "height": 120,
+      "kind": "deterministic"
+    },
+    {
+      "id": "banners/round-won",
+      "path": "/nexus-assets/banners/round-won.png",
+      "width": 520,
+      "height": 104,
+      "kind": "deterministic"
+    },
+    {
+      "id": "banners/round-lost",
+      "path": "/nexus-assets/banners/round-lost.png",
+      "width": 520,
+      "height": 104,
+      "kind": "deterministic"
+    },
+    {
+      "id": "banners/defeat",
+      "path": "/nexus-assets/banners/defeat.png",
+      "width": 430,
+      "height": 108,
+      "kind": "deterministic"
+    },
+    {
+      "id": "banners/round-1",
+      "path": "/nexus-assets/banners/round-1.png",
+      "width": 360,
+      "height": 104,
+      "kind": "deterministic"
+    },
+    {
+      "id": "banners/round-3",
+      "path": "/nexus-assets/banners/round-3.png",
+      "width": 360,
+      "height": 104,
+      "kind": "deterministic"
+    },
+    {
+      "id": "banners/round-4",
+      "path": "/nexus-assets/banners/round-4.png",
+      "width": 360,
+      "height": 104,
+      "kind": "deterministic"
+    },
+    {
+      "id": "vfx/projectile-green-160x64",
+      "path": "/nexus-assets/vfx/projectile-green-160x64.png",
+      "width": 160,
+      "height": 64,
+      "kind": "deterministic"
+    },
+    {
+      "id": "vfx/projectile-fire-120x58",
+      "path": "/nexus-assets/vfx/projectile-fire-120x58.png",
+      "width": 120,
+      "height": 58,
+      "kind": "deterministic"
+    },
+    {
+      "id": "vfx/projectile-ice-140x52",
+      "path": "/nexus-assets/vfx/projectile-ice-140x52.png",
+      "width": 140,
+      "height": 52,
+      "kind": "deterministic"
+    },
+    {
+      "id": "vfx/impact-burst-128x128",
+      "path": "/nexus-assets/vfx/impact-burst-128x128.png",
+      "width": 128,
+      "height": 128,
+      "kind": "deterministic"
+    },
+    {
+      "id": "vfx/slash-white-160x82",
+      "path": "/nexus-assets/vfx/slash-white-160x82.png",
+      "width": 160,
+      "height": 82,
+      "kind": "deterministic"
+    },
+    {
+      "id": "vfx/target-arrow-down-44x44",
+      "path": "/nexus-assets/vfx/target-arrow-down-44x44.png",
+      "width": 44,
+      "height": 44,
+      "kind": "deterministic"
+    },
+    {
+      "id": "vfx/screen-vignette-overlay-664x480",
+      "path": "/nexus-assets/vfx/screen-vignette-overlay-664x480.png",
+      "width": 664,
+      "height": 480,
+      "kind": "deterministic"
+    },
+    {
+      "id": "backgrounds/arena-bar-664x480",
+      "path": "/nexus-assets/backgrounds/arena-bar-664x480.png",
+      "width": 664,
+      "height": 480,
+      "kind": "resized-generated-background"
+    },
+    {
+      "id": "backgrounds/arena-bar-1024x576",
+      "path": "/nexus-assets/backgrounds/arena-bar-1024x576.png",
+      "width": 1024,
+      "height": 576,
+      "kind": "resized-generated-background"
+    },
+    {
+      "id": "backgrounds/arena-letterbox-bars-664x480",
+      "path": "/nexus-assets/backgrounds/arena-letterbox-bars-664x480.png",
+      "width": 664,
+      "height": 480,
+      "kind": "deterministic"
+    },
+    {
+      "id": "backgrounds/board-horizontal-band-664x128",
+      "path": "/nexus-assets/backgrounds/board-horizontal-band-664x128.png",
+      "width": 664,
+      "height": 128,
+      "kind": "deterministic"
+    }
+  ]
+}

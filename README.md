@@ -1,6 +1,6 @@
-# Klanz Battle Prototype
+# Нексус Battle Prototype
 
-Playable Next.js prototype of a Klanz-inspired card battle.
+Playable Next.js prototype of a Нексус-inspired card battle.
 
 ## Battle Rules
 
@@ -11,7 +11,7 @@ Playable Next.js prototype of a Klanz-inspired card battle.
 - The higher attack wins the round. Equal attack is resolved randomly.
 - The winning card deals its damage to the enemy fighter.
 - The first actor alternates after every round.
-- Cards include early prototype abilities inspired by known Klanz clan bonuses.
+- Cards include early prototype abilities inspired by known Нексус clan bonuses.
 
 ## Development
 
@@ -21,6 +21,19 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+`npm run dev` starts the custom Node server, so local PvP uses the same `/ws` path as production.
+
+## Deployment
+
+The self-hosted target is Docker Compose behind your Nginx:
+
+```bash
+docker compose up -d --build
+```
+
+By default Compose binds the app to `127.0.0.1:3010` and the container listens on `3000`.
+See [docs/deploy.md](docs/deploy.md) for the Nginx WebSocket proxy block and GitHub publishing notes.
 
 ## Verification
 
