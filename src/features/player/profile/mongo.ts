@@ -1,14 +1,27 @@
-import { MongoClient, type Collection, type Filter, type WithId } from "mongodb";
+import { MongoClient, MongoServerError, ObjectId, type Collection, type Filter, type WithId } from "mongodb";
+import { BoosterOpeningError } from "@/features/boosters/opening";
+import type { BoosterOpeningSource, PersistStarterBoosterOpeningInput, PersistedStarterBoosterOpening, StoredBoosterOpeningRecord } from "@/features/boosters/types";
 import { createNewStoredPlayerProfile, type PlayerIdentity, type StoredPlayerProfile } from "./types";
 import type { PlayerProfileStore } from "./api";
 
 const DEFAULT_MONGODB_URI = "mongodb://127.0.0.1:27017/nexus-card-battle";
 const DEFAULT_MONGODB_DB = "nexus-card-battle";
 const PLAYERS_COLLECTION = "players";
+const BOOSTER_OPENINGS_COLLECTION = "boosterOpenings";
 
 type MongoPlayerDocument = Omit<StoredPlayerProfile, "id"> & {
   createdAt: Date;
   updatedAt: Date;
+};
+
+type MongoBoosterOpeningDocument = {
+  playerId: string;
+  identity: PlayerIdentity;
+  boosterId: string;
+  source: BoosterOpeningSource;
+  cardIds: string[];
+  openedAt: Date;
+  createdAt: Date;
 };
 
 const mongoGlobal = globalThis as typeof globalThis & {
@@ -23,6 +36,7 @@ export function getMongoPlayerProfileStore() {
 
 export class MongoPlayerProfileStore implements PlayerProfileStore {
   private indexesReady?: Promise<void>;
+  private boosterOpeningIndexesReady?: Promise<void>;
 
   constructor(
     private readonly clientPromise: Promise<MongoClient>,
@@ -60,10 +74,37 @@ export class MongoPlayerProfileStore implements PlayerProfileStore {
     return fromMongoDocument(document);
   }
 
+  async saveStarterBoosterOpening(input: PersistStarterBoosterOpeningInput): Promise<PersistedStarterBoosterOpening> {
+    const players = await this.getPlayersCollection();
+    const openings = await this.getBoosterOpeningsCollection();
+    const now = new Date();
+    const { opening, insertedOpeningId } = await createOrLoadStarterOpening(openings, input, now);
+
+    try {
+      return {
+        player: fromMongoDocument(await applyStarterOpeningToPlayer(players, input.identity, input.boosterId, opening.cardIds, now)),
+        opening: fromMongoOpeningDocument(opening),
+      };
+    } catch (error) {
+      if (insertedOpeningId) {
+        await openings.deleteOne({ _id: insertedOpeningId }).catch(() => undefined);
+      }
+
+      throw error;
+    }
+  }
+
   private async getPlayersCollection() {
     const client = await this.clientPromise;
     const collection = client.db(this.dbName).collection<MongoPlayerDocument>(PLAYERS_COLLECTION);
     await this.ensureIndexes(collection);
+    return collection;
+  }
+
+  private async getBoosterOpeningsCollection() {
+    const client = await this.clientPromise;
+    const collection = client.db(this.dbName).collection<MongoBoosterOpeningDocument>(BOOSTER_OPENINGS_COLLECTION);
+    await this.ensureBoosterOpeningIndexes(collection);
     return collection;
   }
 
@@ -89,6 +130,124 @@ export class MongoPlayerProfileStore implements PlayerProfileStore {
 
     return this.indexesReady;
   }
+
+  private ensureBoosterOpeningIndexes(collection: Collection<MongoBoosterOpeningDocument>) {
+    this.boosterOpeningIndexesReady ??= Promise.all([
+      collection.createIndex(
+        { playerId: 1, boosterId: 1, source: 1 },
+        {
+          name: "uniq_starter_booster_opening",
+          unique: true,
+        },
+      ),
+      collection.createIndex({ playerId: 1, openedAt: -1 }, { name: "idx_booster_openings_player_opened_at" }),
+      collection.createIndex({ boosterId: 1, openedAt: -1 }, { name: "idx_booster_openings_booster_opened_at" }),
+    ]).then(() => undefined);
+
+    return this.boosterOpeningIndexesReady;
+  }
+}
+
+async function applyStarterOpeningToPlayer(
+  players: Collection<MongoPlayerDocument>,
+  identity: PlayerIdentity,
+  boosterId: string,
+  cardIds: string[],
+  now: Date,
+) {
+  const updatedPlayer = await players.findOneAndUpdate(
+    {
+      ...identityFilter(identity),
+      starterFreeBoostersRemaining: { $gt: 0 },
+      openedBoosterIds: { $ne: boosterId },
+      ownedCardIds: { $nin: cardIds },
+    },
+    {
+      $addToSet: {
+        ownedCardIds: { $each: cardIds },
+        deckIds: { $each: cardIds },
+        openedBoosterIds: boosterId,
+      },
+      $inc: {
+        starterFreeBoostersRemaining: -1,
+      },
+      $set: {
+        updatedAt: now,
+      },
+    },
+    {
+      returnDocument: "after",
+    },
+  );
+
+  if (updatedPlayer) {
+    return updatedPlayer;
+  }
+
+  const currentPlayer = await players.findOne(identityFilter(identity));
+  if (currentPlayer && hasAppliedStarterOpening(currentPlayer, boosterId, cardIds)) {
+    return currentPlayer;
+  }
+
+  throw new BoosterOpeningError("starter_booster_unavailable", "Starter booster opening could not be saved for the current player state.", 409);
+}
+
+async function createOrLoadStarterOpening(
+  openings: Collection<MongoBoosterOpeningDocument>,
+  input: PersistStarterBoosterOpeningInput,
+  now: Date,
+): Promise<{ opening: WithId<MongoBoosterOpeningDocument>; insertedOpeningId?: ObjectId }> {
+  const openingId = new ObjectId();
+  const openingDocument: WithId<MongoBoosterOpeningDocument> = {
+    _id: openingId,
+    playerId: input.playerId,
+    identity: input.identity,
+    boosterId: input.boosterId,
+    source: "starter_free",
+    cardIds: input.cardIds,
+    openedAt: input.openedAt,
+    createdAt: now,
+  };
+
+  try {
+    // Compose uses standalone Mongo, so history is written before player state and replayed on duplicate recovery.
+    await openings.insertOne(openingDocument);
+    return {
+      opening: openingDocument,
+      insertedOpeningId: openingId,
+    };
+  } catch (error) {
+    if (!isDuplicateKeyError(error)) {
+      throw error;
+    }
+  }
+
+  const existingOpening = await openings.findOne(starterOpeningFilter(input.playerId, input.boosterId));
+  if (!existingOpening) {
+    throw new BoosterOpeningError("starter_booster_unavailable", "Starter booster opening history could not be recovered.", 409);
+  }
+
+  return {
+    opening: existingOpening,
+  };
+}
+
+function hasAppliedStarterOpening(player: MongoPlayerDocument, boosterId: string, cardIds: string[]) {
+  const ownedCardIds = new Set(player.ownedCardIds);
+  const deckIds = new Set(player.deckIds);
+  return player.openedBoosterIds.includes(boosterId) && cardIds.every((cardId) => ownedCardIds.has(cardId) && deckIds.has(cardId));
+}
+
+function starterOpeningFilter(playerId: string, boosterId: string): Filter<MongoBoosterOpeningDocument> {
+  return {
+    playerId,
+    boosterId,
+    source: "starter_free",
+  };
+}
+
+function isDuplicateKeyError(error: unknown) {
+  return error instanceof MongoServerError && error.code === 11000;
 }
 
 function getMongoClient(uri: string) {
@@ -129,5 +288,16 @@ function fromMongoDocument(document: WithId<MongoPlayerDocument>): StoredPlayerP
     deckIds: document.deckIds,
     starterFreeBoostersRemaining: document.starterFreeBoostersRemaining,
     openedBoosterIds: document.openedBoosterIds,
+  };
+}
+
+function fromMongoOpeningDocument(document: WithId<MongoBoosterOpeningDocument>): StoredBoosterOpeningRecord {
+  return {
+    id: document._id.toHexString(),
+    playerId: document.playerId,
+    boosterId: document.boosterId,
+    source: document.source,
+    cardIds: document.cardIds,
+    openedAt: document.openedAt,
   };
 }
