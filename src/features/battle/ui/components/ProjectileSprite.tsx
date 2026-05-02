@@ -3,19 +3,19 @@ import { cn } from "@/shared/lib/cn";
 
 const projectileAssets = [
   {
-    src: "/generated/projectiles/fire-orb.png",
+    src: "/nexus-assets/projectiles/fire-orb.png",
     glow: "drop-shadow-[0_0_12px_rgba(255,100,33,0.84)]",
   },
   {
-    src: "/generated/projectiles/plasma-bolt.png",
+    src: "/nexus-assets/projectiles/plasma-bolt.png",
     glow: "drop-shadow-[0_0_14px_rgba(89,223,255,0.86)]",
   },
   {
-    src: "/generated/projectiles/saw-disc.png",
+    src: "/nexus-assets/projectiles/saw-disc.png",
     glow: "drop-shadow-[0_0_13px_rgba(255,212,60,0.76)]",
   },
   {
-    src: "/generated/projectiles/toxic-orb.png",
+    src: "/nexus-assets/projectiles/toxic-orb.png",
     glow: "drop-shadow-[0_0_14px_rgba(232,75,255,0.78)]",
   },
 ];

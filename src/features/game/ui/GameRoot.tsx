@@ -14,6 +14,7 @@ type BattleMode = "ai" | "human";
 type TelegramWindow = Window & {
   Telegram?: {
     WebApp?: {
+      initData?: string;
       ready?: () => void;
       expand?: () => void;
       isFullscreen?: boolean;
@@ -37,13 +38,6 @@ type TelegramWindow = Window & {
       };
     };
   };
-};
-
-type PersistenceWindow = {
-  requestIdleCallback?: Window["requestIdleCallback"];
-  cancelIdleCallback?: Window["cancelIdleCallback"];
-  setTimeout: Window["setTimeout"];
-  clearTimeout: Window["clearTimeout"];
 };
 
 type LockableScreenOrientation = ScreenOrientation & {
@@ -250,7 +244,8 @@ async function saveDeckIds(deckIds: string[]) {
 
 function getTelegramWebApp() {
   if (typeof window === "undefined") return undefined;
-  return (window as TelegramWindow).Telegram?.WebApp;
+  const webApp = (window as TelegramWindow).Telegram?.WebApp;
+  return webApp?.initData ? webApp : undefined;
 }
 
 function requestTelegramFullscreen(webApp: NonNullable<TelegramWindow["Telegram"]>["WebApp"]) {
@@ -348,15 +343,8 @@ async function writeCloudDeckIds(deckIds: string[]) {
 function schedulePersistenceTask(task: () => void) {
   if (typeof window === "undefined") return () => {};
 
-  const persistenceWindow = window as unknown as PersistenceWindow;
-
-  if (persistenceWindow.requestIdleCallback && persistenceWindow.cancelIdleCallback) {
-    const handle = persistenceWindow.requestIdleCallback(task, { timeout: 750 });
-    return () => persistenceWindow.cancelIdleCallback?.(handle);
-  }
-
-  const handle = persistenceWindow.setTimeout(task, 0);
-  return () => persistenceWindow.clearTimeout(handle);
+  const handle = window.setTimeout(task, 0);
+  return () => window.clearTimeout(handle);
 }
 
 function sanitizeDeckIds(deckIds: string[], collectionIds: string[]) {

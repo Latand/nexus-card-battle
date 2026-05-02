@@ -34,7 +34,7 @@ export function BattleCard({
     backgroundImage: [
       "linear-gradient(180deg, rgba(255,255,255,0.08), transparent 12%)",
       `linear-gradient(135deg, color-mix(in srgb, ${card.accent}, transparent 62%), rgba(23,17,21,0.72) 60%)`,
-      "url('/generated/nexus-card-frame.png')",
+      "url('/nexus-assets/cards/nexus-card-frame.png')",
     ].join(", "),
     backgroundPosition: "center",
     backgroundSize: "auto, auto, cover",

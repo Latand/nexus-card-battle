@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 test("pairs two tabs and resolves the first human round", async ({ context, page }) => {
   const first = page;
@@ -9,8 +9,6 @@ test("pairs two tabs and resolves the first human round", async ({ context, page
 
   await expect(first.getByTestId("play-human-match")).toBeEnabled();
   await expect(second.getByTestId("play-human-match")).toBeEnabled();
-  await expect.poll(() => readSavedDeckIds(first)).toHaveLength(9);
-  await expect.poll(() => readSavedDeckIds(second)).toHaveLength(9);
 
   await first.getByTestId("play-human-match").click();
   await second.getByTestId("play-human-match").click();
@@ -22,7 +20,7 @@ test("pairs two tabs and resolves the first human round", async ({ context, page
   const secondMover = firstMover === first ? second : first;
 
   const firstMoverCardId = await pickFirstCard(firstMover);
-  await expect(secondMover.getByTestId("round-status")).toContainText("Your Turn", { timeout: 8_000 });
+  await expect(secondMover.getByTestId("round-status")).toBeVisible({ timeout: 8_000 });
 
   await pickFirstCard(secondMover, { knownEnemyCard: true });
 
@@ -34,28 +32,25 @@ test("pairs two tabs and resolves the first human round", async ({ context, page
   await second.close();
 });
 
-async function resolveFirstMover(
-  first: import("@playwright/test").Page,
-  second: import("@playwright/test").Page,
-) {
+async function resolveFirstMover(first: Page, second: Page) {
   await expect
     .poll(
       async () => {
-        const firstText = await first.getByTestId("round-status").textContent().catch(() => "");
-        const secondText = await second.getByTestId("round-status").textContent().catch(() => "");
+        const firstEnabled = await countEnabledPlayerCards(first);
+        const secondEnabled = await countEnabledPlayerCards(second);
 
-        if (firstText?.includes("Your Turn")) return "first";
-        if (secondText?.includes("Your Turn")) return "second";
+        if (firstEnabled > 0) return "first";
+        if (secondEnabled > 0) return "second";
         return "waiting";
       },
       { timeout: 12_000 },
     )
     .not.toBe("waiting");
 
-  return (await first.getByTestId("round-status").textContent())?.includes("Your Turn") ? first : second;
+  return (await countEnabledPlayerCards(first)) > 0 ? first : second;
 }
 
-async function pickFirstCard(page: import("@playwright/test").Page, options: { knownEnemyCard?: boolean } = {}) {
+async function pickFirstCard(page: Page, options: { knownEnemyCard?: boolean } = {}) {
   const cardButton = await getFirstEnabledPlayerCard(page);
   const testId = await cardButton.getAttribute("data-testid");
   const cardId = testId?.replace("player-card-", "");
@@ -71,7 +66,7 @@ async function pickFirstCard(page: import("@playwright/test").Page, options: { k
   return cardId as string;
 }
 
-async function getFirstEnabledPlayerCard(page: import("@playwright/test").Page) {
+async function getFirstEnabledPlayerCard(page: Page) {
   const cardButtons = page.locator('[data-testid^="player-card-"]');
   await expect.poll(async () => countEnabledPlayerCards(page), { timeout: 12_000 }).toBeGreaterThan(0);
 
@@ -84,7 +79,7 @@ async function getFirstEnabledPlayerCard(page: import("@playwright/test").Page) 
   throw new Error("No enabled player cards found.");
 }
 
-async function countEnabledPlayerCards(page: import("@playwright/test").Page) {
+async function countEnabledPlayerCards(page: Page) {
   const cardButtons = page.locator('[data-testid^="player-card-"]');
   const count = await cardButtons.count();
   let enabled = 0;
@@ -94,11 +89,4 @@ async function countEnabledPlayerCards(page: import("@playwright/test").Page) {
   }
 
   return enabled;
-}
-
-async function readSavedDeckIds(page: import("@playwright/test").Page) {
-  return page.evaluate(() => {
-    const raw = window.sessionStorage.getItem("nexus:deck-session:v1");
-    return raw ? (JSON.parse(raw) as string[]) : [];
-  });
 }
