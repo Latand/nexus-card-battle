@@ -12,7 +12,7 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: "bun run dev -- --hostname 127.0.0.1",
+    command: "MONGODB_SERVER_SELECTION_TIMEOUT_MS=200 bun run dev -- --hostname 127.0.0.1",
     url: "http://127.0.0.1:3000",
     reuseExistingServer: true,
     timeout: 120_000,
