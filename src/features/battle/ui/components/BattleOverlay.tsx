@@ -167,50 +167,59 @@ function getPhaseLabel(phase: Phase, isFinisher: boolean) {
   return "Урон";
 }
 
-function getVirtualCardLife(clash: Clash, phase: Phase, side: Side) {
-  const ownAttack = side === "player" ? clash.playerAttack : clash.enemyAttack;
-  const rivalAttack = side === "player" ? clash.enemyAttack : clash.playerAttack;
-
-  if (phase !== "damage_apply") return ownAttack;
-  if (clash.winner !== side) return 0;
-
-  return Math.max(1, ownAttack - rivalAttack);
-}
-
 function DuelStatus({
-  fighter,
-  cardName,
-  cardLife,
-  cardLifeMax,
   cardEnergy,
   attack,
+  attackMax,
   revealAttack,
-  humanHp,
-  statuses,
 }: {
-  fighter: Fighter;
-  cardName: string;
-  cardLife: number;
-  cardLifeMax: number;
   cardEnergy: number;
   attack: number;
+  attackMax: number;
   revealAttack: boolean;
-  humanHp: number;
-  statuses: Fighter["statuses"];
 }) {
   return (
     <article className="grid gap-[5px] border-2 border-[#c7ccd1] bg-[linear-gradient(180deg,#444c50,#16191c_48%,#08090b),repeating-linear-gradient(135deg,rgba(255,255,255,0.12)_0_1px,transparent_1px_8px)] p-1.5 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.7),0_8px_22px_rgba(0,0,0,0.52)] max-[760px]:p-[5px]">
-      <strong className="grid min-h-[18px] place-items-center text-[13px] font-black uppercase leading-none text-[#f3f3f3] [text-shadow:0_1px_0_#000] max-[760px]:text-[11px]">
-        {fighter.name}
-      </strong>
-      {revealAttack ? <DuelBar label="Карта" value={cardLife} max={cardLifeMax} tone="health" slots={12} /> : null}
-      <div className="grid grid-cols-3 gap-1 max-[760px]:grid-cols-2 [&>span:last-child]:max-[760px]:col-span-full">
-        <span className={duelNumber()}>{cardName}</span>
-        <span className={duelNumber()}>HP {humanHp}</span>
-        <span className={duelNumber()}>{revealAttack ? `Атака ${attack}` : "Атака ?"}</span>
-      </div>
-      <StatusBadges statuses={statuses} compact />
       <DuelBar label="Енергія" value={cardEnergy} max={MAX_ENERGY} tone="energy" />
+      {revealAttack ? <DuelBar label="Сила удару" value={attack} max={attackMax} tone="attack" slots={12} hideLabel /> : null}
+    </article>
+  );
+}
+
+function DuelCombatant({
+  fighter,
+  health,
+  card,
+  showAvatar,
+  abilityActive,
+  bonusVisible,
+}: {
+  fighter: Fighter;
+  health: number;
+  card: Clash["playerCard"];
+  showAvatar: boolean;
+  abilityActive: boolean;
+  bonusVisible: boolean;
+}) {
+  if (showAvatar) return <FighterImpactAvatar fighter={fighter} health={health} />;
+
+  return <BattleCard card={card} compact abilityActive={abilityActive} bonusVisible={bonusVisible} />;
+}
+
+function FighterImpactAvatar({ fighter, health }: { fighter: Fighter; health: number }) {
+  return (
+    <article
+      className="compact duel-avatar relative grid min-h-[292px] w-[min(214px,22vw)] place-items-center overflow-hidden rounded-[28px] border-2 border-[#d6a03b]/75 bg-[radial-gradient(circle_at_50%_18%,rgba(255,224,138,0.28),transparent_31%),linear-gradient(180deg,rgba(42,48,50,0.92),rgba(8,9,11,0.96))] p-[10%] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.72),0_14px_30px_rgba(0,0,0,0.48)] before:pointer-events-none before:absolute before:inset-[7%] before:rounded-[22px] before:border before:border-white/12 before:content-['']"
+      aria-label={`${fighter.name} отримує урон`}
+      data-testid={`duel-avatar-${fighter.id}`}
+    >
+      <div className="relative aspect-square w-[78%] overflow-hidden rounded-full border-[3px] border-[#ffe08a]/75 bg-black shadow-[0_0_28px_rgba(255,224,138,0.26),inset_0_0_0_4px_rgba(0,0,0,0.5)] max-[620px]:w-[84%] max-[620px]:border-2">
+        <Image src={fighter.avatarUrl} alt="" fill sizes="220px" className="object-cover" />
+      </div>
+      <div className="absolute inset-x-[9%] bottom-[8%] grid grid-cols-[minmax(0,1fr)_24px] items-center gap-1 rounded-sm border border-white/12 bg-black/70 px-1.5 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] max-[620px]:grid-cols-[minmax(0,1fr)_18px] max-[620px]:px-1">
+        <ResourcePills value={health} max={MAX_HEALTH} tone="health" dense />
+        <b className="text-center text-[10px] font-black leading-none text-[#dfffce] [text-shadow:0_1px_0_#000] max-[620px]:text-[8px]">{Math.max(0, health)}</b>
+      </div>
     </article>
   );
 }
@@ -252,24 +261,49 @@ function DuelBar({
   max,
   tone,
   slots,
+  hideLabel = false,
 }: {
   label: string;
   value: number;
   max: number;
-  tone: "health" | "energy";
+  tone: "health" | "energy" | "attack";
   slots?: number;
+  hideLabel?: boolean;
 }) {
   return (
     <div className="relative grid min-h-[18px] grid-cols-[54px_minmax(0,1fr)_28px] items-center gap-1.5 max-[760px]:grid-cols-[38px_minmax(0,1fr)_22px] max-[620px]:grid-cols-[minmax(0,1fr)_20px]">
-      <span className="text-[10px] font-black uppercase text-[#fff7d6] [text-shadow:0_1px_0_#000] max-[620px]:hidden">{label}</span>
+      {hideLabel ? (
+        <DuelToneMark tone={tone} />
+      ) : (
+        <span className="text-[10px] font-black uppercase text-[#fff7d6] [text-shadow:0_1px_0_#000] max-[620px]:hidden">{label}</span>
+      )}
       <ResourcePills value={value} max={max} tone={tone} dense slots={slots} />
       <b className="text-[10px] font-black uppercase text-[#fff7d6] [text-shadow:0_1px_0_#000]">{value}</b>
     </div>
   );
 }
 
-function duelNumber() {
-  return "grid min-h-[18px] place-items-center border border-white/15 bg-black/35 text-[10px] font-black uppercase text-[#fff7d6] [text-shadow:0_1px_0_#000] max-[620px]:text-[8px]";
+function DuelToneMark({ tone }: { tone: "health" | "energy" | "attack" }) {
+  return (
+    <span
+      className={cn(
+        "mx-auto h-[9px] w-[22px] rounded-[2px] border shadow-[0_0_9px_rgba(0,0,0,0.62)] max-[760px]:w-[18px] max-[620px]:hidden",
+        tone === "attack"
+          ? "border-[#ff9bb2]/80 bg-[linear-gradient(180deg,#ff94aa,#b51d44)]"
+          : tone === "energy"
+            ? "border-[#ffe08a]/70 bg-[linear-gradient(180deg,#fff08a,#c88613)]"
+            : "border-[#9dff63]/70 bg-[linear-gradient(180deg,#bbff83,#21a72d)]",
+      )}
+      aria-hidden="true"
+      title={labelForTone(tone)}
+    />
+  );
+}
+
+function labelForTone(tone: "health" | "energy" | "attack") {
+  if (tone === "attack") return "Сила удару";
+  if (tone === "energy") return "Енергія";
+  return "Життя";
 }
 
 function DuelProjectiles({ clash, finisher }: { clash: Clash; finisher: boolean }) {

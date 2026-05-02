@@ -322,7 +322,7 @@ a {
     grid-template-columns: minmax(106px, 138px) minmax(180px, 1fr) minmax(106px, 138px) !important;
   }
 
-  .duel-grid .battle-card-face--compact {
+  .duel-grid :is(.battle-card-face--compact, .duel-avatar) {
     width: min(108px, 14dvw) !important;
     min-height: 142px !important;
   }
@@ -365,7 +365,7 @@ a {
     inset: 70px 20px 82px !important;
   }
 
-  .duel-grid .battle-card-face--compact {
+  .duel-grid :is(.battle-card-face--compact, .duel-avatar) {
     width: min(102px, 13dvw) !important;
     min-height: 134px !important;
   }
