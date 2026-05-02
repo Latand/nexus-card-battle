@@ -2,7 +2,7 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 import { cards } from "../src/features/battle/model/cards";
 import type { Card } from "../src/features/battle/model/types";
 import { getBoosterById } from "../src/features/boosters/catalog";
-import type { PlayerIdentity } from "../src/features/player/profile/types";
+import { STARTER_FREE_BOOSTERS, type PlayerIdentity } from "../src/features/player/profile/types";
 import { fulfillBoosterCatalog, fulfillPlayerProfile, type TestPlayerProfileInput } from "./fixtures/playerProfile";
 
 const GUEST_ID_STORAGE_KEY = "nexus:player-guest-id:v1";
@@ -15,6 +15,11 @@ const secondBoosterId = "factory-shift";
 const firstOpenedCards = getCardsForClans(["[Da:Hack]", "Aliens"]);
 const secondOpenedCards = getCardsForClans(["Workers", "Micron"]);
 const fullStarterDeckIds = [...firstOpenedCards, ...secondOpenedCards].map((card) => card.id);
+
+type RevealProfileState = Pick<
+  TestPlayerProfileInput,
+  "ownedCardIds" | "deckIds" | "starterFreeBoostersRemaining" | "openedBoosterIds"
+>;
 
 test("opens two different starter boosters, reveals saved cards, and edits the ten-card deck-ready state", async ({ page }) => {
   expect(firstOpenedCards).toHaveLength(5);
@@ -168,7 +173,7 @@ async function openBoosterAndReveal(
   harness: Awaited<ReturnType<typeof setupStarterOnboarding>>,
   boosterId: string,
   openingCards: Card[],
-  nextProfile: Partial<TestPlayerProfileInput>,
+  nextProfile: RevealProfileState,
 ) {
   const openRoutePromise = harness.waitForOpenRoute();
   await page.getByTestId(`starter-booster-open-${boosterId}`).click();
@@ -184,6 +189,15 @@ async function openBoosterAndReveal(
   await fulfillOpenBooster(openRoute, boosterId, openingCards, createProfile({ identity: harness.identity, ...nextProfile }));
 
   await expect(page.getByTestId("starter-reveal-shell")).toBeVisible();
+  const onboardingShell = page.getByTestId("starter-onboarding-shell");
+  const profileShell = page.getByTestId("player-profile-shell");
+  const progressCount = Math.max(0, STARTER_FREE_BOOSTERS - nextProfile.starterFreeBoostersRemaining);
+  await expect(onboardingShell).toHaveAttribute("data-phase", "reveal");
+  await expect(onboardingShell).toHaveAttribute("data-opened-booster-count", String(nextProfile.openedBoosterIds.length));
+  await expect(onboardingShell).toHaveAttribute("data-progress-count", String(progressCount));
+  await expect(profileShell).toHaveAttribute("data-profile-owned-card-count", String(nextProfile.ownedCardIds.length));
+  await expect(profileShell).toHaveAttribute("data-profile-deck-count", String(nextProfile.deckIds.length));
+  await expect(profileShell).toHaveAttribute("data-starter-free-boosters-remaining", String(nextProfile.starterFreeBoostersRemaining));
   await expect(page.locator('[data-testid^="starter-reveal-card-"]')).toHaveCount(5, { timeout: 6_000 });
   await expect(page.getByTestId("starter-reveal-active-card")).toHaveAttribute("data-card-id", openingCards[4].id);
   await expect(page.getByTestId("starter-reveal-continue")).toBeVisible();

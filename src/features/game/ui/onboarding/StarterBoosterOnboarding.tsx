@@ -128,6 +128,8 @@ export function StarterBoosterOnboarding({
         throw new Error("Starter booster did not return cards.");
       }
 
+      setOptimisticProfile(response.player);
+      onProfileChange(response.player);
       setReveal({
         booster: response.booster,
         cards: response.cards,
