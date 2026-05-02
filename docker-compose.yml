@@ -1,14 +1,33 @@
 services:
+  mongo:
+    image: mongo:7
+    container_name: nexus-card-battle-mongo
+    restart: unless-stopped
+    volumes:
+      - nexus_mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   nexus-card-battle:
     build:
       context: .
     image: nexus-card-battle:latest
     container_name: nexus-card-battle
     restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
       HOSTNAME: 0.0.0.0
       PORT: "3000"
+      MONGODB_URI: "${MONGODB_URI:-mongodb://mongo:27017/nexus-card-battle}"
     ports:
       - "${APP_HOST:-127.0.0.1}:${APP_PORT:-3010}:3000"
+
+volumes:
+  nexus_mongodb_data:

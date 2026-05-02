@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { cards } from "@/features/battle/model/cards";
 import { BattleGame } from "@/features/battle/ui/BattleGame";
 import { RealtimeBattleGame } from "@/features/battle/ui/RealtimeBattleGame";
@@ -8,8 +8,6 @@ import type { TelegramPlayer } from "@/shared/lib/telegram";
 import { PLAYER_DECK_SIZE } from "../model/randomDeck";
 import { CollectionDeckScreen } from "./collection/CollectionDeckScreen";
 
-const DECK_SESSION_STORAGE_KEY = "nexus:deck-session:v1";
-const DECK_CLOUD_STORAGE_KEY = "nexus_deck_v1";
 type BattleMode = "ai" | "human";
 type TelegramWindow = Window & {
   Telegram?: {
@@ -32,10 +30,6 @@ type TelegramWindow = Window & {
           last_name?: string;
         };
       };
-      CloudStorage?: {
-        getItem: (key: string, callback: (error: string | Error | null, value?: string) => void) => void;
-        setItem: (key: string, value: string, callback?: (error: string | Error | null, stored?: boolean) => void) => void;
-      };
     };
   };
 };
@@ -52,36 +46,14 @@ export function GameRoot() {
   const [telegramPlayer, setTelegramPlayer] = useState<TelegramPlayer>(() => readTelegramPlayer());
   const [telegramLandscapePromptActive, setTelegramLandscapePromptActive] = useState(false);
   const playerName = telegramPlayer.name;
-  const deckIdsRef = useRef(deckIds);
-  const deckTouchedRef = useRef(false);
-  const persistenceReadyRef = useRef(false);
-
-  useEffect(() => {
-    deckIdsRef.current = deckIds;
-  }, [deckIds]);
 
   useEffect(() => {
     const telegramPlayerHandle = window.setTimeout(() => setTelegramPlayer(readTelegramPlayer()), 0);
 
-    const cancelPersistenceTask = schedulePersistenceTask(() => {
-      void loadSavedDeckIds(collectionIds).then((savedDeckIds) => {
-        persistenceReadyRef.current = true;
-
-        if (savedDeckIds && !deckTouchedRef.current) {
-          deckIdsRef.current = savedDeckIds;
-          setDeckIds(savedDeckIds);
-          return;
-        }
-
-        void saveDeckIds(deckIdsRef.current);
-      });
-    });
-
     return () => {
       window.clearTimeout(telegramPlayerHandle);
-      cancelPersistenceTask();
     };
-  }, [collectionIds]);
+  }, []);
 
   useEffect(() => {
     const webApp = getTelegramWebApp();
@@ -121,19 +93,10 @@ export function GameRoot() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!persistenceReadyRef.current) return;
-    return schedulePersistenceTask(() => {
-      void saveDeckIds(deckIds);
-    });
-  }, [deckIds]);
-
   const handleDeckChange = useCallback(
     (nextDeckIds: string[]) => {
       const sanitizedDeckIds = sanitizeDeckIds(nextDeckIds, collectionIds);
 
-      deckTouchedRef.current = true;
-      deckIdsRef.current = sanitizedDeckIds;
       setDeckIds(sanitizedDeckIds);
     },
     [collectionIds],
@@ -180,25 +143,6 @@ export function GameRoot() {
   );
 }
 
-async function loadSavedDeckIds(collectionIds: string[]) {
-  if (typeof window === "undefined") return null;
-
-  const cloudDeckIds = await readCloudDeckIds(collectionIds);
-  if (cloudDeckIds) return cloudDeckIds;
-
-  try {
-    const raw = window.sessionStorage.getItem(DECK_SESSION_STORAGE_KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw);
-    if (!isStringArray(parsed)) return null;
-
-    return sanitizeDeckIds(parsed, collectionIds);
-  } catch {
-    return null;
-  }
-}
-
 function readTelegramPlayer(): TelegramPlayer {
   if (typeof window === "undefined") return {};
 
@@ -227,18 +171,6 @@ function readStorageString(key: string) {
     return window.localStorage.getItem(key)?.trim() || window.sessionStorage.getItem(key)?.trim() || undefined;
   } catch {
     return undefined;
-  }
-}
-
-async function saveDeckIds(deckIds: string[]) {
-  if (typeof window === "undefined") return;
-
-  await writeCloudDeckIds(deckIds);
-
-  try {
-    window.sessionStorage.setItem(DECK_SESSION_STORAGE_KEY, JSON.stringify(deckIds));
-  } catch {
-    // Storage can be unavailable in private or restricted browser contexts.
   }
 }
 
@@ -304,44 +236,6 @@ function TelegramLandscapeOverlay({ active }: { active: boolean }) {
   );
 }
 
-async function readCloudDeckIds(collectionIds: string[]) {
-  const cloudStorage = getTelegramWebApp()?.CloudStorage;
-  if (!cloudStorage) return null;
-
-  const raw = await new Promise<string | undefined>((resolve) => {
-    cloudStorage.getItem(DECK_CLOUD_STORAGE_KEY, (error, value) => {
-      resolve(error ? undefined : value);
-    });
-  });
-
-  if (!raw) return null;
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (!isStringArray(parsed)) return null;
-
-    return sanitizeDeckIds(parsed, collectionIds);
-  } catch {
-    return null;
-  }
-}
-
-async function writeCloudDeckIds(deckIds: string[]) {
-  const cloudStorage = getTelegramWebApp()?.CloudStorage;
-  if (!cloudStorage) return;
-
-  await new Promise<void>((resolve) => {
-    cloudStorage.setItem(DECK_CLOUD_STORAGE_KEY, JSON.stringify(deckIds), () => resolve());
-  });
-}
-
-function schedulePersistenceTask(task: () => void) {
-  if (typeof window === "undefined") return () => {};
-
-  const handle = window.setTimeout(task, 0);
-  return () => window.clearTimeout(handle);
-}
-
 function sanitizeDeckIds(deckIds: string[], collectionIds: string[]) {
   const collection = new Set(collectionIds);
   const normalized = unique(deckIds).filter((cardId) => collection.has(cardId));
@@ -363,10 +257,6 @@ function sanitizeDeckIds(deckIds: string[], collectionIds: string[]) {
 
 function createStarterDeckIds(collectionIds: string[]) {
   return collectionIds.slice(0, PLAYER_DECK_SIZE);
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
 function unique(values: string[]) {

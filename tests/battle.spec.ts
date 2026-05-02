@@ -13,43 +13,33 @@ test("keeps the minimum deck locked", async ({ page }) => {
   expect(firstCardId).toBeTruthy();
 
   await expect(page.getByTestId(`deck-remove-${firstCardId}`)).toBeDisabled();
-  await expect.poll(() => readSavedDeckIds(page)).toContain(firstCardId);
 });
 
-test("persists custom deck changes", async ({ page }) => {
+test("ignores legacy deck session storage without deleting it", async ({ page }) => {
+  const legacyDeckIds = [
+    "dahack-1645",
+    "dahack-110",
+    "dahack-820",
+    "dahack-167",
+    "dahack-1727",
+    "dahack-795",
+    "dahack-1383",
+    "dahack-658",
+    "dahack-108",
+    "dahack-363",
+  ];
+  await page.addInitScript(
+    ({ storageKey, deckIds }) => {
+      window.sessionStorage.setItem(storageKey, JSON.stringify(deckIds));
+    },
+    { storageKey: DECK_SESSION_STORAGE_KEY, deckIds: legacyDeckIds },
+  );
+
   await page.goto("/");
 
   const deckCards = page.locator('[data-testid^="deck-card-"]');
   await expect(deckCards).toHaveCount(9);
-  await expect.poll(() => readSavedDeckIds(page)).toHaveLength(9);
-
-  const savedDeckIds = await readSavedDeckIds(page);
-  const extraCardId = await page.evaluate((currentDeckIds) => {
-    const currentDeck = new Set(currentDeckIds);
-    const toggles = [...document.querySelectorAll<HTMLElement>('[data-testid^="collection-toggle-"]')];
-    const extraToggle = toggles.find((toggle) => {
-      const cardId = toggle.dataset.testid?.replace("collection-toggle-", "");
-      return cardId && !currentDeck.has(cardId);
-    });
-
-    return extraToggle?.dataset.testid?.replace("collection-toggle-", "") ?? null;
-  }, savedDeckIds);
-
-  expect(extraCardId).toBeTruthy();
-  await page.getByTestId(`collection-toggle-${extraCardId}`).click({ force: true });
-
-  await expect(deckCards).toHaveCount(10);
-  await expect.poll(() => readSavedDeckIds(page)).toContain(extraCardId);
-
-  await page.reload();
-
-  await expect(deckCards).toHaveCount(10);
-  await expect.poll(() => readSavedDeckIds(page)).toContain(extraCardId);
-
-  await page.getByTestId(`deck-remove-${extraCardId}`).click({ force: true });
-
-  await expect(deckCards).toHaveCount(9);
-  await expect.poll(() => readSavedDeckIds(page)).not.toContain(extraCardId);
+  await expect.poll(() => readSavedDeckIds(page)).toEqual(legacyDeckIds);
 });
 
 test("plays a complete state-machine battle", async ({ page }) => {
