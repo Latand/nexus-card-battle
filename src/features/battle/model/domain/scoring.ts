@@ -1,6 +1,5 @@
 import type { BonusState } from "./bonusRules";
 import { BASE_ATTACK_ENERGY } from "../constants";
-import { getClanBonus } from "../clans";
 import {
   applyNumericEffect,
   createEffectLog,
@@ -146,7 +145,7 @@ function getAllowedAbilityEffects(card: Card, abilityBlocked?: boolean) {
 
 function getActiveRuleGroups(card: Card, options: ScoreOptions, abilityEffects: EffectSpec[]) {
   const context = getEffectContext(card, options);
-  const bonusEffects = options.clanBonus?.active ? expandEffectSpecs(options.clanBonus.bonus.effects, options) : [];
+  const bonusEffects = options.clanBonus?.active ? options.clanBonus.bonus.effects : [];
   const bonusRules = instantiateEffectRules(bonusEffects);
   const abilityRules = getActiveAbilityRules(card, options, abilityEffects);
   const handSupportEffects = getActiveHandSupportEffects(card, options);
@@ -172,8 +171,7 @@ function getOpponentCardFallback(opponent: Fighter) {
 
 function getActiveAbilityRules(card: Card, options: ScoreOptions, abilityEffects: EffectSpec[]) {
   const context = getEffectContext(card, options);
-  const expandedAbilityEffects = expandEffectSpecs(abilityEffects, options);
-  const abilityRules = instantiateEffectRules(expandedAbilityEffects);
+  const abilityRules = instantiateEffectRules(abilityEffects);
 
   return abilityRules.filter((rule) => !context || isEffectConditionMet(rule, context));
 }
@@ -189,7 +187,7 @@ function getActiveHandSupportEffects(card: Card, options: ScoreOptions): QueuedE
     if (sourceCard.used || options.owner?.usedCardIds.includes(sourceCard.id)) return [];
 
     const supportEffects = sourceCard.ability.effects.filter(isHandSupportEffect);
-    const supportRules = instantiateEffectRules(expandEffectSpecs(supportEffects, options));
+    const supportRules = instantiateEffectRules(supportEffects);
 
     return supportRules
       .filter((rule) => !context || isEffectConditionMet(rule, { ...context, ownerCard: sourceCard }))
@@ -227,22 +225,4 @@ function applyScoreEffect(
   if (rule.mode === "per_owner_hp") return value + (rule.amount ?? 0) * scoreContext.ownerHp;
   if (rule.mode === "per_opponent_hp") return value + (rule.amount ?? 0) * scoreContext.opponentHp;
   return applyNumericEffect(value, rule);
-}
-
-function expandEffectSpecs(effectSpecs: EffectSpec[], options: ScoreOptions): EffectSpec[] {
-  return effectSpecs.flatMap((spec) => {
-    if (spec.key !== "copy-clan-bonus") return spec;
-    if (!spec.copyClan || !options.owner) return [];
-    if (!options.owner.hand.some((card) => card.clan === spec.copyClan)) return [];
-
-    const copiedBonus = getClanBonus(spec.copyClan);
-
-    return copiedBonus.effects.map((effect) => ({
-      ...effect,
-      condition: effect.condition ?? spec.condition,
-      outcome: effect.outcome ?? spec.outcome,
-      unblockable: effect.unblockable || spec.unblockable,
-      ...(effect.label ? { label: `${copiedBonus.name}: ${effect.label}` } : {}),
-    }));
-  });
 }

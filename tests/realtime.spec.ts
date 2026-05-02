@@ -74,7 +74,7 @@ test("does not leak the first PvP mover energy before reveal", async ({ baseURL 
   const firstMover = firstReady.firstPlayerId === firstReady.playerId ? first : second;
   const secondMover = firstMover === first ? second : first;
   const firstMoverReady = firstMover === first ? firstReady : secondReady;
-  const firstMoverReadyPayload = firstMoverReady as { playerId: string; players: Record<string, { handIds?: string[] }> };
+  const firstMoverReadyPayload = firstMoverReady as unknown as { playerId: string; players: Record<string, { handIds?: string[] }> };
   const firstMoverPlayer = firstMoverReadyPayload.players[firstMoverReadyPayload.playerId];
   const cardId = firstMoverPlayer.handIds?.[0] ?? deckIds[0];
 

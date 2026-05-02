@@ -42,7 +42,6 @@ export type EffectSpec = {
   mode?: EffectMode;
   target?: EffectTarget;
   statusKind?: StatusKind;
-  copyClan?: string;
   unblockable?: boolean;
 };
 
