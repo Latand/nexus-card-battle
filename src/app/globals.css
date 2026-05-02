@@ -25,6 +25,25 @@ body {
   box-sizing: border-box;
 }
 
+.battle-screen,
+.battle-screen *,
+[data-testid="battle-overlay"],
+[data-testid="battle-overlay"] *,
+.selection-dialog,
+.selection-dialog * {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.battle-screen :is(button, [role="button"], .battle-card-face, img),
+[data-testid="battle-overlay"] :is(button, [role="button"], .battle-card-face, img),
+.selection-dialog :is(button, [role="button"], .battle-card-face, img) {
+  -webkit-user-drag: none;
+  touch-action: manipulation;
+}
+
 a {
   color: inherit;
   text-decoration: none;

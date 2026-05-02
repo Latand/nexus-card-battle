@@ -126,6 +126,8 @@ async function playFirstAvailableCard(page: Page, extraEnergyClicks: number, opt
     await expect(page.locator('[data-owner="enemy"] [data-played="true"]')).toHaveCount(1);
   }
   await expect(page.getByTestId("battle-overlay")).toHaveAttribute("data-phase", "battle_intro", { timeout: 8_000 });
+  await expect.poll(async () => page.getByTestId("duel-exchange-projectile").count()).toBeGreaterThanOrEqual(2);
+  await expect.poll(async () => page.getByTestId("duel-exchange-projectile").count()).toBeLessThanOrEqual(4);
   await expect
     .poll(
       async () => {

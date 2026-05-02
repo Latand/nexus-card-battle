@@ -295,13 +295,21 @@ function submitMove(session, message) {
 
   if (session.id === match.firstPlayerId) {
     startTurnTimer(match, opponentId);
-    broadcast(match, {
+    send(session, {
       type: "first_move",
       matchId: match.id,
       round: match.round,
       playerId: session.id,
       opponentId,
       move,
+    });
+    send(sessions.get(opponentId), {
+      type: "first_move",
+      matchId: match.id,
+      round: match.round,
+      playerId: session.id,
+      opponentId,
+      move: maskMoveForOpponent(move),
     });
     return;
   }
@@ -469,6 +477,12 @@ function sanitizeMove(value) {
     cardId: value.cardId,
     energy: Math.max(0, Math.min(12, Number.parseInt(String(value.energy ?? 0), 10) || 0)),
     boosted: Boolean(value.boosted),
+  };
+}
+
+function maskMoveForOpponent(move) {
+  return {
+    cardId: move.cardId,
   };
 }
 

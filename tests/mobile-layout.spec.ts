@@ -89,6 +89,34 @@ for (const viewport of VIEWPORTS) {
   });
 }
 
+test("disables accidental text selection on mobile battle controls", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openBattle(page);
+
+  const selectionState = await page.evaluate(() => {
+    const screen = document.querySelector(".battle-screen");
+    const card = document.querySelector('[data-testid^="player-card-"]');
+    const button = document.querySelector('[data-testid="round-marker"]');
+    const screenStyle = screen ? getComputedStyle(screen) : null;
+    const cardStyle = card ? getComputedStyle(card) : null;
+    const buttonStyle = button ? getComputedStyle(button) : null;
+
+    return {
+      screenUserSelect: screenStyle?.userSelect,
+      cardUserSelect: cardStyle?.userSelect,
+      buttonUserSelect: buttonStyle?.userSelect,
+      cardTapHighlight: cardStyle?.getPropertyValue("-webkit-tap-highlight-color"),
+      cardTouchAction: cardStyle?.touchAction,
+    };
+  });
+
+  expect(selectionState.screenUserSelect).toBe("none");
+  expect(selectionState.cardUserSelect).toBe("none");
+  expect(selectionState.buttonUserSelect).toBe("none");
+  expect(selectionState.cardTapHighlight).toBe("rgba(0, 0, 0, 0)");
+  expect(selectionState.cardTouchAction).toBe("manipulation");
+});
+
 test("keeps duel cards readable with enough portrait breathing room", async ({ page }) => {
   await page.setViewportSize({ width: 350, height: 760 });
   await openBattle(page);

@@ -42,6 +42,17 @@ type HumanMove = {
   boosted: boolean;
 };
 
+type HumanFirstMove = {
+  cardId: string;
+  energy?: number;
+  boosted?: boolean;
+};
+
+type KnownEnemyMove = {
+  card: Card;
+  energy?: number;
+};
+
 type HumanMatchPlayer = {
   id: string;
   name?: string;
@@ -71,7 +82,7 @@ type HumanFirstMoveMessage = HumanSocketMessage & {
   matchId: string;
   round: number;
   playerId: string;
-  move: HumanMove;
+  move: HumanFirstMove;
 };
 
 type HumanRoundResolvedMessage = HumanSocketMessage & {
@@ -103,7 +114,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, tel
   const [energy, setEnergy] = useState(0);
   const [damageBoost, setDamageBoost] = useState(false);
   const [pending, setPending] = useState<Outcome | null>(null);
-  const [enemyLockedMove, setEnemyLockedMove] = useState<EnemyMove | null>(null);
+  const [enemyLockedMove, setEnemyLockedMove] = useState<KnownEnemyMove | null>(null);
   const [selectionOpen, setSelectionOpen] = useState(false);
   const [turnSeconds, setTurnSeconds] = useState(TURN_SECONDS);
   const [humanStatus, setHumanStatus] = useState<HumanMatchStatus>(isHumanMatch ? "connecting" : "idle");
@@ -113,7 +124,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, tel
   const socketRef = useRef<WebSocket | null>(null);
   const gameRef = useRef(game);
   const matchInfoRef = useRef(matchInfo);
-  const remoteFirstMoveRef = useRef<{ round: number; move: HumanMove } | null>(null);
+  const remoteFirstMoveRef = useRef<{ round: number; move: HumanFirstMove } | null>(null);
   const pendingFirstMovesRef = useRef(new Map<number, HumanFirstMoveMessage>());
   const pendingRoundResolvedRef = useRef(new Map<number, HumanRoundResolvedMessage>());
   const resolvingHumanRoundRef = useRef<number | null>(null);
@@ -242,7 +253,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, tel
         if (game.first === "enemy") {
           if (isHumanMatch) {
             const remoteMove = remoteFirstMoveRef.current?.round === game.round.round ? remoteFirstMoveRef.current.move : null;
-            const enemyMove = remoteMove ? createEnemyMoveFromHumanMove(game, remoteMove) : null;
+            const enemyMove = remoteMove ? createKnownEnemyMoveFromHumanMove(game, remoteMove) : null;
 
             if (enemyMove) {
               setEnemyLockedMove(enemyMove);
@@ -252,7 +263,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, tel
                 round: {
                   ...value.round,
                   enemyCardId: enemyMove.card.id,
-                  enemyEnergyBid: enemyMove.energy,
+                  enemyEnergyBid: enemyMove.energy ?? value.round.enemyEnergyBid,
                 },
               }));
               return;
@@ -363,7 +374,12 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, tel
       return;
     }
 
-    const knownEnemyMove = game.first === "enemy" ? enemyLockedMove ?? chooseEnemyMove(game.enemy, game.player, game.round.round) : undefined;
+    const knownEnemyMove =
+      game.first === "enemy"
+        ? enemyLockedMove?.energy !== undefined
+          ? ({ card: enemyLockedMove.card, energy: enemyLockedMove.energy } satisfies EnemyMove)
+          : chooseEnemyMove(game.enemy, game.player, game.round.round)
+        : undefined;
     const outcome = resolveRound(game.player, game.enemy, card, legalEnergy, effectiveBoost, game.first, game.round.round, knownEnemyMove);
     const enemyMove = knownEnemyMove ?? { card: outcome.clash.enemyCard, energy: outcome.clash.enemyEnergy };
 
@@ -502,7 +518,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, tel
 
     if (currentGame.phase !== "opponent_turn" || currentGame.first !== "enemy") return;
 
-    const enemyMove = createEnemyMoveFromHumanMove(currentGame, message.move);
+    const enemyMove = createKnownEnemyMoveFromHumanMove(currentGame, message.move);
     if (!enemyMove) return;
 
     setEnemyLockedMove(enemyMove);
@@ -512,7 +528,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, tel
       round: {
         ...value.round,
         enemyCardId: enemyMove.card.id,
-        enemyEnergyBid: enemyMove.energy,
+        enemyEnergyBid: enemyMove.energy ?? value.round.enemyEnergyBid,
       },
     }));
   }
@@ -901,13 +917,13 @@ function findCardInHand(hand: Card[], cardId: string) {
   return hand.find((card) => card.id === cardId);
 }
 
-function createEnemyMoveFromHumanMove(game: GameState, move: HumanMove): EnemyMove | null {
+function createKnownEnemyMoveFromHumanMove(game: GameState, move: HumanFirstMove): KnownEnemyMove | null {
   const card = findCardInHand(game.enemy.hand, move.cardId);
   if (!card) return null;
 
   return {
     card,
-    energy: move.energy,
+    ...(typeof move.energy === "number" ? { energy: move.energy } : {}),
   };
 }
 

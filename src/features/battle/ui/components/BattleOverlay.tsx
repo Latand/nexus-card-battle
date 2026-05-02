@@ -1,7 +1,7 @@
 import Image from "next/image";
 import type { CSSProperties } from "react";
 import { cn } from "@/shared/lib/cn";
-import { BASE_ATTACK_ENERGY, DAMAGE_THROWS_CAP, MAX_HEALTH } from "../../model/constants";
+import { BASE_ATTACK_ENERGY, DAMAGE_THROWS_CAP, EXCHANGE_THROWS_MAX, EXCHANGE_THROWS_MIN, MAX_HEALTH } from "../../model/constants";
 import { hasApplicableAbilityEffect, isAbilityBlocked } from "../../model/game";
 import type { Clash, Fighter, Outcome, Phase, ResolvedEffect, Side } from "../../model/types";
 import { BattleCard } from "./BattleCard";
@@ -112,7 +112,9 @@ export function BattleOverlay({
             />
           </div>
 
-          {isDamage ? <DuelProjectiles clash={clash} finisher={isFinisher} /> : <div className="min-h-80" />}
+          {phase === "battle_intro" ? <DuelExchangeProjectiles clash={clash} /> : null}
+          {isDamage ? <DuelProjectiles clash={clash} finisher={isFinisher} /> : null}
+          {!isDamage && phase !== "battle_intro" ? <div className="min-h-80" /> : null}
 
           <div
             className={cn(
@@ -435,6 +437,49 @@ function DuelProjectiles({ clash, finisher }: { clash: Clash; finisher: boolean 
   );
 }
 
+function DuelExchangeProjectiles({ clash }: { clash: Clash }) {
+  const throws = buildExchangeThrows(clash);
+
+  return (
+    <div className="relative min-h-80 self-stretch overflow-visible max-[760px]:min-h-[260px]" aria-hidden="true" data-testid="duel-exchange-projectiles">
+      {throws.map((throwItem, index) => (
+        <DuelProjectile
+          key={`${clash.round}-exchange-${index}`}
+          from={throwItem.from}
+          index={index}
+          kind={throwItem.kind}
+          mode="exchange"
+        />
+      ))}
+    </div>
+  );
+}
+
+function buildExchangeThrows(clash: Clash) {
+  const count = EXCHANGE_THROWS_MIN + (stableHash(`${clash.round}:${clash.playerCard.id}:${clash.enemyCard.id}:${clash.playerAttack}:${clash.enemyAttack}`) % (EXCHANGE_THROWS_MAX - EXCHANGE_THROWS_MIN + 1));
+  const startsFromPlayer = clash.first === "player";
+
+  return Array.from({ length: count }).map((_, index) => {
+    const evenThrow = index % 2 === 0;
+    const from: Side = evenThrow === startsFromPlayer ? "player" : "enemy";
+
+    return {
+      from,
+      kind: (index + stableHash(`${clash.playerCard.id}:${clash.enemyCard.id}:${index}`)) % 5,
+    };
+  });
+}
+
+function stableHash(value: string) {
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+
+  return hash;
+}
+
 function DuelProjectile({
   from,
   index,
@@ -444,9 +489,9 @@ function DuelProjectile({
   from: Side;
   index: number;
   kind: number;
-  mode: "damage" | "finish";
+  mode: "damage" | "exchange" | "finish";
 }) {
-  const size = mode === "finish" ? 104 : 58 + (index % 3) * 12;
+  const size = mode === "finish" ? 104 : mode === "exchange" ? 54 + (index % 2) * 10 : 58 + (index % 3) * 12;
   const direction = from === "player" ? 1 : -1;
 
   return (
@@ -456,13 +501,14 @@ function DuelProjectile({
         from === "player" ? "animate-[nexus-duel-throw-player_var(--duration)_var(--delay)_both]" : "animate-[nexus-duel-throw-enemy_var(--duration)_var(--delay)_both]",
         mode === "finish" && "z-[2]",
       )}
+      data-testid={mode === "exchange" ? "duel-exchange-projectile" : undefined}
       style={
         {
-          "--duration": mode === "damage" ? "820ms" : "1120ms",
-          "--delay": mode === "damage" ? `${index * 240}ms` : "420ms",
+          "--duration": mode === "finish" ? "1120ms" : mode === "exchange" ? "760ms" : "820ms",
+          "--delay": mode === "finish" ? "420ms" : mode === "exchange" ? `${index * 430}ms` : `${index * 240}ms`,
           width: `${size}px`,
           height: `${size}px`,
-          top: `calc(34% + ${(index % 5) * 18}px)`,
+          top: mode === "exchange" ? `calc(30% + ${(index % 4) * 22}px)` : `calc(34% + ${(index % 5) * 18}px)`,
           left: "calc(50% - 20px)",
         } as CSSProperties
       }
