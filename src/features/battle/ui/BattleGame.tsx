@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/shared/lib/cn";
+import type { TelegramPlayer } from "@/shared/lib/telegram";
 import { cards } from "../model/cards";
 import { isClanBonusActive } from "../model/clans";
 import { DAMAGE_BOOST_COST, PHASE_TIMING_MS, TURN_SECONDS } from "../model/constants";
@@ -28,6 +29,7 @@ type BattleGameProps = {
   playerCollectionIds?: string[];
   playerDeckIds?: string[];
   playerName?: string;
+  telegramPlayer?: TelegramPlayer;
   mode?: "ai" | "human";
   onOpenCollection?: () => void;
 };
@@ -42,6 +44,8 @@ type HumanMove = {
 
 type HumanMatchPlayer = {
   id: string;
+  name?: string;
+  telegramId?: string;
   deckIds: string[];
   collectionIds: string[];
   handIds?: string[];
@@ -79,7 +83,7 @@ type HumanRoundResolvedMessage = HumanSocketMessage & {
   moves: Record<string, HumanMove>;
 };
 
-export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, mode = "ai", onOpenCollection }: BattleGameProps = {}) {
+export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, telegramPlayer, mode = "ai", onOpenCollection }: BattleGameProps = {}) {
   const isHumanMatch = mode === "human";
   const initialGame = useMemo(
     () => createInitialGame({ playerCollectionIds, playerDeckIds, playerName }),
@@ -101,6 +105,9 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, mod
   const gameRef = useRef(game);
   const matchInfoRef = useRef(matchInfo);
   const remoteFirstMoveRef = useRef<{ round: number; move: HumanMove } | null>(null);
+  const pendingFirstMovesRef = useRef(new Map<number, HumanFirstMoveMessage>());
+  const pendingRoundResolvedRef = useRef(new Map<number, HumanRoundResolvedMessage>());
+  const resolvingHumanRoundRef = useRef<number | null>(null);
   const humanMessageHandlerRef = useRef<(message: HumanSocketMessage) => void>(() => {});
 
   useEffect(() => {
@@ -113,6 +120,11 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, mod
 
   useEffect(() => {
     humanMessageHandlerRef.current = handleHumanSocketMessage;
+  });
+
+  useEffect(() => {
+    if (!isHumanMatch || humanStatus !== "matched") return;
+    flushBufferedHumanMessages();
   });
 
   useEffect(() => {
@@ -133,6 +145,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, mod
         type: "join_human",
         deckIds: playerDeckIds,
         collectionIds: playerCollectionIds,
+        user: telegramPlayer,
       });
     });
 
@@ -169,7 +182,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, mod
       socket.close();
       if (socketRef.current === socket) socketRef.current = null;
     };
-  }, [isHumanMatch, playerCollectionIds, playerDeckIds]);
+  }, [isHumanMatch, playerCollectionIds, playerDeckIds, telegramPlayer]);
 
   const selected = getSelectedCard(game.player, selectedId) ?? game.player.hand[0];
   const boostCost = damageBoost ? DAMAGE_BOOST_COST : 0;
@@ -282,6 +295,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, mod
         setEnergy(0);
         setDamageBoost(false);
         setPending(null);
+        resolvingHumanRoundRef.current = null;
         setEnemyLockedMove(null);
         setGame(applied);
       }, 1200 + pending.clash.damage * 220);
@@ -419,7 +433,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, mod
       const nextGame = createHumanGame(nextMatch, playerName);
       const firstCard = getAvailableCards(nextGame.player)[0];
 
-      remoteFirstMoveRef.current = null;
+      clearHumanMessageBuffers();
       setMatchInfo(nextMatch);
       setGame(nextGame);
       setSelectedId(firstCard?.id);
@@ -461,7 +475,13 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, mod
     const currentMatch = matchInfoRef.current;
     const currentGame = gameRef.current;
 
-    if (!currentMatch || message.matchId !== currentMatch.matchId || message.round !== currentGame.round.round) return;
+    if (!currentMatch || message.matchId !== currentMatch.matchId) return;
+    if (message.round < currentGame.round.round || currentGame.matchResult) return;
+    if (message.round > currentGame.round.round) {
+      pendingFirstMovesRef.current.set(message.round, message);
+      return;
+    }
+
     if (message.playerId === currentMatch.playerId) return;
 
     remoteFirstMoveRef.current = { round: message.round, move: message.move };
@@ -486,7 +506,13 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, mod
   function handleHumanRoundResolved(message: HumanRoundResolvedMessage) {
     const currentMatch = matchInfoRef.current;
     const currentGame = gameRef.current;
-    if (!currentMatch || message.matchId !== currentMatch.matchId || message.round !== currentGame.round.round) return;
+    if (!currentMatch || message.matchId !== currentMatch.matchId) return;
+    if (message.round < currentGame.round.round || currentGame.matchResult) return;
+    if (message.round > currentGame.round.round) {
+      pendingRoundResolvedRef.current.set(message.round, message);
+      return;
+    }
+    if (resolvingHumanRoundRef.current === message.round || currentGame.round.clash?.round === message.round) return;
 
     const playerMove = message.moves[currentMatch.playerId];
     const opponentMove = message.moves[currentMatch.opponentId];
@@ -502,6 +528,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, mod
 
     const first = message.firstPlayerId === currentMatch.playerId ? "player" : "enemy";
     const enemyMove = { card: enemyCard, energy: opponentMove.energy };
+    resolvingHumanRoundRef.current = message.round;
     const outcome = resolveRound(
       currentGame.player,
       currentGame.enemy,
@@ -543,7 +570,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, mod
     setPending(null);
     setEnemyLockedMove(null);
     setSelectionOpen(false);
-    remoteFirstMoveRef.current = null;
+    clearHumanMessageBuffers();
 
     if (!isSocketOpen(socket)) return;
 
@@ -552,7 +579,33 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, mod
       type: "join_human",
       deckIds: playerDeckIds,
       collectionIds: playerCollectionIds,
+      user: telegramPlayer,
     });
+  }
+
+  function flushBufferedHumanMessages() {
+    const currentGame = gameRef.current;
+    const round = currentGame.round.round;
+    const firstMove = pendingFirstMovesRef.current.get(round);
+
+    if (firstMove) {
+      pendingFirstMovesRef.current.delete(round);
+      handleHumanFirstMove(firstMove);
+    }
+
+    const roundResolved = pendingRoundResolvedRef.current.get(round);
+
+    if (roundResolved) {
+      pendingRoundResolvedRef.current.delete(round);
+      handleHumanRoundResolved(roundResolved);
+    }
+  }
+
+  function clearHumanMessageBuffers() {
+    remoteFirstMoveRef.current = null;
+    pendingFirstMovesRef.current.clear();
+    pendingRoundResolvedRef.current.clear();
+    resolvingHumanRoundRef.current = null;
   }
 
   useEffect(() => {
@@ -762,6 +815,7 @@ function createHumanGame(match: HumanMatchInfo, playerName?: string) {
     enemyDeckIds: opponent.deckIds,
     playerName,
   });
+  const opponentName = opponent.name || (opponent.telegramId ? `Telegram ${opponent.telegramId}` : "Суперник");
 
   return {
     ...game,
@@ -777,6 +831,7 @@ function createHumanGame(match: HumanMatchInfo, playerName?: string) {
     },
     enemy: {
       ...game.enemy,
+      name: opponentName,
       hand: buildHumanHand(opponent.handIds ?? opponent.deckIds.slice(0, 4)),
       usedCardIds: opponent.usedCardIds ?? [],
     },
@@ -876,7 +931,7 @@ function getHumanOverlayTitle(status: HumanMatchStatus) {
 
 function getHumanOverlaySubtitle(status: HumanMatchStatus) {
   if (status === "connecting") return "Підключаємося до живого матчу.";
-  if (status === "queued") return "Чекаємо іншого гравця. Хід не буде підмінятися ІІ.";
+  if (status === "queued") return "Чекаємо іншого гравця.";
   if (status === "opponent_left") return "Матч зупинено, бо другий гравець залишив арену.";
   if (status === "error") return "Спробуй повернутися до колоди й запустити PvP ще раз.";
   if (status === "closed") return "Сервер закрив з'єднання з матчем.";

@@ -1,9 +1,15 @@
 import Image from "next/image";
 import type { CSSProperties } from "react";
 import { cn } from "@/shared/lib/cn";
-import { visibleText } from "@/shared/lib/visibleText";
-import type { Card } from "../../model/types";
+import type { Card, Rarity } from "../../model/types";
 import { CardTooltip } from "./CardTooltip";
+
+const rarityLabels: Record<Rarity, string> = {
+  Common: "Звичайна",
+  Rare: "Рідкісна",
+  Unique: "Унікальна",
+  Legend: "Легендарна",
+};
 
 export function BattleCard({
   card,
@@ -18,10 +24,10 @@ export function BattleCard({
   abilityActive?: boolean;
   bonusVisible?: boolean;
 }) {
-  const abilityName = visibleText(card.ability.name);
-  const abilityDescription = visibleText(card.ability.description);
-  const bonusName = visibleText(card.bonus.name);
-  const bonusDescription = visibleText(card.bonus.description);
+  const abilityName = card.ability.name;
+  const abilityDescription = card.ability.description;
+  const bonusName = card.bonus.name;
+  const bonusDescription = card.bonus.description;
   const style = {
     containerType: "inline-size",
     "--accent": card.accent,
@@ -48,8 +54,8 @@ export function BattleCard({
       style={style}
     >
       <div className="absolute inset-x-[7.5%] top-[1.7%] z-[2] flex justify-between gap-2">
-        <span className="text-[11px] font-black uppercase tracking-[0.08em] text-[#d8bd82]">{visibleText(card.rarity)}</span>
-        <b className="text-right text-[11px] leading-none text-[#fff2c1]">{visibleText(card.clan)}</b>
+        <span className="text-[11px] font-black uppercase tracking-[0.08em] text-[#d8bd82]">{rarityLabels[card.rarity]}</span>
+        <b className="text-right text-[11px] leading-none text-[#fff2c1]">{card.clan}</b>
       </div>
 
       <div
@@ -67,7 +73,7 @@ export function BattleCard({
       </div>
 
       <div className="absolute inset-x-[8%] top-[51.8%] z-[2] truncate text-[clamp(18px,8.7cqw,24px)] font-black leading-none text-[#fff6d0] [text-shadow:0_2px_0_rgba(0,0,0,0.8)]">
-        {visibleText(card.name)}
+        {card.name}
       </div>
 
       <b className="absolute left-[7.2%] top-[72.8%] z-[2] grid aspect-square w-[21.5%] place-items-center rounded-full bg-[radial-gradient(circle_at_36%_30%,#fff7c2_0_18%,#ffe08a_20%_62%,#a96c20_64%)] pt-px text-[clamp(19px,9.3cqw,28px)] font-black leading-none text-[#160f0f] shadow-[inset_0_-5px_0_rgba(0,0,0,0.18),0_1px_0_rgba(255,255,255,0.32)]">

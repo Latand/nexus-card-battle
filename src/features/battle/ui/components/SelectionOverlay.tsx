@@ -1,5 +1,4 @@
 import { cn } from "@/shared/lib/cn";
-import { visibleText } from "@/shared/lib/visibleText";
 import { isClanBonusActive } from "../../model/clans";
 import { BASE_ATTACK_ENERGY } from "../../model/constants";
 import { hasApplicableAbilityEffect } from "../../model/game";
@@ -95,8 +94,8 @@ export function SelectionOverlay({
 
         <div className="relative z-[2] grid gap-2 rounded-[7px] border-2 border-[#1e2527] bg-[linear-gradient(180deg,#6c6b65_0_6%,#2d3032_7%_54%,#151719_55%),repeating-linear-gradient(135deg,rgba(255,255,255,0.1)_0_1px,transparent_1px_7px)] p-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.18),0_16px_30px_rgba(0,0,0,0.44)] max-[620px]:w-[min(260px,100%)] max-[620px]:justify-self-center">
           <div className="grid min-h-[42px] content-center border border-white/20 bg-black/35 px-2.5 py-[5px]">
-            <span className="text-[10px] font-black uppercase text-[#d8bd82]">{visibleText(selected.clan)}</span>
-            <strong className="text-lg font-black leading-none text-[#fff7d7]">{visibleText(selected.name)}</strong>
+            <span className="text-[10px] font-black uppercase text-[#d8bd82]">{selected.clan}</span>
+            <strong className="text-lg font-black leading-none text-[#fff7d7]">{selected.name}</strong>
           </div>
 
           <div className="grid grid-cols-[34px_minmax(0,1fr)_34px_34px] items-center gap-[5px]">
@@ -150,21 +149,21 @@ export function SelectionOverlay({
             <CardTooltip
               className="block min-w-0"
               eyebrow="Уміння"
-              title={visibleText(selected.ability.name)}
-              description={visibleText(selected.ability.description)}
+              title={selected.ability.name}
+              description={selected.ability.description}
             >
               <span className={cn("block truncate rounded px-1 py-0.5", !selectedAbilityActive && "text-[#8c836f]")}>
-                {visibleText(selected.ability.name)}
+                {selected.ability.name}
               </span>
             </CardTooltip>
             <CardTooltip
               className="block min-w-0"
               eyebrow="Бонус"
-              title={visibleText(selected.bonus.name)}
-              description={visibleText(selected.bonus.description)}
+              title={selected.bonus.name}
+              description={selected.bonus.description}
             >
               <span className={cn("block truncate rounded px-1 py-0.5", !selectedBonusVisible && "text-[#8c836f]")}>
-                {visibleText(selected.bonus.name)}
+                {selected.bonus.name}
               </span>
             </CardTooltip>
           </div>

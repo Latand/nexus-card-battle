@@ -25,6 +25,8 @@ export function Hand({
   onPick?: (card: Card) => void;
   disabled?: boolean;
 }) {
+  const hasPlayedEnemyCard = owner === "enemy" && Boolean(playedCardId);
+
   return (
     <section
       className={cn(
@@ -33,6 +35,7 @@ export function Hand({
         owner === "enemy"
           ? "mt-1 w-[min(760px,92vw)] px-3 [article]:min-h-[132px] max-[960px]:w-[min(640px,94vw)] max-[760px]:w-full max-[760px]:px-1 max-[760px]:[article]:min-h-[110px]"
           : "mt-2 w-[min(790px,94vw)] px-3 [article]:min-h-[152px] max-[960px]:w-[min(700px,96vw)] max-[760px]:w-full max-[760px]:px-1 max-[760px]:[article]:min-h-[118px]",
+        hasPlayedEnemyCard && "pb-8 max-[760px]:pb-6",
         active
           ? owner === "player"
             ? "border-[#ffd84d]/90 bg-[linear-gradient(180deg,rgba(255,217,69,0.16),rgba(0,0,0,0.18))] shadow-[0_0_24px_rgba(255,211,62,0.48),inset_0_0_24px_rgba(255,211,62,0.12)]"
@@ -55,7 +58,7 @@ export function Hand({
           "relative z-[1] block border-0 bg-transparent p-0 text-left text-inherit transition-[filter,transform,opacity] duration-500",
           isSelected && owner === "player" && "-translate-y-2 drop-shadow-[0_0_18px_rgba(255,210,58,0.86)]",
           isSelected && owner === "enemy" && "drop-shadow-[0_0_18px_rgba(255,91,84,0.76)]",
-          isPlayed && owner === "enemy" && "z-[3] scale-[1.035] drop-shadow-[0_0_18px_rgba(255,74,66,0.62)]",
+          isPlayed && owner === "enemy" && "z-[3] translate-y-6 scale-[1.045] drop-shadow-[0_18px_24px_rgba(255,74,66,0.58)] max-[760px]:translate-y-5",
           card.used && "cursor-not-allowed opacity-35 grayscale",
           !card.used && "cursor-pointer hover:-translate-y-1 hover:drop-shadow-[0_0_12px_rgba(255,220,91,0.5)]",
         );

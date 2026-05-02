@@ -21,6 +21,8 @@ const handle = app.getRequestHandler();
 const sessions = new Map();
 const matches = new Map();
 let waitingSessionId = null;
+const BATTLE_HAND_SIZE = 4;
+const MIN_DECK_SIZE = 8;
 
 app.prepare().then(() => {
   requestHandler = (request, response) => {
@@ -46,6 +48,7 @@ app.prepare().then(() => {
       id: createId("tab"),
       ws,
       alive: true,
+      user: null,
       queuedDeckIds: [],
       queuedCollectionIds: [],
       matchId: null,
@@ -136,9 +139,10 @@ function handleSocketMessage(session, message) {
 function joinHumanQueue(session, message) {
   const deckIds = sanitizeStringArray(message.deckIds);
   const collectionIds = sanitizeStringArray(message.collectionIds);
+  session.user = sanitizeUser(message.user);
 
-  if (deckIds.length < 8) {
-    sendError(session, "Deck must contain at least 8 cards.");
+  if (deckIds.length < MIN_DECK_SIZE) {
+    sendError(session, `Deck must contain at least ${MIN_DECK_SIZE} cards.`);
     return;
   }
 
@@ -176,6 +180,7 @@ function cancelQueue(session, options = {}) {
 }
 
 function createMatch(left, right) {
+  const hands = dealBattleHands(left.queuedDeckIds, right.queuedDeckIds);
   const match = {
     id: createId("match"),
     playerIds: [left.id, right.id],
@@ -185,16 +190,20 @@ function createMatch(left, right) {
     players: {
       [left.id]: {
         id: left.id,
+        name: getSessionDisplayName(left),
+        telegramId: left.user?.telegramId,
         deckIds: left.queuedDeckIds,
         collectionIds: left.queuedCollectionIds,
-        handIds: selectBattleHandIds(left.queuedDeckIds),
+        handIds: hands.left,
         usedCardIds: [],
       },
       [right.id]: {
         id: right.id,
+        name: getSessionDisplayName(right),
+        telegramId: right.user?.telegramId,
         deckIds: right.queuedDeckIds,
         collectionIds: right.queuedCollectionIds,
-        handIds: selectBattleHandIds(right.queuedDeckIds),
+        handIds: hands.right,
         usedCardIds: [],
       },
     },
@@ -379,8 +388,69 @@ function sanitizeMove(value) {
   };
 }
 
+function sanitizeUser(value) {
+  if (!value || typeof value !== "object") return null;
+
+  const telegramId = sanitizeShortString(value.telegramId, 64);
+  const name = sanitizeShortString(value.name, 80);
+  const username = sanitizeShortString(value.username, 64);
+
+  if (!telegramId && !name && !username) return null;
+
+  return { telegramId, name, username };
+}
+
+function sanitizeShortString(value, maxLength) {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.slice(0, maxLength);
+}
+
+function getSessionDisplayName(session) {
+  return session.user?.name || session.user?.username || "Гравець";
+}
+
 function selectBattleHandIds(deckIds) {
-  return shuffle(deckIds).slice(0, 4);
+  return shuffle(deckIds).slice(0, BATTLE_HAND_SIZE);
+}
+
+function dealBattleHands(leftDeckIds, rightDeckIds) {
+  if (sameStringArray(leftDeckIds, rightDeckIds) && leftDeckIds.length >= BATTLE_HAND_SIZE * 2) {
+    const shuffledDeckIds = shuffle(leftDeckIds);
+
+    return {
+      left: shuffledDeckIds.slice(0, BATTLE_HAND_SIZE),
+      right: shuffledDeckIds.slice(BATTLE_HAND_SIZE, BATTLE_HAND_SIZE * 2),
+    };
+  }
+
+  let left = selectBattleHandIds(leftDeckIds);
+  let right = selectBattleHandIds(rightDeckIds);
+
+  if (sameStringArray(left, right)) {
+    right = selectDistinctBattleHandIds(rightDeckIds, left);
+  }
+
+  return { left, right };
+}
+
+function selectDistinctBattleHandIds(deckIds, otherHandIds) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const handIds = selectBattleHandIds(deckIds);
+    if (!sameStringArray(handIds, otherHandIds)) return handIds;
+  }
+
+  const differentIds = shuffle(deckIds.filter((cardId) => !otherHandIds.includes(cardId)));
+  const sharedIds = shuffle(deckIds.filter((cardId) => otherHandIds.includes(cardId)));
+  const fallback = [...differentIds, ...sharedIds].slice(0, BATTLE_HAND_SIZE);
+
+  return fallback.length === BATTLE_HAND_SIZE ? fallback : selectBattleHandIds(deckIds);
+}
+
+function sameStringArray(left, right) {
+  if (left.length !== right.length) return false;
+  return left.every((item, index) => item === right[index]);
 }
 
 function shuffle(items) {

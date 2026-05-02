@@ -1,7 +1,6 @@
 import Image from "next/image";
 import type { CSSProperties } from "react";
 import { cn } from "@/shared/lib/cn";
-import { visibleText } from "@/shared/lib/visibleText";
 import { DAMAGE_THROWS_CAP, MAX_ENERGY } from "../../model/constants";
 import { hasApplicableAbilityEffect, isAbilityBlocked } from "../../model/game";
 import type { Clash, Fighter, Outcome, Phase, ResolvedEffect, Side } from "../../model/types";
@@ -153,10 +152,10 @@ function getStatusText(phase: Phase, clash: Clash, isFinisher: boolean, loserCar
   const winnerAttack = clash.winner === "player" ? clash.playerAttack : clash.enemyAttack;
   const loserAttack = clash.winner === "player" ? clash.enemyAttack : clash.playerAttack;
   const damageText = isFinisher
-    ? `${visibleText(loserCardName)} вибуває: ${clash.damage} урону для ${damageTarget}`
+    ? `${loserCardName} вибуває: ${clash.damage} урону для ${damageTarget}`
     : `${damageTarget} отримує ${clash.damage} урону`;
 
-  return `${visibleText(winnerCardName)} перемагає: ${winnerAttack} проти ${loserAttack}; ${damageText}`;
+  return `${winnerCardName} перемагає: ${winnerAttack} проти ${loserAttack}; ${damageText}`;
 }
 
 function isCopyClanBonusResolved(card: Clash["playerCard"], hand: Clash["playerCard"][]) {
@@ -214,7 +213,7 @@ function DuelStatus({
       </strong>
       {revealAttack ? <DuelBar label="Карта" value={cardLife} max={cardLifeMax} tone="health" slots={12} /> : null}
       <div className="grid grid-cols-3 gap-1 max-[760px]:grid-cols-2 [&>span:last-child]:max-[760px]:col-span-full">
-        <span className={duelNumber()}>{visibleText(cardName)}</span>
+        <span className={duelNumber()}>{cardName}</span>
         <span className={duelNumber()}>HP {humanHp}</span>
         <span className={duelNumber()}>{revealAttack ? `Атака ${attack}` : "Атака ?"}</span>
       </div>
@@ -240,10 +239,10 @@ function EffectList({ effects }: { effects: ResolvedEffect[] }) {
               ? "border-[#ffe08a]/45 bg-[#49370e]/78 text-[#ffe9a8]"
               : "border-white/12 bg-white/8 text-[#f4e7c4]",
           )}
-          title={`${visibleText(effect.source)}: ${visibleText(effect.label)}`}
+          title={`${effect.source}: ${effect.label}`}
         >
           {effect.target ? `${effect.target === "player" ? "Гравець" : "Суперник"}: ` : ""}
-          {visibleText(effect.label)}
+          {effect.label}
           {effect.value !== undefined ? ` ${formatSigned(effect.value)}` : ""}
         </span>
       ))}

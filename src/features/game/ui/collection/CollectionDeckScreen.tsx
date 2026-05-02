@@ -7,7 +7,6 @@ import { clanList } from "@/features/battle/model/clans";
 import type { Card, Rarity } from "@/features/battle/model/types";
 import { BattleCard } from "@/features/battle/ui/components/BattleCard";
 import { cn } from "@/shared/lib/cn";
-import { visibleText } from "@/shared/lib/visibleText";
 import { PLAYER_DECK_SIZE } from "../../model/randomDeck";
 
 type Props = {
@@ -73,7 +72,7 @@ export function CollectionDeckScreen({ collectionIds, deckIds: savedDeckIds = []
       .filter((card) => {
         if (!normalizedQuery) return true;
         return [card.name, card.clan, card.ability.name, card.bonus.name].some((value) =>
-          visibleText(value).toLowerCase().includes(normalizedQuery),
+          value.toLowerCase().includes(normalizedQuery),
         );
       })
       .sort((left, right) => sortCards(left, right, sortMode));
@@ -212,7 +211,7 @@ export function CollectionDeckScreen({ collectionIds, deckIds: savedDeckIds = []
                       type="button"
                       onClick={() => setActiveFaction(faction.name)}
                     >
-                      <span className="truncate">{visibleText(faction.name)}</span>
+                      <span className="truncate">{faction.name}</span>
                       <b>{count}</b>
                     </button>
                   );
@@ -300,7 +299,7 @@ function CollectionCardTile({
       style={style}
       data-testid={`collection-card-${card.id}`}
     >
-      <button className="absolute inset-0 z-[1] rounded-md" type="button" onClick={onSelect} aria-label={`Обрати ${visibleText(card.name)}`} />
+      <button className="absolute inset-0 z-[1] rounded-md" type="button" onClick={onSelect} aria-label={`Обрати ${card.name}`} />
       <MiniBattleCard card={card} size="collection" />
 
       {inDeck ? (
@@ -317,7 +316,7 @@ function CollectionCardTile({
         type="button"
         disabled={inDeck && !canRemove}
         onClick={onToggle}
-        aria-label={inDeck ? `Прибрати ${visibleText(card.name)} з колоди` : `Додати ${visibleText(card.name)} до колоди`}
+        aria-label={inDeck ? `Прибрати ${card.name} з колоди` : `Додати ${card.name} до колоди`}
         data-testid={`collection-toggle-${card.id}`}
       >
         <span
@@ -467,7 +466,7 @@ function DeckDockSlot({
       )}
       data-testid={`deck-card-${card.id}`}
     >
-      <button className="absolute inset-0 z-[1] rounded-md" type="button" onClick={onSelect} aria-label={`Обрати ${visibleText(card.name)}`} />
+      <button className="absolute inset-0 z-[1] rounded-md" type="button" onClick={onSelect} aria-label={`Обрати ${card.name}`} />
       <MiniBattleCard card={card} size="dock" />
       <b className="pointer-events-none absolute left-1.5 top-1.5 z-[3] grid aspect-square w-6 place-items-center rounded-full bg-[#111820] text-xs font-black text-[#ffe08a] shadow-[0_4px_12px_rgba(0,0,0,0.42)]">
         {index + 1}
@@ -483,7 +482,7 @@ function DeckDockSlot({
         disabled={!canRemove}
         onClick={onRemove}
         data-testid={`deck-remove-${card.id}`}
-        aria-label={`Прибрати ${visibleText(card.name)} з колоди`}
+        aria-label={`Прибрати ${card.name} з колоди`}
       >
         −
       </button>
@@ -534,8 +533,8 @@ function CardDetails({
 
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <strong className="block truncate text-2xl font-black uppercase leading-none text-[#fff0ad]">{visibleText(card.name)}</strong>
-          <span className="mt-1 block text-xs font-black uppercase tracking-[0.1em] text-[#9ed6e4]">{visibleText(card.clan)} · {rarityLabels[card.rarity]}</span>
+          <strong className="block truncate text-2xl font-black uppercase leading-none text-[#fff0ad]">{card.name}</strong>
+          <span className="mt-1 block text-xs font-black uppercase tracking-[0.1em] text-[#9ed6e4]">{card.clan} · {rarityLabels[card.rarity]}</span>
         </div>
         <button className={utilityButtonClass()} type="button" onClick={onToggle} disabled={disableRemove}>
           {inDeck ? "Прибрати" : "До колоди"}
@@ -563,8 +562,8 @@ function DeckLinksPanel({ activeLinks }: { activeLinks: { faction: string; bonus
         {activeLinks.length > 0 ? (
           activeLinks.map((link) => (
             <div key={link.faction} className="rounded border border-[#65d7e9]/20 bg-[#65d7e9]/8 px-2 py-1.5">
-              <b className="block truncate text-xs font-black text-[#c7f5ff]">{visibleText(link.faction)}</b>
-              <span className="block truncate text-[11px] font-bold text-[#efe3c5]">{visibleText(link.bonus)}</span>
+              <b className="block truncate text-xs font-black text-[#c7f5ff]">{link.faction}</b>
+              <span className="block truncate text-[11px] font-bold text-[#efe3c5]">{link.bonus}</span>
             </div>
           ))
         ) : (
@@ -581,8 +580,8 @@ function DetailRow({ label, title, description }: { label: string; title: string
   return (
     <div className="rounded border border-white/10 bg-white/[0.04] p-2">
       <dt className="text-[10px] font-black uppercase tracking-[0.12em] text-[#d4b06a]">{label}</dt>
-      <dd className="mt-1 text-sm font-black text-[#fff7df]">{visibleText(title)}</dd>
-      <dd className="mt-1 line-clamp-3 text-xs font-bold leading-snug text-[#bdb197]">{visibleText(description)}</dd>
+      <dd className="mt-1 text-sm font-black text-[#fff7df]">{title}</dd>
+      <dd className="mt-1 line-clamp-3 text-xs font-bold leading-snug text-[#bdb197]">{description}</dd>
     </div>
   );
 }

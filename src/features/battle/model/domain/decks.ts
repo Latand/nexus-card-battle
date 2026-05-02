@@ -74,9 +74,27 @@ function shuffle<T>(items: T[]) {
   const next = [...items];
 
   for (let index = next.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
+    const swapIndex = randomIndex(index + 1);
     [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
   }
 
   return next;
+}
+
+function randomIndex(maxExclusive: number) {
+  const cryptoApi = globalThis.crypto;
+
+  if (cryptoApi?.getRandomValues) {
+    const values = new Uint32Array(1);
+    const maxUint32 = 0xffffffff;
+    const limit = maxUint32 - (maxUint32 % maxExclusive);
+
+    do {
+      cryptoApi.getRandomValues(values);
+    } while (values[0] >= limit);
+
+    return values[0] % maxExclusive;
+  }
+
+  return Math.floor(Math.random() * maxExclusive);
 }
