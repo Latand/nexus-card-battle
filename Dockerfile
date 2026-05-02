@@ -21,7 +21,8 @@ RUN bun install --frozen-lockfile --production
 
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/src/features/battle/model ./src/features/battle/model
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
 COPY --from=builder /app/next.config.mjs ./next.config.mjs
 COPY --from=builder /app/server.js ./server.js
 
