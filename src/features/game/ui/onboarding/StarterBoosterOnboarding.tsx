@@ -9,7 +9,7 @@ import { BattleCard } from "@/features/battle/ui/components/BattleCard";
 import { STARTER_FREE_BOOSTERS, type PlayerIdentity, type PlayerProfile } from "@/features/player/profile/types";
 import { cn } from "@/shared/lib/cn";
 
-type ProfileStatus = "loading" | "ready" | "fallback";
+type ProfileStatus = "loading" | "ready" | "unavailable";
 type Phase = "catalog" | "opening" | "reveal";
 type CatalogStatus = "loading" | "ready" | "error";
 

@@ -48,6 +48,58 @@ test("bootstraps a browser guest profile on first load", async ({ page }) => {
   expect(storedGuestId).toBe((requests[0] as { identity: { guestId: string } }).identity.guestId);
 });
 
+test("blocks collection access and retries when profile bootstrap fails", async ({ page }) => {
+  let profileRequests = 0;
+  let catalogRequests = 0;
+  let profile: TestPlayerProfileInput | undefined;
+
+  await mockPlayerProfile(page, async (route) => {
+    profileRequests += 1;
+    const requestBody = route.request().postDataJSON() as { identity: { mode: "guest"; guestId: string } };
+
+    if (profileRequests === 1) {
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "profile_unavailable" }) });
+      return;
+    }
+
+    profile = {
+      id: "player-retry-e2e",
+      identity: requestBody.identity,
+      ownedCardIds: [],
+      deckIds: [],
+      starterFreeBoostersRemaining: 2,
+      openedBoosterIds: [],
+    };
+    await fulfillPlayerProfile(route, profile);
+  });
+  await page.route("**/api/boosters", async (route) => {
+    catalogRequests += 1;
+    if (!profile) throw new Error("Profile must load before booster catalog.");
+    await fulfillBoosterCatalog(route, profile);
+  });
+
+  await page.goto("/");
+
+  const profileShell = page.getByTestId("player-profile-shell");
+  await expect(profileShell).toHaveAttribute("data-profile-status", "unavailable");
+  await expect(page.getByTestId("profile-unavailable")).toBeVisible();
+  await expect(page.getByTestId("profile-retry")).toBeVisible();
+  await expect(page.getByTestId("collection-search")).toHaveCount(0);
+  await expect(page.getByTestId("play-selected-deck")).toHaveCount(0);
+  await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(0);
+  await expect(page.getByTestId("starter-onboarding-shell")).toHaveCount(0);
+  expect(catalogRequests).toBe(0);
+
+  await page.getByTestId("profile-retry").click();
+
+  await expect(profileShell).toHaveAttribute("data-profile-status", "ready");
+  await expect(page.getByTestId("starter-onboarding-shell")).toBeVisible();
+  await expect(page.locator('[data-testid^="starter-booster-card-"]')).toHaveCount(12);
+  await expect(page.getByTestId("collection-search")).toHaveCount(0);
+  expect(profileRequests).toBe(2);
+  expect(catalogRequests).toBeGreaterThanOrEqual(1);
+});
+
 test("bootstraps the Telegram MVP identity from client-provided telegramId", async ({ page }) => {
   await page.route("https://telegram.org/js/telegram-web-app.js", async (route) => {
     await route.fulfill({ contentType: "application/javascript", body: "" });

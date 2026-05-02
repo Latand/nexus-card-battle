@@ -12,7 +12,7 @@ import { CollectionDeckScreen } from "./collection/CollectionDeckScreen";
 import { StarterBoosterOnboarding } from "./onboarding/StarterBoosterOnboarding";
 
 type BattleMode = "ai" | "human";
-type ProfileStatus = "loading" | "ready" | "fallback";
+type ProfileStatus = "loading" | "ready" | "unavailable";
 type DeckSource = "profile" | "starter-fallback";
 type TelegramWindow = Window & {
   Telegram?: {
@@ -51,6 +51,7 @@ export function GameRoot() {
   const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
   const [playerIdentity, setPlayerIdentity] = useState<PlayerIdentity | null>(null);
   const [profileStatus, setProfileStatus] = useState<ProfileStatus>("loading");
+  const [profileRetryKey, setProfileRetryKey] = useState(0);
   const [telegramPlayer, setTelegramPlayer] = useState<TelegramPlayer>(() => readTelegramPlayer());
   const [telegramLandscapePromptActive, setTelegramLandscapePromptActive] = useState(false);
   const deckTouchedRef = useRef(false);
@@ -88,13 +89,14 @@ export function GameRoot() {
       .catch(() => {
         if (disposed) return;
         setPlayerIdentity(identity);
-        setProfileStatus("fallback");
+        setPlayerProfile(null);
+        setProfileStatus("unavailable");
       });
 
     return () => {
       disposed = true;
     };
-  }, []);
+  }, [profileRetryKey]);
 
   useEffect(() => {
     if (deckTouchedRef.current) return;
@@ -154,6 +156,12 @@ export function GameRoot() {
     deckTouchedRef.current = false;
     setPlayerProfile(nextProfile);
   }, []);
+  const retryProfileLoad = useCallback(() => {
+    deckTouchedRef.current = false;
+    setPlayerProfile(null);
+    setProfileStatus("loading");
+    setProfileRetryKey((current) => current + 1);
+  }, []);
 
   if (screen === "battle") {
     return (
@@ -183,6 +191,15 @@ export function GameRoot() {
     return (
       <>
         <ProfileLoadingScreen />
+        <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
+      </>
+    );
+  }
+
+  if (profileStatus === "unavailable") {
+    return (
+      <>
+        <ProfileUnavailableScreen profileIdentityMode={playerIdentity?.mode} onRetry={retryProfileLoad} />
         <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
       </>
     );
@@ -224,6 +241,48 @@ export function GameRoot() {
       />
       <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
     </>
+  );
+}
+
+function ProfileUnavailableScreen({
+  profileIdentityMode,
+  onRetry,
+}: {
+  profileIdentityMode?: "telegram" | "guest";
+  onRetry: () => void;
+}) {
+  return (
+    <main
+      className="grid min-h-screen place-items-center bg-[#080907] px-4 text-[#f7efd7]"
+      data-testid="player-profile-shell"
+      data-profile-status="unavailable"
+      data-profile-identity-mode={profileIdentityMode ?? "unknown"}
+      data-profile-owned-card-count="0"
+      data-profile-deck-count="0"
+      data-deck-source="starter-fallback"
+      data-starter-free-boosters-remaining="0"
+    >
+      <section
+        className="grid w-full max-w-[460px] gap-3 rounded-md border border-[#ef735a]/45 bg-[linear-gradient(180deg,rgba(36,20,16,0.94),rgba(9,11,11,0.97))] p-4 text-left shadow-[0_18px_42px_rgba(0,0,0,0.42)]"
+        data-testid="profile-unavailable"
+      >
+        <b className="text-[11px] font-black uppercase tracking-[0.16em] text-[#efcf6f]">Профіль недоступний</b>
+        <strong className="text-[clamp(24px,6vw,34px)] font-black uppercase leading-none text-[#fff0ad]">
+          Не вдалося завантажити гравця
+        </strong>
+        <p className="text-sm font-bold leading-snug text-[#d6c5a0]">
+          Стартові бустери та колода відкриваються тільки після збереженого профілю.
+        </p>
+        <button
+          className="min-h-[42px] justify-self-start rounded-md border-2 border-black/55 bg-[linear-gradient(180deg,#fff26d,#e2b72e_56%,#966414)] px-5 text-sm font-black uppercase text-[#17100a] transition hover:brightness-110"
+          type="button"
+          onClick={onRetry}
+          data-testid="profile-retry"
+        >
+          Спробувати ще раз
+        </button>
+      </section>
+    </main>
   );
 }
 

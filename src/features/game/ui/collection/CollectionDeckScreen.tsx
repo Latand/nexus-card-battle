@@ -12,7 +12,7 @@ import { PLAYER_DECK_SIZE } from "../../model/randomDeck";
 type Props = {
   collectionIds: string[];
   deckIds: string[];
-  profileStatus: "loading" | "ready" | "fallback";
+  profileStatus: "loading" | "ready" | "unavailable";
   profileIdentityMode?: "telegram" | "guest";
   profileOwnedCardCount: number;
   profileDeckCount: number;
