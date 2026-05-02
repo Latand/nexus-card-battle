@@ -63,7 +63,8 @@ export function GameRoot() {
     profileStatus === "ready" &&
     Boolean(playerIdentity) &&
     Boolean(playerProfile) &&
-    (playerProfile?.starterFreeBoostersRemaining ?? 0) > 0;
+    (playerProfile?.starterFreeBoostersRemaining ?? 0) > 0 &&
+    !playerProfile?.onboarding.completed;
 
   useEffect(() => {
     const telegramPlayerHandle = window.setTimeout(() => setTelegramPlayer(readTelegramPlayer()), 0);
@@ -149,6 +150,10 @@ export function GameRoot() {
     },
     [collectionIds],
   );
+  const handleStarterProfileChange = useCallback((nextProfile: PlayerProfile) => {
+    deckTouchedRef.current = false;
+    setPlayerProfile(nextProfile);
+  }, []);
 
   if (screen === "battle") {
     return (
@@ -192,10 +197,7 @@ export function GameRoot() {
           profileStatus={profileStatus}
           profileIdentityMode={playerIdentity.mode}
           deckSource={deckSource}
-          onProfileChange={(nextProfile) => {
-            deckTouchedRef.current = false;
-            setPlayerProfile(nextProfile);
-          }}
+          onProfileChange={handleStarterProfileChange}
         />
         <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
       </>

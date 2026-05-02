@@ -1,4 +1,5 @@
 import type { Page, Route } from "@playwright/test";
+import { getBoosterCatalogForPlayer } from "../../src/features/boosters/catalog";
 import type { PlayerIdentity } from "../../src/features/player/profile/types";
 
 export const PROFILE_DECK_IDS = [
@@ -40,23 +41,41 @@ export async function mockDeckReadyProfile(page: Page, options: Partial<TestPlay
 }
 
 export async function fulfillPlayerProfile(route: Route, profile: TestPlayerProfileInput) {
-  const collectionReady = profile.ownedCardIds.length > 0;
-  const deckReady = profile.deckIds.length > 0;
-
   await route.fulfill({
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({
-      player: {
-        ...profile,
-        openedBoosterIds: profile.openedBoosterIds ?? [],
-        onboarding: {
-          starterBoostersAvailable: profile.starterFreeBoostersRemaining > 0,
-          collectionReady,
-          deckReady,
-          completed: collectionReady && deckReady && profile.starterFreeBoostersRemaining === 0,
-        },
-      },
+      player: createPlayerProfileBody(profile),
     }),
   });
+}
+
+export async function fulfillBoosterCatalog(route: Route, profile: TestPlayerProfileInput) {
+  await route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      boosters: getBoosterCatalogForPlayer({
+        openedBoosterIds: profile.openedBoosterIds ?? [],
+        starterFreeBoostersRemaining: profile.starterFreeBoostersRemaining,
+      }),
+      player: createPlayerProfileBody(profile),
+    }),
+  });
+}
+
+function createPlayerProfileBody(profile: TestPlayerProfileInput) {
+  const collectionReady = profile.ownedCardIds.length > 0;
+  const deckReady = profile.deckIds.length > 0;
+
+  return {
+    ...profile,
+    openedBoosterIds: profile.openedBoosterIds ?? [],
+    onboarding: {
+      starterBoostersAvailable: profile.starterFreeBoostersRemaining > 0,
+      collectionReady,
+      deckReady,
+      completed: collectionReady && deckReady && profile.starterFreeBoostersRemaining === 0,
+    },
+  };
 }

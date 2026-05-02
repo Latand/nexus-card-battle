@@ -1,9 +1,8 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useEffect, useMemo, useState } from "react";
-import { getBoosterCatalogForPlayer } from "@/features/boosters/catalog";
-import { openStarterBooster } from "@/features/boosters/client";
+import { useEffect, useState } from "react";
+import { fetchStarterBoosterCatalog, openStarterBooster } from "@/features/boosters/client";
 import type { BoosterCatalogItem, BoosterResponse } from "@/features/boosters/types";
 import type { Card, Rarity } from "@/features/battle/model/types";
 import { BattleCard } from "@/features/battle/ui/components/BattleCard";
@@ -12,6 +11,7 @@ import { cn } from "@/shared/lib/cn";
 
 type ProfileStatus = "loading" | "ready" | "fallback";
 type Phase = "catalog" | "opening" | "reveal";
+type CatalogStatus = "loading" | "ready" | "error";
 
 type Props = {
   identity: PlayerIdentity;
@@ -58,11 +58,39 @@ export function StarterBoosterOnboarding({
   const [error, setError] = useState<string | null>(null);
   const [reveal, setReveal] = useState<RevealState | null>(null);
   const [revealedCount, setRevealedCount] = useState(0);
-  const visibleProfile = optimisticProfile ?? profile;
-  const boosters = useMemo(() => getBoosterCatalogForPlayer(visibleProfile), [visibleProfile]);
-  const openedCount = visibleProfile.openedBoosterIds.length;
-  const progressCount = Math.max(0, STARTER_FREE_BOOSTERS - visibleProfile.starterFreeBoostersRemaining);
-  const canChoose = phase === "catalog";
+  const [catalogStatus, setCatalogStatus] = useState<CatalogStatus>("loading");
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [catalogProfile, setCatalogProfile] = useState<PlayerProfile | null>(null);
+  const [boosters, setBoosters] = useState<BoosterCatalogItem[]>([]);
+  const [catalogRefreshKey, setCatalogRefreshKey] = useState(0);
+  const profileForDisplay = optimisticProfile ?? catalogProfile ?? profile;
+  const openedCount = profileForDisplay.openedBoosterIds.length;
+  const progressCount = Math.max(0, STARTER_FREE_BOOSTERS - profileForDisplay.starterFreeBoostersRemaining);
+  const canChoose = phase === "catalog" && catalogStatus === "ready";
+
+  useEffect(() => {
+    let disposed = false;
+
+    void fetchStarterBoosterCatalog(identity)
+      .then((response) => {
+        if (disposed) return;
+        setBoosters(response.boosters);
+        setCatalogProfile(response.player);
+        setOptimisticProfile(response.player);
+        setCatalogError(null);
+        setCatalogStatus("ready");
+        onProfileChange(response.player);
+      })
+      .catch((caughtError) => {
+        if (disposed) return;
+        setCatalogError(caughtError instanceof Error ? caughtError.message : "Каталог бустерів зараз недоступний.");
+        setCatalogStatus("error");
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [catalogRefreshKey, identity, onProfileChange]);
 
   useEffect(() => {
     if (phase !== "reveal" || !reveal) return;
@@ -117,7 +145,11 @@ export function StarterBoosterOnboarding({
     setOpeningBoosterId(null);
     setReveal(null);
     setRevealedCount(0);
+    setCatalogStatus("loading");
+    setCatalogError(null);
+    setBoosters([]);
     setPhase("catalog");
+    setCatalogRefreshKey((current) => current + 1);
   }
 
   return (
@@ -126,10 +158,10 @@ export function StarterBoosterOnboarding({
       data-testid="player-profile-shell"
       data-profile-status={profileStatus}
       data-profile-identity-mode={profileIdentityMode ?? "unknown"}
-      data-profile-owned-card-count={visibleProfile.ownedCardIds.length}
-      data-profile-deck-count={visibleProfile.deckIds.length}
+      data-profile-owned-card-count={profileForDisplay.ownedCardIds.length}
+      data-profile-deck-count={profileForDisplay.deckIds.length}
       data-deck-source={deckSource}
-      data-starter-free-boosters-remaining={visibleProfile.starterFreeBoostersRemaining}
+      data-starter-free-boosters-remaining={profileForDisplay.starterFreeBoostersRemaining}
     >
       <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,rgba(16,17,12,0.95),rgba(5,8,9,0.98)),url('/nexus-assets/backgrounds/arena-bar-1024x576.png')] bg-cover bg-center px-4 py-4 max-[620px]:px-2">
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(255,224,138,0.1),transparent_18%,transparent_78%,rgba(101,215,233,0.1))]" />
@@ -138,6 +170,7 @@ export function StarterBoosterOnboarding({
           className="relative z-10 mx-auto grid min-h-[calc(100dvh-32px)] max-w-[1280px] grid-rows-[auto_minmax(0,1fr)] gap-3"
           data-testid="starter-onboarding-shell"
           data-phase={phase}
+          data-catalog-status={catalogStatus}
           data-opened-booster-count={openedCount}
           data-progress-count={progressCount}
         >
@@ -149,12 +182,12 @@ export function StarterBoosterOnboarding({
               </h1>
             </div>
 
-            <StarterProgress profile={visibleProfile} />
+            <StarterProgress profile={profileForDisplay} />
 
             <div className="grid min-w-[240px] grid-cols-3 gap-2 max-[980px]:min-w-0">
               <Metric label="Бустерів" value={`${progressCount}/${STARTER_FREE_BOOSTERS}`} />
-              <Metric label="Карт" value={visibleProfile.ownedCardIds.length} testId="starter-owned-count" />
-              <Metric label="Ще" value={visibleProfile.starterFreeBoostersRemaining} />
+              <Metric label="Карт" value={profileForDisplay.ownedCardIds.length} testId="starter-owned-count" />
+              <Metric label="Ще" value={profileForDisplay.starterFreeBoostersRemaining} />
             </div>
           </header>
 
@@ -189,6 +222,24 @@ export function StarterBoosterOnboarding({
                 </div>
               ) : null}
 
+              {catalogStatus === "loading" ? (
+                <div
+                  className="rounded-md border border-[#d4aa4d]/35 bg-black/34 px-4 py-3 text-sm font-black uppercase tracking-[0.08em] text-[#ffe08a]"
+                  data-testid="starter-catalog-loading"
+                >
+                  Завантажуємо каталог бустерів...
+                </div>
+              ) : null}
+
+              {catalogStatus === "error" ? (
+                <div
+                  className="rounded-md border border-[#ef735a]/45 bg-[#3a1512]/80 px-4 py-3 text-sm font-bold text-[#ffd5ca]"
+                  data-testid="starter-catalog-error"
+                >
+                  {catalogError}
+                </div>
+              ) : null}
+
               {error ? (
                 <div
                   className="rounded-md border border-[#ef735a]/45 bg-[#3a1512]/80 px-4 py-3 text-sm font-bold text-[#ffd5ca]"
@@ -198,21 +249,23 @@ export function StarterBoosterOnboarding({
                 </div>
               ) : null}
 
-              <div
-                className="booster-catalog-grid grid min-h-0 grid-cols-[repeat(auto-fit,minmax(178px,1fr))] gap-2.5 overflow-y-auto pr-1 max-[430px]:grid-cols-2 max-[430px]:gap-2"
-                data-testid="starter-booster-catalog"
-              >
-                {boosters.map((booster, index) => (
-                  <BoosterTile
-                    key={booster.id}
-                    booster={booster}
-                    index={index}
-                    busy={phase === "opening"}
-                    opening={openingBoosterId === booster.id}
-                    onOpen={() => handleOpenBooster(booster)}
-                  />
-                ))}
-              </div>
+              {catalogStatus === "ready" ? (
+                <div
+                  className="booster-catalog-grid grid min-h-0 grid-cols-[repeat(auto-fit,minmax(178px,1fr))] gap-2.5 overflow-y-auto pr-1 max-[430px]:grid-cols-2 max-[430px]:gap-2"
+                  data-testid="starter-booster-catalog"
+                >
+                  {boosters.map((booster, index) => (
+                    <BoosterTile
+                      key={booster.id}
+                      booster={booster}
+                      index={index}
+                      busy={phase === "opening"}
+                      opening={openingBoosterId === booster.id}
+                      onOpen={() => handleOpenBooster(booster)}
+                    />
+                  ))}
+                </div>
+              ) : null}
             </section>
           )}
         </section>
