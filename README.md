@@ -1,17 +1,26 @@
-# Нексус Battle Prototype
+# Nexus Card Battle
 
-Playable Next.js prototype of a Нексус-inspired card battle.
+Telegram Mini App card battle built with Next.js and a custom Node/WebSocket server.
+
+Players build a deck, fight AI locally, or queue into a live PvP match. Inside Telegram, the app reads the current user from `Telegram.WebApp`, opens in fullscreen when supported, and stores the selected deck in Telegram CloudStorage with a browser `sessionStorage` fallback.
+
+## Features
+
+- Deck builder with persisted player decks.
+- AI battle mode for single-player testing.
+- Human-vs-human matchmaking over `/ws`.
+- Telegram Mini App integration for user names, fullscreen launch, and CloudStorage deck sync.
+- Docker-ready production server that serves both Next.js and WebSocket traffic.
 
 ## Battle Rules
 
-- 8 total cards, split into 4 cards for the player and 4 for the opponent.
+- A deck must contain at least 9 cards.
+- Each battle hand contains 4 cards.
 - Each fighter starts with 12 health and 12 energy.
-- The battle lasts 4 rounds, unless someone reaches 0 health earlier.
+- Battles last up to 4 rounds, unless a fighter reaches 0 health earlier.
 - Attack is calculated as `power * (energy + 1)`.
-- The higher attack wins the round. Equal attack is resolved randomly.
-- The winning card deals its damage to the enemy fighter.
+- The higher attack wins the round, and the winning card deals damage.
 - The first actor alternates after every round.
-- Cards include early prototype abilities inspired by known Нексус clan bonuses.
 
 ## Development
 
@@ -24,20 +33,21 @@ Open [http://localhost:3000](http://localhost:3000).
 
 `npm run dev` starts the custom Node server, so local PvP uses the same `/ws` path as production.
 
-## Deployment
+## Production
 
-The self-hosted target is Docker Compose behind your Nginx:
+Use the Docker/self-host path for PvP, because the arena needs a long-lived WebSocket server:
 
 ```bash
 docker compose up -d --build
 ```
 
 By default Compose binds the app to `127.0.0.1:3010` and the container listens on `3000`.
-See [docs/deploy.md](docs/deploy.md) for the Nginx WebSocket proxy block and GitHub publishing notes.
+See [docs/deploy.md](docs/deploy.md) for the Nginx WebSocket proxy block.
 
 ## Verification
 
 ```bash
 npm run lint
 npm run build
+npm run test:e2e
 ```
