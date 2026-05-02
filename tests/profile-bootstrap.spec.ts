@@ -1,10 +1,11 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { fulfillPlayerProfile, PROFILE_DECK_IDS, PROFILE_OWNED_CARD_IDS } from "./fixtures/playerProfile";
+import { fulfillBoosterCatalog, fulfillPlayerProfile, PROFILE_DECK_IDS, PROFILE_OWNED_CARD_IDS, type TestPlayerProfileInput } from "./fixtures/playerProfile";
 
 const GUEST_ID_STORAGE_KEY = "nexus:player-guest-id:v1";
 
 test("bootstraps a browser guest profile on first load", async ({ page }) => {
   const requests: unknown[] = [];
+  let profile: TestPlayerProfileInput | undefined;
   await mockPlayerProfile(page, async (route) => {
     const requestBody = route.request().postDataJSON() as { identity: { mode: "guest"; guestId: string } };
     requests.push(requestBody);
@@ -12,14 +13,19 @@ test("bootstraps a browser guest profile on first load", async ({ page }) => {
     expect(requestBody.identity.mode).toBe("guest");
     expect(requestBody.identity.guestId).toMatch(/^guest_/);
 
-    await fulfillPlayerProfile(route, {
+    profile = {
       id: "player-guest-e2e",
       identity: requestBody.identity,
       ownedCardIds: [],
       deckIds: [],
       starterFreeBoostersRemaining: 2,
       openedBoosterIds: [],
-    });
+    };
+    await fulfillPlayerProfile(route, profile);
+  });
+  await page.route("**/api/boosters", async (route) => {
+    if (!profile) throw new Error("Profile must load before booster catalog.");
+    await fulfillBoosterCatalog(route, profile);
   });
 
   await page.goto("/");

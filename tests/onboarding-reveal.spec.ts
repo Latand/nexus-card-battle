@@ -2,7 +2,7 @@ import { expect, test, type Route } from "@playwright/test";
 import { cards } from "../src/features/battle/model/cards";
 import type { Card } from "../src/features/battle/model/types";
 import type { PlayerIdentity } from "../src/features/player/profile/types";
-import { fulfillPlayerProfile, type TestPlayerProfileInput } from "./fixtures/playerProfile";
+import { fulfillBoosterCatalog, fulfillPlayerProfile, type TestPlayerProfileInput } from "./fixtures/playerProfile";
 
 const GUEST_ID_STORAGE_KEY = "nexus:player-guest-id:v1";
 const identity: PlayerIdentity = {
@@ -16,6 +16,7 @@ test("opens the first starter booster, reveals saved cards, and reloads into the
   expect(openedCards).toHaveLength(5);
 
   let profile = createProfile();
+  let catalogRequestCount = 0;
   let openRequestCount = 0;
   let resolveOpenRoute: (route: Route) => void = () => undefined;
   const openRoutePromise = new Promise<Route>((resolve) => {
@@ -31,6 +32,12 @@ test("opens the first starter booster, reveals saved cards, and reloads into the
   await page.route("**/api/player", async (route) => {
     await fulfillPlayerProfile(route, profile);
   });
+  await page.route("**/api/boosters", async (route) => {
+    const catalogBody = route.request().postDataJSON() as { identity: PlayerIdentity };
+    catalogRequestCount += 1;
+    expect(catalogBody.identity).toEqual(identity);
+    await fulfillBoosterCatalog(route, profile);
+  });
   await page.route("**/api/player/open-booster", async (route) => {
     openRequestCount += 1;
     resolveOpenRoute(route);
@@ -43,6 +50,7 @@ test("opens the first starter booster, reveals saved cards, and reloads into the
   await expect(page.getByTestId("player-profile-shell")).toHaveAttribute("data-profile-owned-card-count", "0");
   await expect(page.getByTestId("player-profile-shell")).toHaveAttribute("data-starter-free-boosters-remaining", "2");
   await expect(shell).toHaveAttribute("data-opened-booster-count", "0");
+  await expect(shell).toHaveAttribute("data-catalog-status", "ready");
   await expect(page.locator('[data-testid^="starter-booster-card-"]')).toHaveCount(12);
   await expect(page.getByTestId("collection-search")).toHaveCount(0);
 
@@ -80,6 +88,7 @@ test("opens the first starter booster, reveals saved cards, and reloads into the
   await expect(page.getByTestId("starter-booster-card-neon-breach")).toHaveAttribute("data-opened", "true");
   await expect(page.getByTestId("starter-booster-open-neon-breach")).toBeDisabled();
   await expect(page.getByTestId("starter-booster-open-factory-shift")).toBeEnabled();
+  expect(catalogRequestCount).toBeGreaterThanOrEqual(2);
 
   await page.reload();
 
