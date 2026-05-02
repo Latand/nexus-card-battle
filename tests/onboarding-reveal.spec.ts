@@ -21,7 +21,7 @@ type RevealProfileState = Pick<
   "ownedCardIds" | "deckIds" | "starterFreeBoostersRemaining" | "openedBoosterIds"
 >;
 
-test("opens two different starter boosters, reveals saved cards, and edits the ten-card deck-ready state", async ({ page }) => {
+test("opens two different starter boosters, survives reload, reaches deck ready, and enters battle", async ({ page }) => {
   expect(firstOpenedCards).toHaveLength(5);
   expect(secondOpenedCards).toHaveLength(5);
 
@@ -76,6 +76,11 @@ test("opens two different starter boosters, reveals saved cards, and edits the t
   await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(10);
   await expect(page.getByTestId("play-selected-deck")).toBeEnabled();
   await expect(page.getByTestId("play-human-match")).toBeEnabled();
+
+  await page.getByTestId("play-selected-deck").click();
+  await expect(page.getByTestId("round-status")).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('[data-testid^="player-card-"]')).toHaveCount(4);
+  await expectPlayerHandToUseDeck(page, fullStarterDeckIds);
 });
 
 test("starts an AI battle from the ten-card starter deck-ready state", async ({ page }) => {
