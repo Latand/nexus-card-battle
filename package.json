@@ -8,9 +8,12 @@
     "build": "next build",
     "start": "bun server.js",
     "lint": "eslint",
+    "test": "bun test tests/playerProfile.test.ts",
+    "test:profile": "bun test tests/playerProfile.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "mongodb": "^7.2.0",
     "next": "16.2.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
