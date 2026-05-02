@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cards } from "@/features/battle/model/cards";
 import { BattleGame } from "@/features/battle/ui/BattleGame";
 import { RealtimeBattleGame } from "@/features/battle/ui/RealtimeBattleGame";
+import { STARTER_BOOSTER_CARD_COUNT } from "@/features/boosters/types";
 import { fetchPlayerProfile, resolveClientPlayerIdentity } from "@/features/player/profile/client";
-import type { PlayerIdentity, PlayerProfile } from "@/features/player/profile/types";
+import { STARTER_FREE_BOOSTERS, type PlayerIdentity, type PlayerProfile } from "@/features/player/profile/types";
 import type { TelegramPlayer } from "@/shared/lib/telegram";
 import { PLAYER_DECK_SIZE } from "../model/randomDeck";
 import { CollectionDeckScreen } from "./collection/CollectionDeckScreen";
@@ -14,6 +15,7 @@ import { StarterBoosterOnboarding } from "./onboarding/StarterBoosterOnboarding"
 type BattleMode = "ai" | "human";
 type ProfileStatus = "loading" | "ready" | "unavailable";
 type DeckSource = "profile" | "starter-fallback";
+const STARTER_KIT_CARD_COUNT = STARTER_FREE_BOOSTERS * STARTER_BOOSTER_CARD_COUNT;
 type TelegramWindow = Window & {
   Telegram?: {
     WebApp?: {
@@ -52,6 +54,7 @@ export function GameRoot() {
   const [playerIdentity, setPlayerIdentity] = useState<PlayerIdentity | null>(null);
   const [profileStatus, setProfileStatus] = useState<ProfileStatus>("loading");
   const [profileRetryKey, setProfileRetryKey] = useState(0);
+  const [starterDeckReadyVisible, setStarterDeckReadyVisible] = useState(false);
   const [telegramPlayer, setTelegramPlayer] = useState<TelegramPlayer>(() => readTelegramPlayer());
   const [telegramLandscapePromptActive, setTelegramLandscapePromptActive] = useState(false);
   const deckTouchedRef = useRef(false);
@@ -64,8 +67,8 @@ export function GameRoot() {
     profileStatus === "ready" &&
     Boolean(playerIdentity) &&
     Boolean(playerProfile) &&
-    (playerProfile?.starterFreeBoostersRemaining ?? 0) > 0 &&
-    !playerProfile?.onboarding.completed;
+    (starterDeckReadyVisible ||
+      ((playerProfile?.starterFreeBoostersRemaining ?? 0) > 0 && !playerProfile?.onboarding.completed));
 
   useEffect(() => {
     const telegramPlayerHandle = window.setTimeout(() => setTelegramPlayer(readTelegramPlayer()), 0);
@@ -155,9 +158,27 @@ export function GameRoot() {
   const handleStarterProfileChange = useCallback((nextProfile: PlayerProfile) => {
     deckTouchedRef.current = false;
     setPlayerProfile(nextProfile);
+    setStarterDeckReadyVisible(isStarterKitReady(nextProfile));
   }, []);
+  const handleStarterDeckPlay = useCallback((starterDeckIds: string[]) => {
+    deckTouchedRef.current = true;
+    setDeckIds(starterDeckIds);
+    setStarterDeckReadyVisible(false);
+    setBattleMode("ai");
+    setScreen("battle");
+  }, []);
+  const handleStarterDeckEdit = useCallback(
+    (starterDeckIds: string[]) => {
+      deckTouchedRef.current = true;
+      setDeckIds(sanitizeDeckIds(starterDeckIds, collectionIds));
+      setStarterDeckReadyVisible(false);
+      setScreen("collection");
+    },
+    [collectionIds],
+  );
   const retryProfileLoad = useCallback(() => {
     deckTouchedRef.current = false;
+    setStarterDeckReadyVisible(false);
     setPlayerProfile(null);
     setProfileStatus("loading");
     setProfileRetryKey((current) => current + 1);
@@ -215,6 +236,8 @@ export function GameRoot() {
           profileIdentityMode={playerIdentity.mode}
           deckSource={deckSource}
           onProfileChange={handleStarterProfileChange}
+          onPlayDeck={handleStarterDeckPlay}
+          onEditDeck={handleStarterDeckEdit}
         />
         <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
       </>
@@ -411,6 +434,14 @@ function getCollectionIdsForProfile(profile: PlayerProfile | null, allCardIds: s
 function getDeckIdsForProfile(profile: PlayerProfile | null, collectionIds: string[]) {
   if (!profile || profile.deckIds.length === 0) return [];
   return unique(profile.deckIds).filter((cardId) => collectionIds.includes(cardId));
+}
+
+function isStarterKitReady(profile: PlayerProfile) {
+  return (
+    profile.starterFreeBoostersRemaining === 0 &&
+    profile.openedBoosterIds.length >= STARTER_FREE_BOOSTERS &&
+    profile.deckIds.length >= STARTER_KIT_CARD_COUNT
+  );
 }
 
 function sanitizeDeckIds(deckIds: string[], collectionIds: string[]) {
