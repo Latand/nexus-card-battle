@@ -1,53 +1,83 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { cards } from "../src/features/battle/model/cards";
+import type { PlayerIdentity } from "../src/features/player/profile/types";
 import { mockDeckReadyProfile, PROFILE_DECK_IDS } from "./fixtures/playerProfile";
 
 const PROTOCOL_OWNED_COLLECTION_IDS = cards.slice(0, 10).map((card) => card.id);
 const PROTOCOL_OWNED_DECK_IDS = PROTOCOL_OWNED_COLLECTION_IDS.slice(0, 9);
 
-test("pairs two tabs and resolves the first human round", async ({ context, page }) => {
-  const first = page;
-  const second = await context.newPage();
-  await mockDeckReadyProfile(first);
-  await mockDeckReadyProfile(second);
+test("pairs two tabs and resolves the first human round", async ({ baseURL, browser }) => {
+  const firstContext = await browser.newContext();
+  const secondContext = await browser.newContext();
+  const first = await firstContext.newPage();
+  const second = await secondContext.newPage();
 
-  await first.goto("/");
-  await second.goto("/");
+  try {
+    await mockDeckReadyProfile(first, { identity: testIdentity("ui-a") });
+    await mockDeckReadyProfile(second, { identity: testIdentity("ui-b") });
 
-  await expect(first.getByTestId("player-profile-shell")).toHaveAttribute("data-deck-source", "profile", { timeout: 15_000 });
-  await expect(second.getByTestId("player-profile-shell")).toHaveAttribute("data-deck-source", "profile", { timeout: 15_000 });
-  await expect(first.getByTestId("play-human-match")).toBeEnabled({ timeout: 15_000 });
-  await expect(second.getByTestId("play-human-match")).toBeEnabled({ timeout: 15_000 });
+    await first.goto(baseURL ?? "/");
+    await second.goto(baseURL ?? "/");
 
-  await first.getByTestId("play-human-match").click();
-  await second.getByTestId("play-human-match").click();
+    await expect(first.getByTestId("player-profile-shell")).toHaveAttribute("data-deck-source", "profile", { timeout: 15_000 });
+    await expect(second.getByTestId("player-profile-shell")).toHaveAttribute("data-deck-source", "profile", { timeout: 15_000 });
+    await expect(first.getByTestId("play-human-match")).toBeEnabled({ timeout: 15_000 });
+    await expect(second.getByTestId("play-human-match")).toBeEnabled({ timeout: 15_000 });
 
-  await expect(first.getByTestId("round-status")).toBeVisible({ timeout: 12_000 });
-  await expect(second.getByTestId("round-status")).toBeVisible({ timeout: 12_000 });
-  await expectPlayerHandToUseDeck(first, PROFILE_DECK_IDS);
-  await expectPlayerHandToUseDeck(second, PROFILE_DECK_IDS);
+    await Promise.all([
+      first.getByTestId("play-human-match").click(),
+      second.getByTestId("play-human-match").click(),
+    ]);
 
-  const firstMover = await resolveFirstMover(first, second);
-  const secondMover = firstMover === first ? second : first;
+    await expect(first.getByTestId("round-status")).toBeVisible({ timeout: 20_000 });
+    await expect(second.getByTestId("round-status")).toBeVisible({ timeout: 20_000 });
+    await expectPlayerHandToUseDeck(first, PROFILE_DECK_IDS);
+    await expectPlayerHandToUseDeck(second, PROFILE_DECK_IDS);
 
-  const firstMoverCardId = await pickFirstCard(firstMover);
-  await expect(secondMover.getByTestId("round-status")).toBeVisible({ timeout: 8_000 });
+    const firstMover = await resolveFirstMover(first, second);
+    const secondMover = firstMover === first ? second : first;
 
-  await pickFirstCard(secondMover, { knownEnemyCard: true, hiddenEnemyEnergy: true });
+    const firstMoverCardId = await pickFirstCard(firstMover);
+    await expect(secondMover.getByTestId("round-status")).toBeVisible({ timeout: 8_000 });
 
-  await expect(first.getByTestId("battle-overlay")).toHaveAttribute("data-phase", "battle_intro", { timeout: 8_000 });
-  await expect(second.getByTestId("battle-overlay")).toHaveAttribute("data-phase", "battle_intro", { timeout: 8_000 });
-  await expect(firstMover.getByTestId("battle-overlay")).toBeHidden({ timeout: 24_000 });
-  await expect(firstMover.getByTestId(`player-card-${firstMoverCardId}`)).toHaveClass(/opacity-35/, { timeout: 12_000 });
+    await pickFirstCard(secondMover, { knownEnemyCard: true, hiddenEnemyEnergy: true });
 
-  await second.close();
+    await expect(first.getByTestId("battle-overlay")).toHaveAttribute("data-phase", "battle_intro", { timeout: 8_000 });
+    await expect(second.getByTestId("battle-overlay")).toHaveAttribute("data-phase", "battle_intro", { timeout: 8_000 });
+    await expect(firstMover.getByTestId("battle-overlay")).toBeHidden({ timeout: 24_000 });
+    await expect(firstMover.getByTestId(`player-card-${firstMoverCardId}`)).toHaveClass(/opacity-35/, { timeout: 12_000 });
+  } finally {
+    await firstContext.close();
+    await secondContext.close();
+  }
 });
 
-test("forfeits the active PvP player when their turn times out", async ({ baseURL }) => {
+test("matches direct PvP clients with saved profile decks", async ({ baseURL, request }) => {
   const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
-  const deckIds = PROTOCOL_OWNED_DECK_IDS;
-  const first = await connectRealtimeClient(wsUrl, "Timer A", deckIds);
-  const second = await connectRealtimeClient(wsUrl, "Timer B", deckIds);
+  const firstIdentity = testIdentity("protocol-valid-a");
+  const secondIdentity = testIdentity("protocol-valid-b");
+  const firstProfile = await seedRealtimeProfile(request, firstIdentity);
+  const secondProfile = await seedRealtimeProfile(request, secondIdentity);
+  const first = await connectRealtimeClient(wsUrl, "Profile A", firstProfile.deckIds, { identity: firstIdentity });
+  const second = await connectRealtimeClient(wsUrl, "Profile B", secondProfile.deckIds, { identity: secondIdentity });
+
+  const firstReady = await first.waitFor("match_ready");
+  const secondReady = await second.waitFor("match_ready");
+  expectMatchReadyPlayerLoadout(firstReady, firstProfile.deckIds, firstProfile.ownedCardIds);
+  expectMatchReadyPlayerLoadout(secondReady, secondProfile.deckIds, secondProfile.ownedCardIds);
+
+  first.close();
+  second.close();
+});
+
+test("forfeits the active PvP player when their turn times out", async ({ baseURL, request }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const firstIdentity = testIdentity("timer-a");
+  const secondIdentity = testIdentity("timer-b");
+  await seedRealtimeProfile(request, firstIdentity);
+  await seedRealtimeProfile(request, secondIdentity);
+  const first = await connectRealtimeClient(wsUrl, "Timer A", PROTOCOL_OWNED_DECK_IDS, { identity: firstIdentity });
+  const second = await connectRealtimeClient(wsUrl, "Timer B", PROTOCOL_OWNED_DECK_IDS, { identity: secondIdentity });
 
   const firstReady = await first.waitFor("match_ready");
   const secondReady = await second.waitFor("match_ready");
@@ -73,11 +103,15 @@ test("forfeits the active PvP player when their turn times out", async ({ baseUR
   second.close();
 });
 
-test("does not leak the first PvP mover energy before reveal", async ({ baseURL }) => {
+test("does not leak the first PvP mover energy before reveal", async ({ baseURL, request }) => {
   const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const firstIdentity = testIdentity("secret-a");
+  const secondIdentity = testIdentity("secret-b");
+  await seedRealtimeProfile(request, firstIdentity);
+  await seedRealtimeProfile(request, secondIdentity);
   const deckIds = PROTOCOL_OWNED_DECK_IDS;
-  const first = await connectRealtimeClient(wsUrl, "Secret A", deckIds);
-  const second = await connectRealtimeClient(wsUrl, "Secret B", deckIds);
+  const first = await connectRealtimeClient(wsUrl, "Secret A", deckIds, { identity: firstIdentity });
+  const second = await connectRealtimeClient(wsUrl, "Secret B", deckIds, { identity: secondIdentity });
 
   const firstReady = await first.waitFor("match_ready");
   const secondReady = await second.waitFor("match_ready");
@@ -109,18 +143,23 @@ test("does not leak the first PvP mover energy before reveal", async ({ baseURL 
   second.close();
 });
 
-test("rejects removed PvP card ids before matchmaking", async ({ baseURL }) => {
+test("rejects removed PvP card ids before matchmaking", async ({ baseURL, request }) => {
   const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
   const deckIds = PROTOCOL_OWNED_DECK_IDS;
   const staleDeckIds = ["corr-1285", ...deckIds.slice(0, 8)];
-  const staleDeckClient = await connectRealtimeClient(wsUrl, "Stale Deck", staleDeckIds);
+  const staleDeckIdentity = testIdentity("stale-deck");
+  await seedRealtimeProfile(request, staleDeckIdentity);
+  const staleDeckClient = await connectRealtimeClient(wsUrl, "Stale Deck", staleDeckIds, { identity: staleDeckIdentity });
 
   const staleDeckError = await staleDeckClient.waitFor("error", { timeoutMs: 2_000 });
   expect(staleDeckError.message).toBe("Unknown deck card ids: corr-1285");
   await expectNoRealtimeMessage(staleDeckClient, "queued");
   await expectNoRealtimeMessage(staleDeckClient, "match_ready");
 
+  const staleCollectionIdentity = testIdentity("stale-collection");
+  await seedRealtimeProfile(request, staleCollectionIdentity);
   const staleCollectionClient = await connectRealtimeClient(wsUrl, "Stale Collection", deckIds, {
+    identity: staleCollectionIdentity,
     collectionIds: [...deckIds, "corr-1285"],
   });
 
@@ -129,7 +168,9 @@ test("rejects removed PvP card ids before matchmaking", async ({ baseURL }) => {
   await expectNoRealtimeMessage(staleCollectionClient, "queued");
   await expectNoRealtimeMessage(staleCollectionClient, "match_ready");
 
-  const validClient = await connectRealtimeClient(wsUrl, "Valid", deckIds);
+  const validIdentity = testIdentity("valid-after-stale");
+  await seedRealtimeProfile(request, validIdentity);
+  const validClient = await connectRealtimeClient(wsUrl, "Valid", deckIds, { identity: validIdentity });
   await expect(validClient.waitFor("queued", { timeoutMs: 2_000 })).resolves.toMatchObject({ type: "queued" });
   await expectNoRealtimeMessage(validClient, "match_ready");
 
@@ -138,10 +179,12 @@ test("rejects removed PvP card ids before matchmaking", async ({ baseURL }) => {
   validClient.close();
 });
 
-test("rejects PvP decks below the nine-card minimum", async ({ baseURL }) => {
+test("rejects PvP decks below the nine-card minimum", async ({ baseURL, request }) => {
   const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
   const shortDeckIds = PROTOCOL_OWNED_DECK_IDS.slice(0, 8);
-  const client = await connectRealtimeClient(wsUrl, "Short Deck", shortDeckIds);
+  const identity = testIdentity("short-client-deck");
+  await seedRealtimeProfile(request, identity);
+  const client = await connectRealtimeClient(wsUrl, "Short Deck", shortDeckIds, { identity });
 
   const error = await client.waitFor("error", { timeoutMs: 2_000 });
   expect(error.message).toBe("Deck must contain at least 9 cards.");
@@ -151,11 +194,14 @@ test("rejects PvP decks below the nine-card minimum", async ({ baseURL }) => {
   client.close();
 });
 
-test("rejects PvP deck cards outside the provided collection", async ({ baseURL }) => {
+test("rejects PvP deck cards outside the provided collection", async ({ baseURL, request }) => {
   const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
   const deckIds = PROTOCOL_OWNED_DECK_IDS;
   const missingCollectionCardId = deckIds[8];
+  const identity = testIdentity("client-collection-miss");
+  await seedRealtimeProfile(request, identity);
   const client = await connectRealtimeClient(wsUrl, "Non Owned Deck", deckIds, {
+    identity,
     collectionIds: deckIds.slice(0, 8),
   });
 
@@ -165,6 +211,72 @@ test("rejects PvP deck cards outside the provided collection", async ({ baseURL 
   await expectNoRealtimeMessage(client, "match_ready");
 
   client.close();
+});
+
+test("rejects direct PvP clients that try to bypass the saved profile deck", async ({ baseURL, request }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const identity = testIdentity("bypass");
+  const bypassDeckIds = cards
+    .filter((card) => card.clan === "Toyz")
+    .slice(0, 9)
+    .map((card) => card.id);
+  await seedRealtimeProfile(request, identity);
+
+  const client = await connectRealtimeClient(wsUrl, "Bypass", bypassDeckIds, {
+    identity,
+    collectionIds: bypassDeckIds,
+  });
+
+  const error = await client.waitFor("error", { timeoutMs: 2_000 });
+  expect(error.message).toBe("PvP deck must match the saved profile deck.");
+  await expectNoRealtimeMessage(client, "queued");
+  await expectNoRealtimeMessage(client, "match_ready");
+
+  client.close();
+});
+
+test("rejects invalid saved profile decks before PvP matchmaking", async ({ baseURL, request }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const nonOwnedCardId = PROTOCOL_OWNED_COLLECTION_IDS[9];
+  const cases = [
+    {
+      name: "empty",
+      profile: { ownedCardIds: PROTOCOL_OWNED_COLLECTION_IDS, deckIds: [] },
+      message: "Saved deck must contain at least 9 cards.",
+    },
+    {
+      name: "short",
+      profile: { ownedCardIds: PROTOCOL_OWNED_COLLECTION_IDS, deckIds: PROTOCOL_OWNED_DECK_IDS.slice(0, 8) },
+      message: "Saved deck must contain at least 9 cards.",
+    },
+    {
+      name: "duplicate",
+      profile: { ownedCardIds: PROTOCOL_OWNED_COLLECTION_IDS, deckIds: [...PROTOCOL_OWNED_DECK_IDS.slice(0, 8), PROTOCOL_OWNED_DECK_IDS[0]] },
+      message: `Saved deck contains duplicate card ids: ${PROTOCOL_OWNED_DECK_IDS[0]}`,
+    },
+    {
+      name: "unknown",
+      profile: { ownedCardIds: PROTOCOL_OWNED_COLLECTION_IDS, deckIds: [...PROTOCOL_OWNED_DECK_IDS.slice(0, 8), "corr-1285"] },
+      message: "Unknown saved deck card ids: corr-1285",
+    },
+    {
+      name: "non-owned",
+      profile: { ownedCardIds: PROTOCOL_OWNED_DECK_IDS, deckIds: [...PROTOCOL_OWNED_DECK_IDS.slice(0, 8), nonOwnedCardId] },
+      message: `Saved deck contains non-owned card ids: ${nonOwnedCardId}`,
+    },
+  ];
+
+  for (const testCase of cases) {
+    const identity = testIdentity(`saved-${testCase.name}`);
+    await seedRealtimeProfile(request, identity, testCase.profile);
+    const client = await connectRealtimeClient(wsUrl, `Saved ${testCase.name}`, undefined, { identity });
+
+    const error = await client.waitFor("error", { timeoutMs: 2_000 });
+    expect(error.message).toBe(testCase.message);
+    await expectNoRealtimeMessage(client, "queued");
+    await expectNoRealtimeMessage(client, "match_ready");
+    client.close();
+  }
 });
 
 async function resolveFirstMover(first: Page, second: Page) {
@@ -236,7 +348,12 @@ type RealtimeMessage = {
 
 type RealtimeClient = Awaited<ReturnType<typeof connectRealtimeClient>>;
 
-async function connectRealtimeClient(url: string, name: string, deckIds: string[], options: { collectionIds?: string[] } = {}) {
+async function connectRealtimeClient(
+  url: string,
+  name: string,
+  deckIds: string[] | undefined,
+  options: { collectionIds?: string[]; identity?: PlayerIdentity } = {},
+) {
   const socket = new WebSocket(url);
   const messages: RealtimeMessage[] = [];
   const waiters = new Map<string, ((message: RealtimeMessage) => void)[]>();
@@ -257,8 +374,9 @@ async function connectRealtimeClient(url: string, name: string, deckIds: string[
   socket.send(
     JSON.stringify({
       type: "join_human",
-      deckIds,
-      collectionIds: options.collectionIds ?? deckIds,
+      ...(deckIds ? { deckIds } : {}),
+      ...(options.collectionIds ? { collectionIds: options.collectionIds } : deckIds ? { collectionIds: deckIds } : {}),
+      identity: options.identity,
       user: { name },
     }),
   );
@@ -299,6 +417,47 @@ async function connectRealtimeClient(url: string, name: string, deckIds: string[
       });
     },
   };
+}
+
+function testIdentity(slug: string): PlayerIdentity {
+  return {
+    mode: "guest",
+    guestId: `guest-ws-${slug}`,
+  };
+}
+
+async function seedRealtimeProfile(
+  request: APIRequestContext,
+  identity: PlayerIdentity,
+  overrides: Partial<{
+    ownedCardIds: string[];
+    deckIds: string[];
+    starterFreeBoostersRemaining: number;
+    openedBoosterIds: string[];
+  }> = {},
+) {
+  const profile = {
+    id: `player-${identity.mode === "guest" ? identity.guestId : identity.telegramId}`,
+    identity,
+    ownedCardIds: overrides.ownedCardIds ?? PROTOCOL_OWNED_COLLECTION_IDS,
+    deckIds: overrides.deckIds ?? PROTOCOL_OWNED_DECK_IDS,
+    starterFreeBoostersRemaining: overrides.starterFreeBoostersRemaining ?? 0,
+    openedBoosterIds: overrides.openedBoosterIds ?? ["neon-breach", "factory-shift"],
+  };
+  const response = await request.post("/__test/player-profile", {
+    data: profile,
+  });
+
+  expect(response.ok()).toBe(true);
+  return profile;
+}
+
+function expectMatchReadyPlayerLoadout(message: RealtimeMessage, deckIds: string[], collectionIds: string[]) {
+  const payload = message as unknown as { playerId: string; players: Record<string, { deckIds?: string[]; collectionIds?: string[] }> };
+  const player = payload.players[payload.playerId];
+
+  expect(player.deckIds).toEqual(deckIds);
+  expect(player.collectionIds).toEqual(collectionIds);
 }
 
 async function expectNoRealtimeMessage(client: RealtimeClient, type: string) {

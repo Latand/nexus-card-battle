@@ -4,6 +4,12 @@ const crypto = require("node:crypto");
 const next = require("next");
 const { WebSocketServer } = require("ws");
 const { cards } = require("./src/features/battle/model/cards.ts");
+const { getMongoPlayerProfileStore } = require("./src/features/player/profile/mongo.ts");
+const {
+  createNewStoredPlayerProfile,
+  isSamePlayerIdentity,
+  parsePlayerIdentity,
+} = require("./src/features/player/profile/types.ts");
 
 const dev = process.argv.includes("--dev") || process.env.NODE_ENV === "development";
 const hostname = getCliValue("--hostname") || process.env.HOSTNAME || "0.0.0.0";
@@ -14,6 +20,7 @@ let requestHandler = (_request, response) => {
   response.end("Server is starting.");
 };
 const server = createServer((request, response) => {
+  if (handleTestProfileRequest(request, response)) return;
   requestHandler(request, response);
 });
 const app = next({ dev, hostname, port, httpServer: server });
@@ -21,6 +28,7 @@ const handle = app.getRequestHandler();
 
 const sessions = new Map();
 const matches = new Map();
+const testPlayerProfileStore = process.env.NEXUS_TEST_PROFILE_STORE === "1" ? createMemoryPlayerProfileStore() : null;
 let waitingSessionId = null;
 const BATTLE_HAND_SIZE = 4;
 const MIN_DECK_SIZE = 9;
@@ -116,7 +124,10 @@ function handleSocketMessage(session, message) {
   }
 
   if (message.type === "join_human") {
-    joinHumanQueue(session, message);
+    joinHumanQueue(session, message).catch((error) => {
+      console.error("PvP join failed.", error);
+      sendError(session, "Player profile is unavailable.");
+    });
     return;
   }
 
@@ -145,39 +156,61 @@ function handleSocketMessage(session, message) {
   }
 }
 
-function joinHumanQueue(session, message) {
-  const deckIds = sanitizeStringArray(message.deckIds);
-  const collectionIds = sanitizeStringArray(message.collectionIds);
+async function joinHumanQueue(session, message) {
+  const clientDeckIds = sanitizeStringArray(message.deckIds);
+  const clientCollectionIds = sanitizeStringArray(message.collectionIds);
   session.user = sanitizeUser(message.user);
 
-  const deckError = validateKnownCardIds(deckIds, "deck");
+  const deckError = validateKnownCardIds(clientDeckIds, "deck");
   if (deckError) {
     sendError(session, deckError);
     return;
   }
 
-  const collectionError = validateKnownCardIds(collectionIds, "collection");
+  const collectionError = validateKnownCardIds(clientCollectionIds, "collection");
   if (collectionError) {
     sendError(session, collectionError);
     return;
   }
 
-  if (deckIds.length < MIN_DECK_SIZE) {
+  if (Array.isArray(message.deckIds) && clientDeckIds.length < MIN_DECK_SIZE) {
     sendError(session, `Deck must contain at least ${MIN_DECK_SIZE} cards.`);
     return;
   }
 
-  const missingCollectionIds = getMissingCollectionDeckIds(deckIds, collectionIds);
+  const missingCollectionIds = Array.isArray(message.collectionIds)
+    ? getMissingCollectionDeckIds(clientDeckIds, clientCollectionIds)
+    : [];
   if (missingCollectionIds.length > 0) {
     sendError(session, `Deck contains cards outside the collection: ${missingCollectionIds.join(", ")}`);
     return;
   }
 
+  const identity = parseSocketPlayerIdentity(message.identity);
+  if (!identity) {
+    sendError(session, "Player identity is required for PvP.");
+    return;
+  }
+
+  const profile = await getPlayerProfileStore().findOrCreateByIdentity(identity);
+  const profileLoadout = validateProfileBattleLoadout(profile);
+  if (profileLoadout.error) {
+    sendError(session, profileLoadout.error);
+    return;
+  }
+
+  if (clientDeckIds.length > 0 && !sameStringArray(clientDeckIds, profileLoadout.deckIds)) {
+    sendError(session, "PvP deck must match the saved profile deck.");
+    return;
+  }
+
+  if (!sessions.has(session.id) || !isOpen(session.ws)) return;
+
   leaveMatch(session);
   cancelQueue(session, { silent: true });
 
-  session.queuedDeckIds = deckIds;
-  session.queuedCollectionIds = collectionIds;
+  session.queuedDeckIds = profileLoadout.deckIds;
+  session.queuedCollectionIds = profileLoadout.collectionIds;
 
   if (waitingSessionId && waitingSessionId !== session.id) {
     const opponent = sessions.get(waitingSessionId);
@@ -480,8 +513,56 @@ function sendError(session, message) {
   send(session, { type: "error", message });
 }
 
+function getPlayerProfileStore() {
+  return testPlayerProfileStore ?? getMongoPlayerProfileStore();
+}
+
+function parseSocketPlayerIdentity(value) {
+  try {
+    return parsePlayerIdentity(value);
+  } catch {
+    return null;
+  }
+}
+
+function validateProfileBattleLoadout(profile) {
+  const deckIds = getProfileCardIds(profile.deckIds);
+  const collectionIds = getProfileCardIds(profile.ownedCardIds);
+  const duplicateDeckIds = duplicateValues(deckIds);
+
+  if (duplicateDeckIds.length > 0) {
+    return { error: `Saved deck contains duplicate card ids: ${duplicateDeckIds.join(", ")}` };
+  }
+
+  const deckError = validateKnownCardIds(deckIds, "saved deck");
+  if (deckError) {
+    return { error: deckError };
+  }
+
+  const collectionError = validateKnownCardIds(collectionIds, "owned collection");
+  if (collectionError) {
+    return { error: collectionError };
+  }
+
+  if (deckIds.length < MIN_DECK_SIZE) {
+    return { error: `Saved deck must contain at least ${MIN_DECK_SIZE} cards.` };
+  }
+
+  const missingOwnedIds = getMissingCollectionDeckIds(deckIds, collectionIds);
+  if (missingOwnedIds.length > 0) {
+    return { error: `Saved deck contains non-owned card ids: ${missingOwnedIds.join(", ")}` };
+  }
+
+  return { deckIds, collectionIds };
+}
+
 function isOpen(ws) {
   return ws && ws.readyState === 1;
+}
+
+function getProfileCardIds(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item) => typeof item === "string" && item.length > 0);
 }
 
 function sanitizeStringArray(value) {
@@ -498,6 +579,18 @@ function validateKnownCardIds(cardIds, source) {
 function getMissingCollectionDeckIds(deckIds, collectionIds) {
   const collection = new Set(collectionIds);
   return deckIds.filter((cardId) => !collection.has(cardId));
+}
+
+function duplicateValues(values) {
+  const seen = new Set();
+  const duplicates = new Set();
+
+  for (const value of values) {
+    if (seen.has(value)) duplicates.add(value);
+    seen.add(value);
+  }
+
+  return [...duplicates];
 }
 
 function sanitizeMove(value) {
@@ -595,6 +688,101 @@ function shuffle(items) {
 
 function createId(prefix) {
   return `${prefix}_${crypto.randomUUID().replaceAll("-", "").slice(0, 18)}`;
+}
+
+function handleTestProfileRequest(request, response) {
+  const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
+  if (url.pathname !== "/__test/player-profile") return false;
+
+  if (!testPlayerProfileStore) {
+    response.statusCode = 404;
+    response.end("Not found.");
+    return true;
+  }
+
+  if (request.method !== "POST") {
+    response.statusCode = 405;
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ error: "method_not_allowed" }));
+    return true;
+  }
+
+  readJsonRequest(request)
+    .then((body) => {
+      const identity = parsePlayerIdentity(body.identity);
+      const seededProfile = testPlayerProfileStore.seedProfile({
+        id: sanitizeShortString(body.id, 128) || createId("test_player"),
+        identity,
+        ownedCardIds: getProfileCardIds(body.ownedCardIds),
+        deckIds: getProfileCardIds(body.deckIds),
+        starterFreeBoostersRemaining: Number.isInteger(body.starterFreeBoostersRemaining)
+          ? Math.max(0, body.starterFreeBoostersRemaining)
+          : 0,
+        openedBoosterIds: getProfileCardIds(body.openedBoosterIds),
+      });
+
+      response.statusCode = 200;
+      response.setHeader("cache-control", "no-store");
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ player: seededProfile }));
+    })
+    .catch((error) => {
+      response.statusCode = 400;
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ error: "invalid_test_profile", message: error.message }));
+    });
+
+  return true;
+}
+
+function readJsonRequest(request) {
+  return new Promise((resolve, reject) => {
+    let raw = "";
+
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      raw += chunk;
+      if (raw.length > 64_000) {
+        reject(new Error("request body is too large."));
+        request.destroy();
+      }
+    });
+    request.on("end", () => {
+      try {
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch {
+        reject(new Error("request body must be valid JSON."));
+      }
+    });
+    request.on("error", reject);
+  });
+}
+
+function createMemoryPlayerProfileStore() {
+  const profiles = [];
+
+  return {
+    async findOrCreateByIdentity(identity) {
+      const existing = profiles.find((profile) => isSamePlayerIdentity(profile.identity, identity));
+      if (existing) return existing;
+
+      const profile = createNewStoredPlayerProfile(createId("test_player"), identity);
+      profiles.push(profile);
+      return profile;
+    },
+    seedProfile(profile) {
+      const nextProfile = {
+        ...createNewStoredPlayerProfile(profile.id, profile.identity),
+        ...profile,
+      };
+      const existingIndex = profiles.findIndex((item) => isSamePlayerIdentity(item.identity, nextProfile.identity));
+
+      if (existingIndex >= 0) profiles[existingIndex] = nextProfile;
+      else profiles.push(nextProfile);
+
+      return nextProfile;
+    },
+  };
 }
 
 function getCliValue(name) {

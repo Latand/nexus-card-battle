@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { PlayerIdentity } from "@/features/player/profile/types";
 import { cn } from "@/shared/lib/cn";
 import type { TelegramPlayer } from "@/shared/lib/telegram";
 import { cards } from "../model/cards";
@@ -28,6 +29,7 @@ import { SelectionOverlay } from "./components/SelectionOverlay";
 type BattleGameProps = {
   playerCollectionIds?: string[];
   playerDeckIds?: string[];
+  playerIdentity?: PlayerIdentity;
   playerName?: string;
   telegramPlayer?: TelegramPlayer;
   mode?: "ai" | "human";
@@ -103,7 +105,7 @@ type HumanForfeitMessage = HumanSocketMessage & {
   reason?: string;
 };
 
-export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, telegramPlayer, mode = "ai", onOpenCollection }: BattleGameProps = {}) {
+export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity, playerName, telegramPlayer, mode = "ai", onOpenCollection }: BattleGameProps = {}) {
   const isHumanMatch = mode === "human";
   const initialGame = useMemo(
     () => createInitialGame({ playerCollectionIds, playerDeckIds, playerName }),
@@ -165,6 +167,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, tel
         type: "join_human",
         deckIds: playerDeckIds,
         collectionIds: playerCollectionIds,
+        identity: playerIdentity,
         user: telegramPlayer,
       });
     });
@@ -202,7 +205,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, tel
       socket.close();
       if (socketRef.current === socket) socketRef.current = null;
     };
-  }, [isHumanMatch, playerCollectionIds, playerDeckIds, telegramPlayer]);
+  }, [isHumanMatch, playerCollectionIds, playerDeckIds, playerIdentity, telegramPlayer]);
 
   const selected = getSelectedCard(game.player, selectedId) ?? game.player.hand[0];
   const boostCost = damageBoost ? DAMAGE_BOOST_COST : 0;
@@ -632,6 +635,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerName, tel
       type: "join_human",
       deckIds: playerDeckIds,
       collectionIds: playerCollectionIds,
+      identity: playerIdentity,
       user: telegramPlayer,
     });
   }
