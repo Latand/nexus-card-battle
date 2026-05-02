@@ -99,17 +99,17 @@ export function SelectionOverlay({
             <strong className="text-lg font-black leading-none text-[#fff7d7]">{selected.name}</strong>
           </div>
 
-          <div className="grid grid-cols-[34px_minmax(0,1fr)_34px_34px] items-center gap-[5px]">
+          <div className="selection-energy-row grid grid-cols-[36px_minmax(48px,1fr)_36px_36px] items-center gap-1.5 max-[620px]:grid-cols-[34px_minmax(0,1fr)_34px_34px] max-[620px]:gap-1">
             <button className={stepButton("-")} type="button" data-testid="energy-minus" aria-label="Менше енергії" onClick={onMinus} disabled={energy <= 0}>
               -
             </button>
-            <strong className="grid min-h-7 place-items-center border border-white/20 bg-black/50 text-center text-[12px] font-black leading-none text-[#f8f8f8]" data-testid="selection-energy">
+            <strong className="selection-energy-value grid min-h-9 place-items-center border border-white/20 bg-black/50 text-center text-base font-black leading-none text-[#f8f8f8] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] max-[620px]:min-h-8 max-[620px]:text-sm" data-testid="selection-energy">
               {effectiveEnergy}
             </strong>
             <button className={stepButton("+")} type="button" data-testid="energy-plus" aria-label="Більше енергії" onClick={onPlus} disabled={energy >= maxEnergy}>
               +
             </button>
-            <b className="grid min-h-7 place-items-center rounded-md bg-[linear-gradient(180deg,#7656f0,#3e2bb1)] text-lg font-black text-white shadow-[0_1px_0_rgba(0,0,0,0.52)]">
+            <b className="selection-energy-cap grid min-h-9 place-items-center rounded-md bg-[linear-gradient(180deg,#7656f0,#3e2bb1)] text-lg font-black leading-none text-white shadow-[0_1px_0_rgba(0,0,0,0.52)] max-[620px]:min-h-8 max-[620px]:text-base">
               {maxEffectiveEnergy}
             </b>
           </div>
@@ -209,7 +209,7 @@ export function SelectionOverlay({
 
 function stepButton(kind: "-" | "+") {
   return cn(
-    "h-7 cursor-pointer rounded border-2 border-black/60 text-lg font-black uppercase text-[#fff8d8] shadow-[inset_0_-4px_0_rgba(0,0,0,0.2),0_6px_12px_rgba(0,0,0,0.32)] disabled:cursor-not-allowed disabled:opacity-45",
+    "grid h-9 w-full cursor-pointer place-items-center rounded border-2 border-black/60 pb-0.5 text-xl font-black leading-none text-[#fff8d8] shadow-[inset_0_-4px_0_rgba(0,0,0,0.2),0_6px_12px_rgba(0,0,0,0.32)] disabled:cursor-not-allowed disabled:opacity-45 max-[620px]:h-8 max-[620px]:text-lg",
     kind === "+" ? "bg-[linear-gradient(180deg,#4de06f,#168e36)]" : "bg-[linear-gradient(180deg,#dfb44d,#8b5d18)]",
   );
 }

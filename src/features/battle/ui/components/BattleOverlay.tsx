@@ -7,6 +7,7 @@ import type { Clash, Fighter, Outcome, Phase, ResolvedEffect, Side } from "../..
 import { BattleCard } from "./BattleCard";
 import { ProjectileSprite } from "./ProjectileSprite";
 import { ResourcePills } from "./ResourceCounter";
+import { getDuelAttackComparison } from "./attackComparison";
 
 export function BattleOverlay({
   outcome,
@@ -275,19 +276,32 @@ function DuelResult({
   enemy: Fighter;
   finisher: boolean;
 }) {
-  const winnerAttack = clash.winner === "player" ? clash.playerAttack : clash.enemyAttack;
-  const loserAttack = clash.winner === "player" ? clash.enemyAttack : clash.playerAttack;
+  const comparison = getDuelAttackComparison(clash);
   const winnerName = clash.winner === "player" ? player.name : enemy.name;
   const loserName = clash.loser === "player" ? player.name : enemy.name;
 
   return (
     <div className="pointer-events-none absolute left-1/2 top-[54%] z-[5] grid -translate-x-1/2 -translate-y-1/2 justify-items-center gap-1 text-center max-[760px]:top-[55%] max-[620px]:top-[57%]">
-      <div className="flex items-baseline gap-2 px-3 py-1.5 drop-shadow-[0_10px_22px_rgba(0,0,0,0.5)] max-[620px]:gap-1.5 max-[620px]:px-1">
-        <strong className="text-[clamp(32px,5vw,50px)] font-black leading-none text-[#f7ffff] [text-shadow:0_2px_0_#062b38,0_0_16px_rgba(73,213,244,0.48),0_0_28px_rgba(0,0,0,0.72)]">
-          {winnerAttack}
+      <div className="grid grid-cols-[minmax(52px,1fr)_auto_minmax(52px,1fr)] items-baseline gap-2 px-3 py-1.5 drop-shadow-[0_10px_22px_rgba(0,0,0,0.5)] max-[620px]:gap-1.5 max-[620px]:px-1" data-testid="duel-attack-comparison">
+        <strong
+          className={cn(
+            "text-right text-[clamp(24px,4.5vw,46px)] font-black leading-none [text-shadow:0_2px_0_#062b38,0_0_16px_rgba(73,213,244,0.42),0_0_28px_rgba(0,0,0,0.72)]",
+            comparison.playerEmphasis ? "text-[#f7ffff]" : "text-[#8fa9ae]",
+          )}
+          data-testid="duel-player-attack"
+        >
+          {comparison.playerAttack}
         </strong>
-        <b className="text-[clamp(20px,3.5vw,32px)] font-black leading-none text-[#ffe08a] [text-shadow:0_1px_0_#000]">&gt;</b>
-        <span className="text-[clamp(22px,3.8vw,36px)] font-black leading-none text-[#9cb3b8] [text-shadow:0_1px_0_#000]">{loserAttack}</span>
+        <b className="text-[clamp(20px,3.5vw,32px)] font-black leading-none text-[#ffe08a] [text-shadow:0_1px_0_#000]">{comparison.operator}</b>
+        <strong
+          className={cn(
+            "text-left text-[clamp(24px,4.5vw,46px)] font-black leading-none [text-shadow:0_2px_0_#062b38,0_0_16px_rgba(73,213,244,0.42),0_0_28px_rgba(0,0,0,0.72)]",
+            comparison.enemyEmphasis ? "text-[#f7ffff]" : "text-[#8fa9ae]",
+          )}
+          data-testid="duel-enemy-attack"
+        >
+          {comparison.enemyAttack}
+        </strong>
       </div>
       <span className="rounded-full border border-white/10 bg-black/36 px-2.5 py-1 text-[10px] font-black uppercase leading-none text-[#fff1b9] shadow-[0_6px_14px_rgba(0,0,0,0.3)] max-[620px]:px-2 max-[620px]:text-[8px]">
         {finisher ? "Останній удар" : `${winnerName} -> ${loserName}`}

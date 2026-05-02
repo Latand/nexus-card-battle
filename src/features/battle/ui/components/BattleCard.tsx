@@ -57,9 +57,9 @@ export function BattleCard({
       )}
       style={style}
     >
-      <div className="battle-card-meta absolute inset-x-[7.5%] top-[1.7%] z-[2] flex justify-between gap-2">
-        <span className="text-[11px] font-black uppercase tracking-[0.08em] text-[#d8bd82]">{rarityLabels[card.rarity]}</span>
-        <b className="text-right text-[11px] leading-none text-[#fff2c1]">{card.clan}</b>
+      <div className="battle-card-meta absolute inset-x-[7.5%] top-[1.7%] z-[2] grid grid-cols-[minmax(0,1fr)_minmax(0,44%)] items-start gap-1">
+        <span className="min-w-0 truncate text-[11px] font-black uppercase tracking-[0.08em] text-[#d8bd82]">{rarityLabels[card.rarity]}</span>
+        <b className="min-w-0 truncate text-right text-[11px] leading-none text-[#fff2c1]">{card.clan}</b>
       </div>
 
       <div

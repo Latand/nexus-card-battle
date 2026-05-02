@@ -133,7 +133,7 @@ export function CollectionDeckScreen({ collectionIds, deckIds: savedDeckIds = []
               </h1>
             </div>
 
-            <div className="grid grid-cols-[minmax(180px,1fr)_auto_auto] gap-2 max-[760px]:grid-cols-1">
+            <div className="grid min-w-0 grid-cols-[minmax(180px,1fr)_auto_auto] gap-2 max-[760px]:grid-cols-1">
               <label className="grid min-h-[42px] grid-cols-[34px_minmax(0,1fr)] items-center rounded border border-white/10 bg-black/38 px-2">
                 <span className="text-center text-lg font-black text-[#65d7e9]">⌕</span>
                 <input
@@ -180,7 +180,7 @@ export function CollectionDeckScreen({ collectionIds, deckIds: savedDeckIds = []
           />
 
           <div className="grid grid-cols-[220px_minmax(0,1fr)_312px] gap-3 max-[1120px]:grid-cols-[190px_minmax(0,1fr)] max-[860px]:grid-cols-1">
-            <aside className="grid content-start gap-2 rounded-md border border-white/10 bg-black/42 p-2 shadow-[inset_0_0_32px_rgba(0,0,0,0.34)] max-[1120px]:order-1 max-[860px]:order-3">
+            <aside className="grid content-start gap-2 rounded-md border border-white/10 bg-black/42 p-2 shadow-[inset_0_0_32px_rgba(0,0,0,0.34)] max-[1120px]:order-3 max-[1120px]:col-span-2 max-[860px]:col-span-1">
               <div className="flex items-center justify-between gap-2 px-2 py-1">
                 <strong className="text-xs font-black uppercase tracking-[0.14em] text-[#d4b06a]">Фракції</strong>
                 <button
@@ -219,7 +219,7 @@ export function CollectionDeckScreen({ collectionIds, deckIds: savedDeckIds = []
               </div>
             </aside>
 
-            <section className="grid min-h-[560px] content-start gap-3 rounded-md border border-[#d3a248]/32 bg-[rgba(6,8,11,0.66)] p-3 shadow-[inset_0_0_70px_rgba(0,0,0,0.28)] max-[1120px]:order-2 max-[860px]:order-1 max-[860px]:col-span-1">
+            <section className="grid min-h-[560px] content-start gap-3 rounded-md border border-[#d3a248]/32 bg-[rgba(6,8,11,0.66)] p-3 shadow-[inset_0_0_70px_rgba(0,0,0,0.28)] max-[1120px]:order-2 max-[1120px]:col-span-2 max-[860px]:col-span-1">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="grid gap-1">
                   <strong className="text-xl font-black uppercase leading-none text-[#fff0ad]">Колекція</strong>
@@ -238,7 +238,7 @@ export function CollectionDeckScreen({ collectionIds, deckIds: savedDeckIds = []
                 </div>
               </div>
 
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(138px,1fr))] gap-2">
+              <div className="collection-grid grid grid-cols-[repeat(auto-fill,minmax(138px,1fr))] gap-2 max-[420px]:grid-cols-3 max-[420px]:gap-1.5 max-[340px]:grid-cols-2">
                 {visibleCards.map((card) => {
                   const inDeckIndex = deckIds.indexOf(card.id);
 
@@ -257,7 +257,7 @@ export function CollectionDeckScreen({ collectionIds, deckIds: savedDeckIds = []
               </div>
             </section>
 
-            <aside className="grid content-start gap-3 self-start max-[1120px]:order-3 max-[1120px]:col-span-2 max-[860px]:order-2 max-[860px]:col-span-1">
+            <aside className="grid content-start gap-3 self-start max-[1120px]:order-1 max-[1120px]:col-span-2 max-[860px]:col-span-1">
               {selectedCard ? <CardDetails card={selectedCard} inDeck={deckIds.includes(selectedCard.id)} canRemove={canRemoveCard} onToggle={() => (deckIds.includes(selectedCard.id) ? removeCard(selectedCard.id) : addCard(selectedCard))} /> : null}
               <DeckLinksPanel activeLinks={activeLinks} />
             </aside>
@@ -291,7 +291,7 @@ function CollectionCardTile({
   return (
     <article
       className={cn(
-        "group relative grid min-h-[208px] place-items-center rounded-md border bg-black/18 p-2 transition",
+        "collection-card-tile group relative grid min-h-[208px] place-items-center rounded-md border bg-black/18 p-2 transition max-[420px]:min-h-[162px] max-[420px]:p-1 max-[340px]:min-h-[188px]",
         "shadow-[0_12px_26px_rgba(0,0,0,0.34),inset_0_0_0_1px_rgba(255,255,255,0.04)]",
         selected ? "border-[#ffe08a] ring-2 ring-[#ffe08a]/35" : "border-[color-mix(in_srgb,var(--accent),#000_42%)]",
         "hover:-translate-y-0.5 hover:brightness-110",
@@ -360,7 +360,7 @@ function DeckDock({
   onAutofill: () => void;
 }) {
   return (
-    <section className="relative z-20 grid grid-cols-[minmax(0,1fr)_218px] gap-3 rounded-md border border-[#d3a248]/45 bg-[linear-gradient(180deg,rgba(18,22,25,0.95),rgba(7,9,12,0.98))] p-3 shadow-[0_18px_44px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,235,165,0.1)] max-[980px]:grid-cols-1">
+    <section className="relative z-20 grid grid-cols-[minmax(0,1fr)_218px] gap-3 rounded-md border border-[#d3a248]/45 bg-[linear-gradient(180deg,rgba(18,22,25,0.95),rgba(7,9,12,0.98))] p-3 shadow-[0_18px_44px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,235,165,0.1)] max-[980px]:grid-cols-1 max-[420px]:p-2">
       <div className="min-w-0">
         <div className="mb-2 flex items-end justify-between gap-3">
           <div>
@@ -374,8 +374,8 @@ function DeckDock({
           </button>
         </div>
 
-        <div className="overflow-x-auto pb-1">
-          <div className="grid min-w-max grid-flow-col auto-cols-[82px] gap-2">
+        <div className="deck-dock-scroll overflow-x-auto overflow-y-hidden pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="grid min-w-max grid-flow-col auto-cols-[82px] gap-2 max-[420px]:auto-cols-[72px] max-[420px]:gap-1.5">
             {deckCards.map((card, index) => (
               <DeckDockSlot
                 key={card.id}
@@ -390,7 +390,7 @@ function DeckDock({
             {Array.from({ length: Math.max(0, PLAYER_DECK_SIZE - deckCards.length) }, (_, index) => (
               <button
                 key={`empty-${index}`}
-                className="grid h-[118px] w-[82px] place-items-center rounded-md border border-dashed border-white/14 bg-white/[0.03] p-2 text-xs font-black uppercase text-[#746b5a] transition hover:border-[#ffe08a]/40 hover:text-[#efe3c5]"
+                className="grid h-[118px] w-[82px] place-items-center rounded-md border border-dashed border-white/14 bg-white/[0.03] p-2 text-xs font-black uppercase text-[#746b5a] transition hover:border-[#ffe08a]/40 hover:text-[#efe3c5] max-[420px]:h-[106px] max-[420px]:w-[72px]"
                 type="button"
                 onClick={onAutofill}
                 aria-label="Автозаповнити колоду"
@@ -461,7 +461,7 @@ function DeckDockSlot({
   return (
     <article
       className={cn(
-        "group relative grid h-[118px] w-[82px] place-items-center rounded-md border bg-black/18 p-1 transition",
+        "deck-dock-slot group relative grid h-[118px] w-[82px] place-items-center rounded-md border bg-black/18 p-1 transition max-[420px]:h-[106px] max-[420px]:w-[72px]",
         selected ? "border-[#ffe08a] ring-2 ring-[#ffe08a]/30" : "border-white/10 hover:border-[#ffe08a]/50",
       )}
       data-testid={`deck-card-${card.id}`}
@@ -495,16 +495,24 @@ function MiniBattleCard({ card, size }: { card: Card; size: "collection" | "deck
     <div
       className={cn(
         "relative overflow-hidden",
-        size === "collection" ? "h-[188px] w-[136px]" : size === "dock" ? "h-[102px] w-[74px]" : "h-[160px] w-[116px]",
+        size === "collection"
+          ? "h-[188px] w-[136px] max-[420px]:h-[150px] max-[420px]:w-[108px] max-[340px]:h-[176px] max-[340px]:w-[128px]"
+          : size === "dock"
+            ? "h-[102px] w-[74px] max-[420px]:h-[90px] max-[420px]:w-[64px]"
+            : "h-[160px] w-[116px]",
       )}
     >
       <div
         className={cn(
           "pointer-events-none absolute left-0 top-0 w-[216px] origin-top-left",
-          size === "collection" ? "scale-[0.63]" : size === "dock" ? "scale-[0.342]" : "scale-[0.535]",
+          size === "collection"
+            ? "scale-[0.63] max-[420px]:scale-50 max-[340px]:scale-[0.592]"
+            : size === "dock"
+              ? "scale-[0.342] max-[420px]:scale-[0.296]"
+              : "scale-[0.535]",
         )}
       >
-        <BattleCard card={card} compact />
+        <BattleCard card={card} compact className="!w-[216px]" />
       </div>
     </div>
   );
@@ -524,32 +532,34 @@ function CardDetails({
   const disableRemove = inDeck && !canRemove;
 
   return (
-    <section className="rounded-md border border-white/10 bg-black/46 p-3 shadow-[inset_0_0_42px_rgba(0,0,0,0.32)]">
-      <div className="mb-3 grid justify-items-center" data-testid="selected-card-preview">
-        <div className="w-[216px] max-w-full">
+    <section className="card-details rounded-md border border-white/10 bg-black/46 p-3 shadow-[inset_0_0_42px_rgba(0,0,0,0.32)] max-[860px]:grid max-[860px]:grid-cols-[minmax(190px,216px)_minmax(0,1fr)] max-[860px]:gap-3 max-[560px]:grid-cols-[minmax(112px,132px)_minmax(0,1fr)] max-[420px]:p-2">
+      <div className="mb-3 grid justify-items-center max-[860px]:mb-0" data-testid="selected-card-preview">
+        <div className="selected-card-preview-card w-[216px] max-w-full">
           <BattleCard card={card} />
         </div>
       </div>
 
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <strong className="block truncate text-2xl font-black uppercase leading-none text-[#fff0ad]">{card.name}</strong>
-          <span className="mt-1 block text-xs font-black uppercase tracking-[0.1em] text-[#9ed6e4]">{card.clan} · {rarityLabels[card.rarity]}</span>
+      <div className="min-w-0">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <strong className="block truncate text-2xl font-black uppercase leading-none text-[#fff0ad]">{card.name}</strong>
+            <span className="mt-1 block text-xs font-black uppercase tracking-[0.1em] text-[#9ed6e4]">{card.clan} · {rarityLabels[card.rarity]}</span>
+          </div>
+          <button className={utilityButtonClass()} type="button" onClick={onToggle} disabled={disableRemove}>
+            {inDeck ? "Прибрати" : "До колоди"}
+          </button>
         </div>
-        <button className={utilityButtonClass()} type="button" onClick={onToggle} disabled={disableRemove}>
-          {inDeck ? "Прибрати" : "До колоди"}
-        </button>
-      </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Metric label="Сила" value={card.power} />
-        <Metric label="Урон" value={card.damage} />
-      </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Metric label="Сила" value={card.power} />
+          <Metric label="Урон" value={card.damage} />
+        </div>
 
-      <dl className="mt-3 grid gap-2">
-        <DetailRow label="Уміння" title={card.ability.name} description={card.ability.description} />
-        <DetailRow label="Бонус" title={card.bonus.name} description={card.bonus.description} />
-      </dl>
+        <dl className="mt-3 grid gap-2">
+          <DetailRow label="Уміння" title={card.ability.name} description={card.ability.description} />
+          <DetailRow label="Бонус" title={card.bonus.name} description={card.bonus.description} />
+        </dl>
+      </div>
     </section>
   );
 }
@@ -598,14 +608,14 @@ function Segmented({
   label: string;
 }) {
   return (
-    <div className="grid gap-1">
+    <div className="grid min-w-0 gap-1">
       <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#91866f]">{label}</span>
-      <div className="flex min-h-[30px] overflow-hidden rounded border border-white/10 bg-black/35">
+      <div className="flex min-h-[30px] max-w-full overflow-x-auto overflow-y-hidden rounded border border-white/10 bg-black/35 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {items.map((item) => (
           <button
             key={item.id}
             className={cn(
-              "px-2 text-[11px] font-black uppercase transition",
+              "shrink-0 whitespace-nowrap px-2 text-[11px] font-black uppercase transition max-[420px]:px-1.5 max-[420px]:text-[10px]",
               value === item.id ? "bg-[#d3a248] text-[#130f09]" : "text-[#e6dcc3] hover:bg-white/8",
             )}
             type="button"

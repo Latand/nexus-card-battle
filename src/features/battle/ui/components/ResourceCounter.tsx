@@ -112,15 +112,15 @@ export function NamePlate({
     <div
       className={cn(
         "battle-nameplate",
-        "relative grid min-h-[50px] min-w-0 overflow-hidden px-3 py-1 max-[960px]:min-h-[46px] max-[620px]:px-1.5",
+        "relative grid min-h-[54px] min-w-0 overflow-hidden rounded-sm px-4 py-1.5 max-[960px]:min-h-[48px] max-[620px]:min-h-[46px] max-[620px]:px-2",
         withResources
-          ? "grid-cols-2 grid-rows-[auto_auto_auto] items-center gap-x-3 gap-y-0.5 max-[620px]:gap-x-2"
+          ? "grid-cols-2 grid-rows-[auto_auto_auto] items-center gap-x-4 gap-y-0.5 max-[620px]:gap-x-2"
           : "place-items-center",
         player
-          ? "bg-[linear-gradient(90deg,rgba(244,190,77,0.20),rgba(0,0,0,0.42),rgba(244,190,77,0.20))]"
-          : "bg-[linear-gradient(90deg,rgba(73,210,231,0.16),rgba(0,0,0,0.42),rgba(73,210,231,0.16))]",
-        "before:absolute before:left-[-10px] before:top-0 before:h-full before:w-[34px] before:bg-[linear-gradient(135deg,transparent_0_48%,rgba(73,210,231,0.72)_49%_55%,transparent_56%)] before:content-['']",
-        "after:absolute after:right-[-10px] after:top-0 after:h-full after:w-[34px] after:scale-x-[-1] after:bg-[linear-gradient(135deg,transparent_0_48%,rgba(73,210,231,0.72)_49%_55%,transparent_56%)] after:content-['']",
+          ? "bg-[radial-gradient(circle_at_50%_0,rgba(255,224,138,0.18),transparent_56%),linear-gradient(90deg,rgba(244,190,77,0.16),rgba(2,7,10,0.58)_24%_76%,rgba(244,190,77,0.16))]"
+          : "bg-[radial-gradient(circle_at_50%_0,rgba(101,215,233,0.16),transparent_56%),linear-gradient(90deg,rgba(73,210,231,0.14),rgba(2,7,10,0.58)_24%_76%,rgba(73,210,231,0.14))]",
+        "before:pointer-events-none before:absolute before:inset-y-1.5 before:left-0 before:w-px before:bg-[#65d7e9]/35 before:content-['']",
+        "after:pointer-events-none after:absolute after:inset-y-1.5 after:right-0 after:w-px after:bg-[#65d7e9]/35 after:content-['']",
       )}
     >
       <strong className="relative z-[1] col-span-full min-w-0 truncate text-center text-xl font-black uppercase tracking-[0.02em] text-[#f4fbff] max-[960px]:text-lg max-[760px]:text-base max-[620px]:text-[13px]">

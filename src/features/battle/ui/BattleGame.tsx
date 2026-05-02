@@ -1187,26 +1187,26 @@ function getVerdict(result?: MatchResult) {
 function topBarClass() {
   return cn(
     barShellClass(),
-    "mt-0 grid-cols-[92px_minmax(220px,1fr)_82px]",
-    "max-[960px]:grid-cols-[76px_minmax(0,1fr)_68px] max-[760px]:grid-cols-[58px_minmax(0,1fr)_54px]",
+    "mt-0 grid-cols-[96px_minmax(220px,1fr)_86px]",
+    "max-[960px]:grid-cols-[78px_minmax(0,1fr)_70px] max-[760px]:grid-cols-[62px_minmax(0,1fr)_58px]",
   );
 }
 
 function bottomBarClass() {
   return cn(
     barShellClass(),
-    "mt-2 grid-cols-[100px_minmax(220px,1fr)_100px] border-[#d6a03b]/80",
-    "max-[960px]:grid-cols-[82px_minmax(0,1fr)_82px] max-[760px]:grid-cols-[64px_minmax(0,1fr)_64px]",
+    "mt-2 grid-cols-[104px_minmax(220px,1fr)_104px] border-[#d6a03b]/80",
+    "max-[960px]:grid-cols-[84px_minmax(0,1fr)_84px] max-[760px]:grid-cols-[68px_minmax(0,1fr)_68px]",
   );
 }
 
 function barShellClass() {
-  return "relative z-10 mx-auto grid min-h-[50px] w-[min(860px,100%)] items-center overflow-hidden rounded-md border border-[#d6a03b]/70 bg-[linear-gradient(180deg,rgba(10,18,22,0.96),rgba(3,6,9,0.96)),repeating-linear-gradient(135deg,rgba(255,255,255,0.07)_0_1px,transparent_1px_8px)] shadow-[0_10px_26px_rgba(0,0,0,0.58),inset_0_0_0_1px_rgba(255,231,151,0.1)] before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-[#ffe08a]/45 before:content-[''] max-[760px]:min-h-[46px]";
+  return "relative z-10 mx-auto grid min-h-[58px] w-[min(880px,100%)] items-stretch overflow-hidden rounded-[10px] border border-[#d6a03b]/72 bg-[radial-gradient(circle_at_50%_-30%,rgba(255,224,138,0.18),transparent_48%),linear-gradient(180deg,rgba(22,28,29,0.96),rgba(4,8,11,0.98)),repeating-linear-gradient(135deg,rgba(255,255,255,0.035)_0_1px,transparent_1px_10px)] shadow-[0_12px_26px_rgba(0,0,0,0.62),inset_0_0_0_1px_rgba(255,231,151,0.12),inset_0_-10px_22px_rgba(0,0,0,0.32)] before:pointer-events-none before:absolute before:inset-x-2 before:top-0 before:h-px before:bg-[#ffe08a]/50 before:content-[''] after:pointer-events-none after:absolute after:inset-x-3 after:bottom-0 after:h-px after:bg-black/70 after:content-[''] max-[760px]:min-h-[50px] max-[760px]:rounded-[7px]";
 }
 
 function barButtonClass(extra?: string) {
   return cn(
-    "grid min-h-[50px] place-items-center bg-black/35 text-xs font-black uppercase tracking-[0.03em] text-[#fff8d8] max-[760px]:min-h-[46px] max-[760px]:text-[9px]",
+    "grid min-h-[58px] place-items-center border-white/10 bg-[linear-gradient(180deg,rgba(4,9,11,0.96),rgba(0,0,0,0.72))] px-2 text-center text-xs font-black uppercase tracking-[0.03em] text-[#fff8d8] shadow-[inset_0_0_18px_rgba(0,0,0,0.45)] max-[760px]:min-h-[50px] max-[760px]:px-1 max-[760px]:text-[9px] max-[420px]:text-[8px]",
     extra,
   );
 }

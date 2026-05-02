@@ -5,6 +5,19 @@ const VIEWPORTS = [
   { name: "phone landscape", width: 844, height: 390 },
 ] as const;
 
+const COLLECTION_VIEWPORTS = [
+  { name: "tablet portrait", width: 768, height: 1024 },
+  { name: "phone portrait", width: 390, height: 844 },
+  { name: "small phone", width: 320, height: 568 },
+  { name: "short landscape", width: 1024, height: 520 },
+] as const;
+
+const SELECTION_VIEWPORTS = [
+  { name: "phone portrait", width: 390, height: 844 },
+  { name: "small phone", width: 320, height: 568 },
+  { name: "phone landscape", width: 844, height: 390 },
+] as const;
+
 for (const viewport of VIEWPORTS) {
   test(`fits the full battle board on ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
@@ -53,6 +66,20 @@ for (const viewport of VIEWPORTS) {
     );
 
     expect(cardLabelFailures).toEqual([]);
+    const cardBounds = await page.locator(".battle-hand .battle-card-face").evaluateAll((cards) =>
+      cards.map((card) => {
+        const rect = card.getBoundingClientRect();
+        return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+      }),
+    );
+
+    for (const bounds of cardBounds) {
+      expect(bounds.left).toBeGreaterThanOrEqual(0);
+      expect(bounds.right).toBeLessThanOrEqual(viewport.width + 1);
+      expect(bounds.top).toBeGreaterThanOrEqual(0);
+      expect(bounds.bottom).toBeLessThanOrEqual(viewport.height + 1);
+    }
+
     if (viewport.name === "phone landscape") {
       for (const ratio of cardRatios) {
         expect(ratio).toBeGreaterThan(0.58);
@@ -119,6 +146,133 @@ test("keeps the desktop board compact on tall screens", async ({ page }) => {
     expect(ratio).toBeLessThan(0.74);
   }
 });
+
+for (const viewport of COLLECTION_VIEWPORTS) {
+  test(`keeps the collection deck builder aligned on ${viewport.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.goto("/");
+
+    await expect(page.getByTestId("collection-search")).toBeVisible();
+    await expect(page.getByTestId("play-selected-deck")).toBeVisible();
+    await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(9);
+    await expect.poll(async () => page.locator('[data-testid^="collection-card-"]').count()).toBeGreaterThan(9);
+
+    const metrics = await page.evaluate(() => {
+      const rect = (selector: string) => {
+        const bounds = document.querySelector(selector)?.getBoundingClientRect();
+        return bounds
+          ? {
+              top: bounds.top,
+              bottom: bounds.bottom,
+              left: bounds.left,
+              right: bounds.right,
+              width: bounds.width,
+              height: bounds.height,
+            }
+          : null;
+      };
+      const outsideViewport = [...document.querySelectorAll("body *")]
+        .filter((element) => !element.closest(".overflow-x-auto"))
+        .map((element) => element.getBoundingClientRect())
+        .filter((bounds) => bounds.left < -1 || bounds.right > innerWidth + 1 || bounds.top < -1);
+      const collectionPanelBounds = document.querySelector('[data-testid^="collection-card-"]')?.closest("section")?.getBoundingClientRect();
+      const collectionCards = [...document.querySelectorAll('[data-testid^="collection-card-"]')]
+        .slice(0, 2)
+        .map((card) => {
+          const bounds = card.getBoundingClientRect();
+          return { top: bounds.top, width: bounds.width };
+        });
+
+      return {
+        innerWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+        outsideViewport: outsideViewport.length,
+        selectedPreview: rect('[data-testid="selected-card-preview"]'),
+        collectionPanel: collectionPanelBounds
+          ? {
+              top: collectionPanelBounds.top,
+              bottom: collectionPanelBounds.bottom,
+              left: collectionPanelBounds.left,
+              right: collectionPanelBounds.right,
+              width: collectionPanelBounds.width,
+              height: collectionPanelBounds.height,
+            }
+          : null,
+        collectionCards,
+      };
+    });
+
+    expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.innerWidth);
+    expect(metrics.outsideViewport).toBe(0);
+    expect(metrics.selectedPreview).not.toBeNull();
+    expect(metrics.collectionPanel).not.toBeNull();
+    expect(metrics.selectedPreview?.top ?? Number.POSITIVE_INFINITY).toBeLessThan(
+      metrics.collectionPanel?.top ?? Number.NEGATIVE_INFINITY,
+    );
+    expect(metrics.collectionPanel?.width ?? 0).toBeGreaterThanOrEqual(viewport.width - 32);
+
+    if (viewport.width <= 360) {
+      expect(metrics.collectionCards).toHaveLength(2);
+      expect(Math.abs(metrics.collectionCards[0].top - metrics.collectionCards[1].top)).toBeLessThan(1);
+      expect(metrics.collectionCards[0].width).toBeGreaterThanOrEqual(130);
+    }
+  });
+}
+
+for (const viewport of SELECTION_VIEWPORTS) {
+  test(`keeps the selection dialog inside the viewport on ${viewport.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await openBattle(page);
+
+    await page.locator('[data-testid^="player-card-"]').first().click();
+    await expect(page.getByTestId("selection-overlay")).toBeVisible();
+
+    const metrics = await page.evaluate(() => {
+      const rect = (selector: string) => {
+        const bounds = document.querySelector(selector)?.getBoundingClientRect();
+        return bounds
+          ? {
+              top: bounds.top,
+              bottom: bounds.bottom,
+              left: bounds.left,
+              right: bounds.right,
+              width: bounds.width,
+              height: bounds.height,
+            }
+          : null;
+      };
+      const cards = [...document.querySelectorAll(".selection-dialog .battle-card-face")].map((card) => {
+        const bounds = card.getBoundingClientRect();
+        return { top: bounds.top, bottom: bounds.bottom, left: bounds.left, right: bounds.right };
+      });
+
+      return {
+        innerWidth,
+        innerHeight,
+        scrollWidth: document.documentElement.scrollWidth,
+        scrollHeight: document.documentElement.scrollHeight,
+        dialog: rect(".selection-dialog"),
+        ok: rect('[data-testid="selection-ok"]'),
+        enemy: rect(".selection-enemy"),
+        cards,
+      };
+    });
+
+    expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.innerWidth);
+    expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.innerHeight + 1);
+    expect(metrics.dialog?.top ?? -1).toBeGreaterThanOrEqual(0);
+    expect(metrics.dialog?.bottom ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(metrics.innerHeight + 1);
+    expect(metrics.ok?.bottom ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(metrics.innerHeight + 1);
+    expect(metrics.enemy?.bottom ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(metrics.innerHeight + 1);
+
+    for (const card of metrics.cards) {
+      expect(card.left).toBeGreaterThanOrEqual(0);
+      expect(card.right).toBeLessThanOrEqual(metrics.innerWidth + 1);
+      expect(card.top).toBeGreaterThanOrEqual(0);
+      expect(card.bottom).toBeLessThanOrEqual(metrics.innerHeight + 1);
+    }
+  });
+}
 
 async function openBattle(page: Page) {
   await page.goto("/");

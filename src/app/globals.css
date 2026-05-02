@@ -327,13 +327,13 @@ a {
   }
 
   .battle-hand .battle-card-face {
-    min-height: clamp(142px, 20dvh, 174px) !important;
+    min-height: clamp(118px, 15.3dvh, 132px) !important;
     border-width: 2px !important;
     border-radius: 7px !important;
   }
 
   .battle-hand--enemy .battle-card-face {
-    min-height: clamp(128px, 18dvh, 158px) !important;
+    min-height: clamp(108px, 14.2dvh, 122px) !important;
   }
 
   .battle-card-face::before {
@@ -378,6 +378,56 @@ a {
     transform: none !important;
   }
 
+}
+
+@media (max-width: 360px) and (orientation: portrait) {
+  .battle-hand {
+    gap: 3px !important;
+    padding-inline: 4px !important;
+  }
+
+  .battle-hand .battle-card-face {
+    min-height: 106px !important;
+  }
+
+  .battle-hand--enemy .battle-card-face {
+    min-height: 100px !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .card-details {
+    align-items: start;
+  }
+
+  .card-details .selected-card-preview-card {
+    width: min(132px, 34dvw) !important;
+  }
+
+  .card-details .selected-card-preview-card .battle-card-face {
+    min-height: clamp(168px, 45dvw, 188px) !important;
+    border-width: 2px !important;
+    border-radius: 7px !important;
+  }
+
+  .card-details .battle-card-face::before {
+    inset: 5px !important;
+  }
+
+  .card-details dl {
+    gap: 6px !important;
+  }
+
+  .card-details dd:last-child {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .collection-card-tile {
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.035) !important;
+  }
 }
 
 @media (orientation: landscape) and (max-height: 520px) {
@@ -562,5 +612,93 @@ a {
   :is(.selection-enemy) :is(.battle-card-face) {
     width: min(118px, 34dvw) !important;
     min-height: 150px !important;
+  }
+}
+
+@media (max-width: 620px) and (orientation: portrait) and (max-height: 640px) {
+  :is(.selection-dialog) {
+    grid-template-rows: auto auto minmax(58px, 1fr);
+    gap: 4px !important;
+    padding: 8px !important;
+  }
+
+  :is(.selection-card) :is(.battle-card-face) {
+    width: min(118px, 39dvw) !important;
+    min-height: 158px !important;
+  }
+
+  :is(.selection-controls) {
+    width: min(248px, 100%) !important;
+    gap: 3px !important;
+    padding: 6px !important;
+  }
+
+  :is(.selection-controls) > div:first-child {
+    min-height: 28px !important;
+  }
+
+  :is(.selection-controls) [aria-hidden="true"] {
+    display: none !important;
+  }
+
+  :is(.selection-controls) button[data-testid="selection-ok"] {
+    min-height: 32px !important;
+    font-size: 16px !important;
+  }
+
+  :is(.selection-enemy) {
+    min-height: 68px !important;
+    max-height: 86px;
+    overflow: hidden;
+  }
+
+  :is(.selection-enemy) > div {
+    font-size: 28px !important;
+  }
+
+  :is(.selection-enemy) :is(.battle-card-face) {
+    width: min(92px, 30dvw) !important;
+    min-height: 116px !important;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 430px) {
+  :is(.selection-dialog) {
+    min-height: 0 !important;
+    height: min(360px, calc(100dvh - 12px));
+    grid-template-columns: minmax(122px, 170px) minmax(170px, 188px) minmax(104px, 150px) !important;
+    gap: 8px !important;
+    padding: 10px 14px !important;
+    overflow: hidden;
+  }
+
+  :is(.selection-card) :is(.battle-card-face) {
+    width: min(170px, 20dvw) !important;
+    min-height: 238px !important;
+  }
+
+  :is(.selection-controls) {
+    gap: 4px !important;
+    padding: 8px !important;
+  }
+
+  :is(.selection-controls) [aria-hidden="true"] {
+    display: none !important;
+  }
+
+  :is(.selection-controls) button[data-testid="selection-ok"] {
+    min-height: 34px !important;
+    font-size: 18px !important;
+  }
+
+  :is(.selection-enemy) {
+    min-height: 172px !important;
+    max-height: 240px;
+    overflow: hidden;
+  }
+
+  :is(.selection-enemy) :is(.battle-card-face) {
+    width: min(128px, 15dvw) !important;
+    min-height: 178px !important;
   }
 }
