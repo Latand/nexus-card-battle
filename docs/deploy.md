@@ -11,16 +11,36 @@ The app is prepared for two deployment paths:
 docker compose up -d --build
 ```
 
+Compose starts two services:
+
+- `mongo`: MongoDB 7 with the persistent `nexus_mongodb_data` volume.
+- `nexus-card-battle`: the production Node/Next.js/WebSocket server.
+
 Defaults:
 
 - Container port: `3000`
 - Host bind: `127.0.0.1:3010`
 - Override with `APP_HOST` and `APP_PORT`
+- App MongoDB URI: `mongodb://mongo:27017/nexus-card-battle`
+- Override the app database by setting `MONGODB_URI` before `docker compose up`
 
-Example:
+The app waits for the Compose MongoDB healthcheck before starting. When `MONGODB_URI` is not set in the shell, the app uses the in-Compose `mongo` hostname. To use an external MongoDB instance instead:
+
+```bash
+MONGODB_URI=mongodb://mongo.example.internal:27017/nexus-card-battle docker compose up -d --build
+```
+
+Port override example:
 
 ```bash
 APP_PORT=3025 docker compose up -d --build
+```
+
+Validate the Compose file without starting services:
+
+```bash
+docker compose config --quiet
+MONGODB_URI=mongodb://external.example:27017/custom docker compose config --quiet
 ```
 
 ## Nginx

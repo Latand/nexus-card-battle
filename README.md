@@ -47,7 +47,7 @@ See [docs/deploy.md](docs/deploy.md) for the Nginx WebSocket proxy block.
 
 ## Known Limitations
 
-Deck edits are saved through the player profile API and must use known, unique, owned cards with at least 9 cards. Legacy CloudStorage and `sessionStorage` deck keys are ignored without being deleted.
+MongoDB-backed player profiles are the source of truth for owned cards, starter booster history, and saved decks. Deck edits are saved through the player profile API and must use known, unique, owned cards with at least 9 cards. Legacy CloudStorage and `sessionStorage` deck keys may still exist in old clients, but they are ignored without being imported, merged, or deleted.
 
 Telegram profiles currently use the client-provided `Telegram.WebApp.initDataUnsafe.user.id` for MVP bootstrap. Server-side Telegram `initData` HMAC verification is intentionally deferred and should be added before treating Telegram identity as trusted.
 
@@ -55,7 +55,12 @@ Telegram profiles currently use the client-provided `Telegram.WebApp.initDataUns
 
 ```bash
 bun run lint
-bun run test:profile
+bun run test
+docker compose config --quiet
+MONGODB_URI=mongodb://external.example:27017/custom docker compose config --quiet
+bun run test:e2e -- tests/onboarding-reveal.spec.ts tests/data-regression.spec.ts
 bun run build
 bun run test:e2e
 ```
+
+See [docs/release-qa.md](docs/release-qa.md) for the booster onboarding release QA checklist.
