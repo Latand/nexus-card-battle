@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node server.js --dev",
+    "dev": "bun server.js --dev",
     "dev:next": "next dev",
     "build": "next build",
-    "start": "node server.js",
+    "start": "bun server.js",
     "lint": "eslint",
     "test:e2e": "playwright test"
   },

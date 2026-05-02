@@ -1,9 +1,9 @@
 services:
-  traitor:
+  nexus-card-battle:
     build:
       context: .
-    image: klanz-traitor:latest
-    container_name: klanz-traitor
+    image: nexus-card-battle:latest
+    container_name: nexus-card-battle
     restart: unless-stopped
     environment:
       NODE_ENV: production

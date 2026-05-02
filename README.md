@@ -25,8 +25,8 @@ Players build a deck, fight AI locally, or queue into a live PvP match. Inside T
 ## Development
 
 ```bash
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
@@ -47,7 +47,7 @@ See [docs/deploy.md](docs/deploy.md) for the Nginx WebSocket proxy block.
 ## Verification
 
 ```bash
-npm run lint
-npm run build
-npm run test:e2e
+bun run lint
+bun run build
+bun run test:e2e
 ```
