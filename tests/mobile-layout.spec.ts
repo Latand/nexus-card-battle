@@ -89,6 +89,37 @@ test("keeps duel cards readable with enough portrait breathing room", async ({ p
   expect(cardLabelFailures).toEqual([]);
 });
 
+test("keeps the desktop board compact on tall screens", async ({ page }) => {
+  await page.setViewportSize({ width: 1728, height: 1536 });
+  await openBattle(page);
+
+  const metrics = await page.evaluate(() => {
+    const rect = (selector: string) => document.querySelector(selector)?.getBoundingClientRect();
+    const enemyHand = rect(".battle-hand--enemy");
+    const arena = rect(".battle-arena-strip");
+    const playerHand = rect(".battle-hand--player");
+    const cards = [...document.querySelectorAll(".battle-hand .battle-card-face")].map((card) => {
+      const bounds = card.getBoundingClientRect();
+      return bounds.width / bounds.height;
+    });
+
+    return {
+      enemyToArenaGap: arena && enemyHand ? arena.top - enemyHand.bottom : null,
+      arenaToPlayerGap: playerHand && arena ? playerHand.top - arena.bottom : null,
+      cardRatios: cards,
+    };
+  });
+
+  expect(metrics.enemyToArenaGap).not.toBeNull();
+  expect(metrics.arenaToPlayerGap).not.toBeNull();
+  expect(metrics.enemyToArenaGap ?? Number.POSITIVE_INFINITY).toBeLessThan(180);
+  expect(metrics.arenaToPlayerGap ?? Number.POSITIVE_INFINITY).toBeLessThan(180);
+  for (const ratio of metrics.cardRatios) {
+    expect(ratio).toBeGreaterThan(0.58);
+    expect(ratio).toBeLessThan(0.74);
+  }
+});
+
 async function openBattle(page: Page) {
   await page.goto("/");
   await page.getByTestId("play-selected-deck").click();

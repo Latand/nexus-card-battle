@@ -170,7 +170,7 @@ function DuelStatus({
   return (
     <article
       className={cn(
-        "grid w-[min(210px,100%)] gap-1 rounded-sm border border-white/12 bg-black/38 px-2 py-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.1)] backdrop-blur-[2px] max-[620px]:gap-0.5 max-[620px]:px-1.5 max-[620px]:py-1",
+        "grid w-[min(222px,100%)] gap-1 rounded-sm border border-white/12 bg-black/34 px-2 py-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.32),inset_0_1px_0_rgba(255,255,255,0.1)] backdrop-blur-[2px] max-[620px]:gap-0.5 max-[620px]:px-1.5 max-[620px]:py-1",
         align === "right" && "ml-auto",
       )}
     >
@@ -198,15 +198,68 @@ function DuelPillRun({
   return (
     <div
       className={cn(
-        "grid min-h-[14px] grid-cols-[16px_minmax(0,1fr)_24px] items-center gap-1.5 max-[620px]:grid-cols-[12px_minmax(0,1fr)_20px] max-[620px]:gap-1",
+        "grid min-h-[14px] grid-cols-[16px_minmax(0,1fr)_27px] items-center gap-1.5 max-[620px]:grid-cols-[12px_minmax(0,1fr)_21px] max-[620px]:gap-1",
         emphasis && "drop-shadow-[0_0_10px_rgba(78,211,244,0.34)]",
       )}
       aria-label={`${label}: ${value}`}
       title={`${label}: ${value}`}
     >
       <DuelToneMark tone={tone} compact />
-      <ResourcePills value={value} max={max} tone={tone} dense slots={slots ?? 12} />
-      <strong className="text-right text-[11px] font-black leading-none text-[#fff8df] [text-shadow:0_1px_0_#000] max-[620px]:text-[9px]">{Math.max(0, value)}</strong>
+      <DuelPills value={value} max={max} tone={tone} slots={slots ?? 12} />
+      <strong
+        className={cn(
+          "text-right font-black leading-none [text-shadow:0_1px_0_#000]",
+          tone === "attack" ? "text-[12px] text-[#e5fcff] max-[620px]:text-[10px]" : "text-[11px] text-[#fff2b6] max-[620px]:text-[9px]",
+        )}
+      >
+        {Math.max(0, value)}
+      </strong>
+    </div>
+  );
+}
+
+function DuelPills({
+  value,
+  max,
+  tone,
+  slots,
+}: {
+  value: number;
+  max: number;
+  tone: "energy" | "attack";
+  slots: number;
+}) {
+  const slotCount = Math.max(1, Math.floor(slots));
+  const current = Math.max(0, Math.floor(value));
+  const activeSlots = Math.max(
+    tone === "energy" ? 1 : 0,
+    slots === value ? Math.min(current, slotCount) : Math.ceil((Math.min(current, max) / Math.max(1, max)) * slotCount),
+  );
+
+  return (
+    <div className="flex min-w-0 items-center justify-start gap-[2px] max-[620px]:gap-[1px]" aria-hidden="true">
+      {Array.from({ length: slotCount }).map((_, index) => {
+        const active = index < activeSlots;
+        const baseEnergy = tone === "energy" && index === 0;
+
+        return (
+          <i
+            key={index}
+            className={cn(
+              "block flex-1 rounded-[2px] border transition-[opacity,filter,transform] duration-300",
+              tone === "attack" ? "h-[7px] min-w-[3px] max-w-[12px]" : "h-[6px] min-w-[3px] max-w-[11px]",
+              !active && "border-[#101417] bg-black/58 opacity-42 shadow-[inset_0_1px_3px_rgba(0,0,0,0.8)]",
+              active &&
+                tone === "energy" &&
+                "border-[#7a4810] bg-[linear-gradient(180deg,#fff08a,#ffc22e_46%,#a7600d)] shadow-[0_0_6px_rgba(255,204,63,0.48),inset_0_-2px_0_rgba(0,0,0,0.18)]",
+              active &&
+                tone === "attack" &&
+                "border-[#0c5b70] bg-[linear-gradient(180deg,#c6fbff,#43c5e4_48%,#126a8c)] shadow-[0_0_7px_rgba(78,211,244,0.5),inset_0_-2px_0_rgba(0,0,0,0.2)]",
+              baseEnergy && "border-[#fff0a5] brightness-125 shadow-[0_0_8px_rgba(255,232,143,0.66),inset_0_-2px_0_rgba(0,0,0,0.12)]",
+            )}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -230,11 +283,11 @@ function DuelResult({
   return (
     <div className="pointer-events-none absolute left-1/2 top-[54%] z-[5] grid -translate-x-1/2 -translate-y-1/2 justify-items-center gap-1 text-center max-[760px]:top-[55%] max-[620px]:top-[57%]">
       <div className="flex items-baseline gap-2 px-3 py-1.5 drop-shadow-[0_10px_22px_rgba(0,0,0,0.5)] max-[620px]:gap-1.5 max-[620px]:px-1">
-        <strong className="text-[clamp(38px,6vw,62px)] font-black leading-none text-[#f7ffff] [text-shadow:0_2px_0_#062b38,0_0_18px_rgba(73,213,244,0.52),0_0_32px_rgba(0,0,0,0.72)]">
+        <strong className="text-[clamp(32px,5vw,50px)] font-black leading-none text-[#f7ffff] [text-shadow:0_2px_0_#062b38,0_0_16px_rgba(73,213,244,0.48),0_0_28px_rgba(0,0,0,0.72)]">
           {winnerAttack}
         </strong>
-        <b className="text-[clamp(22px,4vw,38px)] font-black leading-none text-[#ffe08a] [text-shadow:0_1px_0_#000]">&gt;</b>
-        <span className="text-[clamp(24px,4.4vw,42px)] font-black leading-none text-[#9cb3b8] [text-shadow:0_1px_0_#000]">{loserAttack}</span>
+        <b className="text-[clamp(20px,3.5vw,32px)] font-black leading-none text-[#ffe08a] [text-shadow:0_1px_0_#000]">&gt;</b>
+        <span className="text-[clamp(22px,3.8vw,36px)] font-black leading-none text-[#9cb3b8] [text-shadow:0_1px_0_#000]">{loserAttack}</span>
       </div>
       <span className="rounded-full border border-white/10 bg-black/36 px-2.5 py-1 text-[10px] font-black uppercase leading-none text-[#fff1b9] shadow-[0_6px_14px_rgba(0,0,0,0.3)] max-[620px]:px-2 max-[620px]:text-[8px]">
         {finisher ? "Останній удар" : `${winnerName} -> ${loserName}`}
@@ -286,7 +339,7 @@ function FighterImpactAvatar({ fighter, health, damage, side }: { fighter: Fight
       </div>
       <b
         className={cn(
-          "absolute left-1/2 top-[9%] z-[2] -translate-x-1/2 rounded-sm border border-[#ffd6c9]/55 bg-[linear-gradient(180deg,#ff554d,#941b19)] px-2.5 py-1 text-[clamp(18px,3.3vw,28px)] font-black leading-none text-[#fff5dc] shadow-[0_8px_18px_rgba(0,0,0,0.5),0_0_18px_rgba(255,64,48,0.42)] [text-shadow:0_2px_0_rgba(0,0,0,0.38)] max-[620px]:px-1.5 max-[620px]:text-[15px]",
+          "absolute left-1/2 top-[7%] z-[2] grid min-h-[34px] min-w-[58px] -translate-x-1/2 place-items-center border border-[#ffd6c9]/45 bg-[linear-gradient(135deg,#ff765d_0_13%,#d62422_14%_70%,#74120f_100%)] px-2.5 py-1 text-[clamp(20px,3.7vw,32px)] font-black leading-none text-[#fff3d7] shadow-[0_10px_20px_rgba(0,0,0,0.54),0_0_20px_rgba(255,64,48,0.46)] [clip-path:polygon(10%_0,100%_0,90%_100%,0_100%)] [text-shadow:0_2px_0_rgba(0,0,0,0.42)] max-[620px]:min-h-[28px] max-[620px]:min-w-[46px] max-[620px]:px-1.5 max-[620px]:text-[17px]",
           side === "player" ? "rotate-[-3deg]" : "rotate-[3deg]",
         )}
       >
