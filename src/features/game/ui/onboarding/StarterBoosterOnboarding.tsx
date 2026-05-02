@@ -3,6 +3,7 @@
 import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import { cards as cardCatalog } from "@/features/battle/model/cards";
+import { clans } from "@/features/battle/model/clans";
 import { fetchStarterBoosterCatalog, openStarterBooster } from "@/features/boosters/client";
 import { STARTER_BOOSTER_CARD_COUNT, type BoosterCatalogItem, type BoosterResponse } from "@/features/boosters/types";
 import type { Card, Rarity } from "@/features/battle/model/types";
@@ -31,7 +32,6 @@ type RevealState = {
   player: PlayerProfile;
 };
 
-const REVEAL_STEP_MS = 460;
 const STARTER_KIT_CARD_COUNT = STARTER_FREE_BOOSTERS * STARTER_BOOSTER_CARD_COUNT;
 const boosterAccents = [
   ["#ffe08a", "#65d7e9"],
@@ -46,6 +46,20 @@ const rarityLabels: Record<Rarity, string> = {
   Rare: "Рідкісна",
   Unique: "Унікальна",
   Legend: "Легендарна",
+};
+const boosterStories: Record<string, string> = {
+  "neon-breach": "Зламники проти прибульців: вимикай уміння, ламай бонуси і забирай темп ще до першого удару.",
+  "factory-shift": "Цехова зміна для силового старту: Workers добивають уроном, Micron піднімає чистий damage.",
+  "street-kings": "Вулиця грає на виснаження, Kingpin повертає енергію навіть після невдалого раунду.",
+  "carnival-vice": "Нервовий контроль атаки: Circus ріже натиск, Gamblers підкручують ризик у свою користь.",
+  "faith-and-fury": "Святі тримаються довше, Fury розганяє атаку і закриває раунди силою.",
+  biohazard: "Мутанти і симбіоти тиснуть силу суперника, поки Deviants роблять кожну відповідь слабшою.",
+  underworld: "Кримінальний пакет з отрутою і прокляттями: грає повільно, але боляче.",
+  "mind-games": "Психологічний бустер: PSI лікується, Enigma краде чужі правила бою.",
+  "toy-factory": "Іграшковий цех контролює атаку, Alpha просто додає сили там, де треба продавити.",
+  "metro-chase": "Погоня за ресурсами: Metropolis краде енергію, Chasers карають навіть програні раунди.",
+  "desert-signal": "Пустельний сигнал про ресурс і живучість: Халифат дає енергію, Nemos тримає здоров'я.",
+  "street-plague": "Вулична чума змішує мінус урону з прокляттям, щоб суперник танув по раундах.",
 };
 
 export function StarterBoosterOnboarding({
@@ -98,23 +112,6 @@ export function StarterBoosterOnboarding({
     };
   }, [catalogRefreshKey, identity, onProfileChange]);
 
-  useEffect(() => {
-    if (phase !== "reveal" || !reveal) return;
-
-    const timer = window.setInterval(() => {
-      setRevealedCount((current) => {
-        if (current >= reveal.cards.length) {
-          window.clearInterval(timer);
-          return current;
-        }
-
-        return current + 1;
-      });
-    }, REVEAL_STEP_MS);
-
-    return () => window.clearInterval(timer);
-  }, [phase, reveal]);
-
   async function handleOpenBooster(booster: BoosterCatalogItem) {
     if (!canChoose || !booster.starter.canOpen) return;
 
@@ -135,7 +132,7 @@ export function StarterBoosterOnboarding({
         cards: response.cards,
         player: response.player,
       });
-      setRevealedCount(1);
+      setRevealedCount(response.cards.length);
       setPhase("reveal");
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Бустер зараз недоступний.");
@@ -219,7 +216,8 @@ export function StarterBoosterOnboarding({
                     {openedCount === 0 ? "Обери перший бустер" : "Другий бустер чекає"}
                   </strong>
                   <p className="mt-2 max-w-[760px] text-sm font-bold leading-snug text-[#cbbd99] max-[520px]:text-xs">
-                    Відкритий бустер записується одразу, а потім п’ять збережених карт виходять у швидкому показі.
+                    Обери два різні бустери. У кожному 5 нових карт з двох кланів: гарантовано одна легендарна,
+                    одна унікальна і ще три карти без повторів з твоєї колекції.
                   </p>
                 </div>
 
@@ -339,7 +337,7 @@ function StarterDeckReady({
 
       <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_260px] gap-3 max-[960px]:grid-cols-1">
         <section className="grid min-h-0 content-start gap-2 overflow-y-auto rounded-md border border-[#d4aa4d]/32 bg-[rgba(5,8,10,0.74)] p-3 shadow-[inset_0_0_68px_rgba(0,0,0,0.3)] max-[520px]:p-2">
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(142px,1fr))] gap-2 max-[430px]:grid-cols-2 max-[430px]:gap-1.5">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(116px,1fr))] gap-3 max-[430px]:grid-cols-2 max-[430px]:gap-1.5">
             {deckCards.map((card, index) => (
               <StarterDeckReadyCard key={`${card.id}-${index}`} card={card} index={index} />
             ))}
@@ -388,37 +386,18 @@ function StarterDeckReadyCard({ card, index }: { card: Card; index: number }) {
 
   return (
     <article
-      className="grid min-h-[118px] grid-rows-[auto_1fr_auto] gap-2 rounded-md border border-[color-mix(in_srgb,var(--card-accent),#000_38%)] bg-[linear-gradient(160deg,color-mix(in_srgb,var(--card-accent),#101010_64%),rgba(6,8,10,0.95)_52%)] p-2 shadow-[0_12px_26px_rgba(0,0,0,0.32),inset_0_1px_0_rgba(255,255,255,0.08)] max-[430px]:min-h-[112px]"
+      className="relative grid min-h-[190px] place-items-center overflow-hidden rounded-md border border-[color-mix(in_srgb,var(--card-accent),#000_38%)] bg-black/22 p-2 shadow-[0_12px_26px_rgba(0,0,0,0.32),inset_0_1px_0_rgba(255,255,255,0.08)] max-[430px]:min-h-[168px] max-[430px]:p-1"
       style={style}
       data-testid={`starter-deck-ready-card-${index + 1}`}
       data-card-id={card.id}
     >
-      <div className="flex items-center justify-between gap-2">
-        <b className="grid aspect-square w-7 place-items-center rounded-sm border border-black/35 bg-[#fff0ad] text-xs font-black text-[#17100a]">
-          {index + 1}
-        </b>
-        <span className="truncate rounded-sm border border-white/12 bg-black/34 px-1.5 py-1 text-[10px] font-black uppercase text-[#9ed6e4]">
-          {rarityLabels[card.rarity]}
-        </span>
-      </div>
-
-      <div className="min-w-0 self-end">
-        <strong className="block truncate text-base font-black uppercase leading-tight text-[#fff4c4] max-[430px]:text-sm">
-          {card.name}
-        </strong>
-        <span className="mt-1 block truncate text-[10px] font-black uppercase tracking-[0.06em] text-[#cbbd99]">
-          {card.clan}
-        </span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-1 text-center">
-        <span className="rounded-sm border border-white/10 bg-black/30 px-1 py-1 text-[10px] font-black uppercase text-[#ffe08a]">
-          С {card.power}
-        </span>
-        <span className="rounded-sm border border-white/10 bg-black/30 px-1 py-1 text-[10px] font-black uppercase text-[#efcf6f]">
-          У {card.damage}
-        </span>
-      </div>
+      <MiniRevealBattleCard card={card} />
+      <b className="pointer-events-none absolute left-2 top-2 z-[3] grid aspect-square w-7 place-items-center rounded-full bg-[#fff0ad] text-xs font-black text-[#17100a] shadow-[0_4px_12px_rgba(0,0,0,0.42)]">
+        {index + 1}
+      </b>
+      <span className="pointer-events-none absolute right-2 top-2 z-[3] max-w-[70%] truncate rounded border border-white/12 bg-black/70 px-2 py-1 text-[9px] font-black uppercase text-[#9ed6e4]">
+        {rarityLabels[card.rarity]}
+      </span>
     </article>
   );
 }
@@ -473,6 +452,7 @@ function BoosterTile({
   const [toneA, toneB] = boosterAccents[index % boosterAccents.length];
   const opened = booster.starter.opened;
   const disabled = busy || !booster.starter.canOpen;
+  const clanDetails = booster.clans.map((clanName) => clans[clanName]).filter(Boolean);
   const style = {
     "--booster-a": toneA,
     "--booster-b": toneB,
@@ -481,7 +461,7 @@ function BoosterTile({
   return (
     <article
       className={cn(
-        "group relative min-h-[178px] overflow-hidden rounded-md border bg-[linear-gradient(145deg,color-mix(in_srgb,var(--booster-a),#111_24%),rgba(8,10,10,0.96)_42%,color-mix(in_srgb,var(--booster-b),#050809_32%))] p-3 shadow-[0_14px_30px_rgba(0,0,0,0.32),inset_0_1px_0_rgba(255,255,255,0.12)] transition max-[430px]:min-h-[166px] max-[430px]:p-2",
+        "group relative min-h-[282px] overflow-hidden rounded-md border bg-[linear-gradient(145deg,color-mix(in_srgb,var(--booster-a),#111_24%),rgba(8,10,10,0.96)_42%,color-mix(in_srgb,var(--booster-b),#050809_32%))] p-3 shadow-[0_14px_30px_rgba(0,0,0,0.32),inset_0_1px_0_rgba(255,255,255,0.12)] transition max-[430px]:min-h-[248px] max-[430px]:p-2",
         opened
           ? "border-[#ffe08a]/65 brightness-75"
           : booster.starter.canOpen
@@ -495,7 +475,7 @@ function BoosterTile({
     >
       <div className="pointer-events-none absolute inset-2 rounded border border-white/12" />
       <div className="pointer-events-none absolute -right-8 -top-12 h-28 w-28 rotate-12 border-[14px] border-[color-mix(in_srgb,var(--booster-a),transparent_38%)]" />
-      <div className="relative z-[1] grid h-full min-h-[152px] grid-rows-[auto_1fr_auto] gap-3 max-[430px]:min-h-[144px]">
+      <div className="relative z-[1] grid h-full min-h-[256px] grid-rows-[auto_1fr_auto] gap-3 max-[430px]:min-h-[226px]">
         <div className="flex items-start justify-between gap-2">
           <span className="rounded-sm border border-black/35 bg-[#fff0ad] px-1.5 py-1 text-[10px] font-black uppercase leading-none text-[#17100a]">
             {String(index + 1).padStart(2, "0")}
@@ -516,14 +496,26 @@ function BoosterTile({
           <strong className="text-[clamp(18px,3vw,25px)] font-black uppercase leading-[0.95] text-[#fff4c4] [text-shadow:0_2px_0_rgba(0,0,0,0.72)]">
             {booster.name}
           </strong>
+          <p className="line-clamp-3 text-[11px] font-bold leading-snug text-[#e8d9b6] max-[430px]:line-clamp-2 max-[430px]:text-[10px]">
+            {boosterStories[booster.id] ?? "Два клана, пять новых карт и стартовая связка для первой колоды."}
+          </p>
+          <div className="grid grid-cols-3 gap-1 text-center">
+            <BoosterPromise value="5" label="карт" />
+            <BoosterPromise value="1" label="легенда" />
+            <BoosterPromise value="1" label="унікальна" />
+          </div>
           <div className="grid gap-1">
-            {booster.clans.map((clan) => (
-              <span
-                key={clan}
-                className="truncate rounded-sm border border-white/12 bg-black/32 px-2 py-1 text-[11px] font-black uppercase tracking-[0.04em] text-[#efe3c5]"
+            {clanDetails.map((clan) => (
+              <div
+                key={clan.name}
+                className="min-w-0 rounded-sm border border-white/12 bg-black/32 px-2 py-1.5"
               >
-                {clan}
-              </span>
+                <div className="flex items-center justify-between gap-2">
+                  <b className="truncate text-[11px] font-black uppercase tracking-[0.04em] text-[#fff0ad]">{clan.name}</b>
+                  <span className="shrink-0 text-[9px] font-black uppercase text-[#8ed8e6]">{clan.bonus.name}</span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-[10px] font-bold leading-snug text-[#cbbd99]">{clan.bonus.description}</p>
+              </div>
             ))}
           </div>
         </div>
@@ -544,6 +536,15 @@ function BoosterTile({
         </button>
       </div>
     </article>
+  );
+}
+
+function BoosterPromise({ value, label }: { value: string; label: string }) {
+  return (
+    <span className="rounded-sm border border-[#ffe08a]/24 bg-[#ffe08a]/10 px-1.5 py-1">
+      <b className="block text-sm font-black leading-none text-[#ffe08a]">{value}</b>
+      <em className="mt-0.5 block truncate text-[8px] font-black uppercase not-italic text-[#e8d9b6]">{label}</em>
+    </span>
   );
 }
 
@@ -572,11 +573,11 @@ function StarterReveal({
         <div>
           <b className="text-[11px] font-black uppercase tracking-[0.16em] text-[#65d7e9]">{reveal.booster.name}</b>
           <h2 className="mt-1 text-[clamp(24px,5vw,42px)] font-black uppercase leading-none text-[#fff0ad]">
-            Карта {safeCount} з {reveal.cards.length}
+            П&apos;ять карт у профілі
           </h2>
         </div>
         <span className="rounded border border-white/10 bg-black/34 px-3 py-2 text-xs font-black uppercase tracking-[0.08em] text-[#cbbd99]">
-          Збережено в профіль
+          1 легендарна · 1 унікальна · без повторів
         </span>
       </div>
 
@@ -612,18 +613,18 @@ function StarterReveal({
       </div>
 
       <div className="grid gap-3">
-        <div className="grid grid-cols-5 gap-2 max-[620px]:gap-1.5" data-testid="starter-reveal-list">
+        <div className="grid grid-cols-5 gap-2 max-[760px]:grid-cols-[repeat(5,minmax(112px,1fr))] max-[760px]:overflow-x-auto max-[620px]:gap-1.5" data-testid="starter-reveal-list">
           {visibleCards.map((card, index) => (
             <article
               key={card.id}
-              className="starter-reveal-chip min-w-0 rounded border border-white/10 bg-black/34 px-2 py-2"
+              className="starter-reveal-chip min-w-0 rounded border border-white/10 bg-black/34 p-1.5"
+              style={{ "--reveal-index": index } as CSSProperties}
               data-testid={`starter-reveal-card-${index + 1}`}
               data-card-id={card.id}
             >
-              <b className="block truncate text-xs font-black uppercase text-[#fff0ad] max-[430px]:text-[10px]">{card.name}</b>
-              <span className="mt-1 block truncate text-[10px] font-black uppercase text-[#9ed6e4] max-[430px]:text-[9px]">
-                {rarityLabels[card.rarity]}
-              </span>
+              <MiniRevealBattleCard card={card} />
+              <b className="mt-1 block truncate text-[11px] font-black uppercase text-[#fff0ad] max-[430px]:text-[10px]">{card.name}</b>
+              <span className="block truncate text-[9px] font-black uppercase text-[#9ed6e4]">{rarityLabels[card.rarity]}</span>
             </article>
           ))}
         </div>
@@ -640,6 +641,16 @@ function StarterReveal({
         ) : null}
       </div>
     </section>
+  );
+}
+
+function MiniRevealBattleCard({ card }: { card: Card }) {
+  return (
+    <div className="relative mx-auto h-[132px] w-[96px] overflow-hidden max-[430px]:h-[116px] max-[430px]:w-[84px]">
+      <div className="pointer-events-none absolute left-0 top-0 w-[216px] origin-top-left scale-[0.444] max-[430px]:scale-[0.389]">
+        <BattleCard card={card} compact className="!w-[216px]" />
+      </div>
+    </div>
   );
 }
 

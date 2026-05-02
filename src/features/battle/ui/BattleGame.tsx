@@ -119,6 +119,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const [enemyLockedMove, setEnemyLockedMove] = useState<KnownEnemyMove | null>(null);
   const [selectionOpen, setSelectionOpen] = useState(false);
   const [turnSeconds, setTurnSeconds] = useState(TURN_SECONDS);
+  const [roundWinnerCardIds, setRoundWinnerCardIds] = useState<ReadonlySet<string>>(() => new Set());
   const [humanStatus, setHumanStatus] = useState<HumanMatchStatus>(isHumanMatch ? "connecting" : "idle");
   const [humanMessage, setHumanMessage] = useState("");
   const [matchInfo, setMatchInfo] = useState<HumanMatchInfo | null>(null);
@@ -391,6 +392,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setSelectionOpen(false);
     setTurnSeconds(TURN_SECONDS);
     setPending(outcome);
+    setRoundWinnerCardIds((value) => addRoundWinnerCardId(value, outcome.clash));
     setEnemyLockedMove(enemyMove);
     setGame((value) => ({
       ...value,
@@ -470,6 +472,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       setDamageBoost(false);
       setPending(null);
       setEnemyLockedMove(null);
+      setRoundWinnerCardIds(new Set());
       setSelectionOpen(false);
       setTurnSeconds(TURN_SECONDS);
       setHumanStatus("matched");
@@ -579,6 +582,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setSelectionOpen(false);
     setTurnSeconds(TURN_SECONDS);
     setPending(outcome);
+    setRoundWinnerCardIds((value) => addRoundWinnerCardId(value, outcome.clash));
     setEnemyLockedMove(enemyMove);
     setGame((value) => ({
       ...value,
@@ -612,6 +616,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setMatchInfo(null);
     setPending(null);
     setEnemyLockedMove(null);
+    setRoundWinnerCardIds(new Set());
     setSelectionOpen(false);
     setTurnSeconds(0);
     clearHumanMessageBuffers();
@@ -626,6 +631,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setMatchInfo(null);
     setPending(null);
     setEnemyLockedMove(null);
+    setRoundWinnerCardIds(new Set());
     setSelectionOpen(false);
     clearHumanMessageBuffers();
 
@@ -772,6 +778,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
         active={activeHand === "enemy"}
         selectedId={enemySelectedCardId}
         playedCardId={enemyPlayedCardId}
+        winnerCardIds={roundWinnerCardIds}
       />
 
       <section
@@ -800,6 +807,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
         owner="player"
         active={activeHand === "player"}
         selectedId={selectedId}
+        winnerCardIds={roundWinnerCardIds}
         onPick={(card) => {
           if (!locked && !card.used) {
             setSelectedId(card.id);
@@ -1215,6 +1223,13 @@ function roundResultText(winner: Side) {
   return winner === "player" ? "Раунд за тобою!" : "Раунд за суперником.";
 }
 
+function addRoundWinnerCardId(value: ReadonlySet<string>, clash: Clash) {
+  const winnerCardId = clash.winner === "player" ? clash.playerCard.id : clash.enemyCard.id;
+  const next = new Set(value);
+  next.add(winnerCardId);
+  return next;
+}
+
 function getVerdict(result?: MatchResult) {
   if (!result) return "";
   if (result === "draw") return "Нічия";
@@ -1238,7 +1253,7 @@ function bottomBarClass() {
 }
 
 function barShellClass() {
-  return "relative z-10 mx-auto grid min-h-[58px] w-[min(880px,100%)] items-stretch overflow-hidden rounded-[10px] border border-[#d6a03b]/72 bg-[radial-gradient(circle_at_50%_-30%,rgba(255,224,138,0.18),transparent_48%),linear-gradient(180deg,rgba(22,28,29,0.96),rgba(4,8,11,0.98)),repeating-linear-gradient(135deg,rgba(255,255,255,0.035)_0_1px,transparent_1px_10px)] shadow-[0_12px_26px_rgba(0,0,0,0.62),inset_0_0_0_1px_rgba(255,231,151,0.12),inset_0_-10px_22px_rgba(0,0,0,0.32)] before:pointer-events-none before:absolute before:inset-x-2 before:top-0 before:h-px before:bg-[#ffe08a]/50 before:content-[''] after:pointer-events-none after:absolute after:inset-x-3 after:bottom-0 after:h-px after:bg-black/70 after:content-[''] max-[760px]:min-h-[50px] max-[760px]:rounded-[7px]";
+  return "relative z-20 mx-auto grid min-h-[58px] w-[min(880px,100%)] items-stretch overflow-hidden rounded-[10px] border border-[#d6a03b]/72 bg-[radial-gradient(circle_at_50%_-30%,rgba(255,224,138,0.18),transparent_48%),linear-gradient(180deg,rgba(22,28,29,0.96),rgba(4,8,11,0.98)),repeating-linear-gradient(135deg,rgba(255,255,255,0.035)_0_1px,transparent_1px_10px)] shadow-[0_12px_26px_rgba(0,0,0,0.62),inset_0_0_0_1px_rgba(255,231,151,0.12),inset_0_-10px_22px_rgba(0,0,0,0.32)] before:pointer-events-none before:absolute before:inset-x-2 before:top-0 before:h-px before:bg-[#ffe08a]/50 before:content-[''] after:pointer-events-none after:absolute after:inset-x-3 after:bottom-0 after:h-px after:bg-black/70 after:content-[''] max-[760px]:min-h-[50px] max-[760px]:rounded-[7px]";
 }
 
 function barButtonClass(extra?: string) {

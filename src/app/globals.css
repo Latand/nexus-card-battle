@@ -126,11 +126,12 @@ a {
 }
 
 .starter-reveal-card {
-  animation: starter-reveal-in 360ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: starter-reveal-in 420ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .starter-reveal-chip {
-  animation: starter-chip-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: starter-chip-in 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--reveal-index, 0) * 70ms);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -143,7 +144,7 @@ a {
 @keyframes nexus-duel-throw-player {
   0% {
     opacity: 0;
-    transform: translateX(-34vw) translateY(28px) rotate(4deg) scale(0.82);
+    transform: translateX(var(--duel-start-x, -34vw)) translateY(var(--duel-start-y, 28px)) rotate(4deg) scale(0.82);
   }
   18%,
   76% {
@@ -151,14 +152,14 @@ a {
   }
   100% {
     opacity: 0;
-    transform: translateX(34vw) translateY(-22px) rotate(24deg) scale(1.08);
+    transform: translateX(var(--duel-end-x, 34vw)) translateY(var(--duel-end-y, -22px)) rotate(24deg) scale(1.08);
   }
 }
 
 @keyframes nexus-duel-throw-enemy {
   0% {
     opacity: 0;
-    transform: translateX(34vw) translateY(-20px) rotate(-4deg) scale(0.82);
+    transform: translateX(var(--duel-end-x, 34vw)) translateY(var(--duel-end-y, -20px)) rotate(-4deg) scale(0.82);
   }
   18%,
   76% {
@@ -166,7 +167,7 @@ a {
   }
   100% {
     opacity: 0;
-    transform: translateX(-34vw) translateY(26px) rotate(-24deg) scale(1.08);
+    transform: translateX(var(--duel-start-x, -34vw)) translateY(var(--duel-start-y, 26px)) rotate(-24deg) scale(1.08);
   }
 }
 
@@ -233,7 +234,7 @@ a {
 
 .battle-hand-card {
   justify-self: center;
-  width: min(184px, 12.5vw, 18dvh, 100%);
+  width: min(184px, 21vw, 18dvh, 100%);
   min-width: 0;
 }
 
@@ -261,37 +262,15 @@ a {
   font-size: clamp(24px, 6.8dvw, 54px);
 }
 
-.battle-card-trait-kind {
-  display: inline-grid;
-  min-width: 1.35em;
-  place-items: center;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--accent), #fff 18%);
-  color: #160f0f;
-  font-size: 0.86em;
-  font-weight: 900;
-  line-height: 1;
+.duel-projectile-lane {
+  --duel-throw-span: clamp(150px, 25vw, 330px);
 }
 
 @container (max-width: 150px) {
-  .battle-card-meta {
-    inset-inline: 7% !important;
-    top: 2.2% !important;
-    gap: 2px !important;
-  }
-
   .battle-card-meta span,
   .battle-card-meta b {
     font-size: clamp(7px, 8.4cqw, 9px) !important;
     letter-spacing: 0 !important;
-  }
-
-  .battle-card-art {
-    inset-inline: 8% !important;
-    top: 13.5% !important;
-    height: 29.5% !important;
-    border-width: 1px !important;
-    border-radius: 5px !important;
   }
 
   .battle-card-art > i {
@@ -299,66 +278,39 @@ a {
   }
 
   .battle-card-name {
-    inset-inline: 7% !important;
-    top: 45.8% !important;
-    font-size: clamp(13px, 17cqw, 18px) !important;
-    line-height: 0.92 !important;
-  }
-
-  .battle-card-traits {
-    inset-inline: 6.5% !important;
-    top: 58.5% !important;
-    gap: 2px !important;
+    font-size: clamp(8px, 10.2cqw, 13px) !important;
+    line-height: 0.9 !important;
   }
 
   .battle-card-trait {
     min-height: 12px !important;
-    justify-content: flex-start !important;
     border-radius: 3px !important;
     padding: 2px 3px !important;
     font-size: clamp(6.5px, 8.2cqw, 8px) !important;
     letter-spacing: 0 !important;
   }
 
-  .battle-card-trait-kind {
-    min-width: 1.45em !important;
-    font-size: 0.78em !important;
-  }
-
   .battle-card-stat {
-    top: 82.5% !important;
-    width: 23.5% !important;
+    width: 18.5% !important;
     font-size: clamp(14px, 18cqw, 18px) !important;
-    box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18), 0 1px 0 rgba(255, 255, 255, 0.28) !important;
-  }
-
-  .battle-card-stat--power {
-    left: 6% !important;
-  }
-
-  .battle-card-stat--damage {
-    left: 70.5% !important;
   }
 }
 
 @container (max-width: 104px) {
   .battle-card-name {
-    font-size: clamp(12px, 17cqw, 16px) !important;
-  }
-
-  .battle-card-traits {
-    top: 58% !important;
+    font-size: clamp(7px, 9.2cqw, 10.5px) !important;
+    line-height: 0.9 !important;
   }
 
   .battle-card-trait {
-    min-height: 12px !important;
-    padding-block: 1.5px !important;
-    font-size: clamp(6px, 7.6cqw, 7px) !important;
+    min-height: 11px !important;
+    padding-block: 1px !important;
+    font-size: clamp(5.5px, 6.8cqw, 7px) !important;
   }
 
   .battle-card-stat {
-    top: 82.5% !important;
-    width: 22.5% !important;
+    width: 17.5% !important;
+    font-size: clamp(12px, 15cqw, 16px) !important;
   }
 }
 
@@ -379,17 +331,18 @@ a {
   }
 
   .battle-hand-card {
-    width: min(100%, 88px);
+    width: min(100%, 134px, calc((100dvw - 52px) / 4));
   }
 
   .battle-hand .battle-card-face {
-    min-height: clamp(118px, 15.3dvh, 132px) !important;
+    width: 100% !important;
+    min-height: 0 !important;
     border-width: 2px !important;
     border-radius: 7px !important;
   }
 
   .battle-hand--enemy .battle-card-face {
-    min-height: clamp(108px, 14.2dvh, 122px) !important;
+    min-height: 0 !important;
   }
 
   .battle-card-face::before {
@@ -418,15 +371,20 @@ a {
   }
 
   .duel-grid {
-    inset: 116px 12px 150px !important;
-    grid-template-columns: minmax(96px, 116px) minmax(58px, 1fr) minmax(96px, 116px) !important;
+    inset: 112px 12px 132px !important;
+    grid-template-columns: minmax(126px, 150px) minmax(54px, 1fr) minmax(126px, 150px) !important;
     align-items: end !important;
     gap: 6px !important;
   }
 
   .duel-grid :is(.battle-card-face--compact, .duel-avatar) {
-    width: min(112px, 31dvw) !important;
-    min-height: clamp(178px, 25dvh, 202px) !important;
+    width: min(138px, 34dvw) !important;
+    min-height: clamp(206px, 26dvh, 230px) !important;
+  }
+
+  .duel-projectile-lane {
+    --duel-throw-span: clamp(138px, 31dvw, 220px);
+    min-height: 240px !important;
   }
 
   .duel-grid > :first-child,
@@ -443,11 +401,11 @@ a {
   }
 
   .battle-hand .battle-card-face {
-    min-height: 106px !important;
+    min-height: 0 !important;
   }
 
   .battle-hand--enemy .battle-card-face {
-    min-height: 100px !important;
+    min-height: 0 !important;
   }
 }
 
@@ -503,18 +461,18 @@ a {
   }
 
   .battle-hand-card {
-    width: min(76px, 100%);
+    width: min(124px, 20.5dvw, 100%);
   }
 
   .battle-hand .battle-card-face {
     aspect-ratio: 2 / 3;
-    min-height: 112px !important;
+    min-height: 176px !important;
     border-width: 2px !important;
     border-radius: 6px !important;
   }
 
   .battle-hand--enemy .battle-card-face {
-    min-height: 108px !important;
+    min-height: 168px !important;
   }
 
   .battle-card-face::before {
@@ -570,18 +528,23 @@ a {
   }
 
   .duel-grid {
-    inset: 76px 22px 86px !important;
-    grid-template-columns: minmax(106px, 138px) minmax(180px, 1fr) minmax(106px, 138px) !important;
+    inset: 70px 18px 72px !important;
+    grid-template-columns: minmax(118px, 148px) minmax(120px, 1fr) minmax(118px, 148px) !important;
   }
 
   .duel-grid :is(.battle-card-face--compact, .duel-avatar) {
-    width: min(108px, 14dvw) !important;
-    min-height: 142px !important;
+    width: min(128px, 21dvw) !important;
+    min-height: 176px !important;
+  }
+
+  .duel-projectile-lane {
+    --duel-throw-span: clamp(132px, 25dvw, 240px);
+    min-height: 186px !important;
   }
 
   .duel-grid > :first-child,
   .duel-grid > :last-child {
-    transform: translateY(-86px) !important;
+    transform: translateY(-64px) !important;
   }
 
   .duel-caption {
@@ -614,17 +577,22 @@ a {
   }
 
   .duel-grid {
-    inset: 70px 20px 82px !important;
+    inset: 64px 16px 68px !important;
   }
 
   .duel-grid :is(.battle-card-face--compact, .duel-avatar) {
-    width: min(102px, 13dvw) !important;
-    min-height: 134px !important;
+    width: min(120px, 20dvw) !important;
+    min-height: 166px !important;
+  }
+
+  .duel-projectile-lane {
+    --duel-throw-span: clamp(124px, 24dvw, 220px);
+    min-height: 174px !important;
   }
 
   .duel-grid > :first-child,
   .duel-grid > :last-child {
-    transform: translateY(-92px) !important;
+    transform: translateY(-58px) !important;
   }
 }
 

@@ -12,6 +12,7 @@ export function Hand({
   active = false,
   selectedId,
   playedCardId,
+  winnerCardIds,
   onPick,
   disabled,
 }: {
@@ -22,6 +23,7 @@ export function Hand({
   active?: boolean;
   selectedId?: string;
   playedCardId?: string;
+  winnerCardIds?: ReadonlySet<string>;
   onPick?: (card: Card) => void;
   disabled?: boolean;
 }) {
@@ -32,10 +34,10 @@ export function Hand({
       className={cn(
         "battle-hand",
         owner === "enemy" ? "battle-hand--enemy" : "battle-hand--player",
-        "relative z-10 mx-auto grid grid-cols-4 items-start justify-center gap-2 rounded-md border-2 py-2 transition-[border-color,background-color,box-shadow,filter,transform] duration-500 max-[760px]:gap-1.5",
+        "relative z-[6] mx-auto grid grid-cols-4 items-start justify-center gap-2 rounded-md border-2 py-2 transition-[border-color,background-color,box-shadow,filter,transform] duration-500 max-[760px]:gap-1.5",
         "before:pointer-events-none before:absolute before:inset-1 before:rounded before:border before:border-white/5 before:content-['']",
         owner === "enemy"
-          ? "mt-1 w-[min(760px,92vw)] px-3 [article]:min-h-[132px] max-[960px]:w-[min(640px,94vw)] max-[760px]:w-full max-[760px]:px-1 max-[760px]:[article]:min-h-[110px]"
+          ? "mt-2 w-[min(760px,92vw)] px-3 [article]:min-h-[132px] max-[960px]:w-[min(640px,94vw)] max-[760px]:w-full max-[760px]:px-1 max-[760px]:[article]:min-h-[110px]"
           : "mt-2 w-[min(790px,94vw)] px-3 [article]:min-h-[152px] max-[960px]:w-[min(700px,96vw)] max-[760px]:w-full max-[760px]:px-1 max-[760px]:[article]:min-h-[118px]",
         hasPlayedEnemyCard && "pb-8 max-[760px]:pb-6",
         active
@@ -50,6 +52,7 @@ export function Hand({
       {cards.map((card) => {
         const isSelected = selectedId === card.id;
         const isPlayed = playedCardId === card.id;
+        const isRoundWinner = card.used && Boolean(winnerCardIds?.has(card.id));
         const clanBonusActive = isClanBonusActive({ hand: cards }, card);
         const abilityActive =
           fighter && opponent
@@ -61,11 +64,13 @@ export function Hand({
           isSelected && owner === "player" && "-translate-y-2 drop-shadow-[0_0_18px_rgba(255,210,58,0.86)]",
           isSelected && owner === "enemy" && "drop-shadow-[0_0_18px_rgba(255,91,84,0.76)]",
           isPlayed && owner === "enemy" && "z-[3] translate-y-6 scale-[1.045] drop-shadow-[0_18px_24px_rgba(255,74,66,0.58)] max-[760px]:translate-y-5",
-          card.used && "cursor-not-allowed opacity-35 grayscale",
+          card.used && "cursor-not-allowed",
           !card.used && "cursor-pointer hover:-translate-y-1 hover:drop-shadow-[0_0_12px_rgba(255,220,91,0.5)]",
         );
+        const cardFaceClass = cn("battle-card-face--hand", card.used && "opacity-35 grayscale");
 
         const cardDisabled = Boolean(disabled || card.used);
+        const medal = isRoundWinner ? <RoundWinnerMedal owner={owner} /> : null;
 
         return owner === "player" ? (
           <div
@@ -85,7 +90,8 @@ export function Hand({
               onPick?.(card);
             }}
           >
-            <BattleCard card={card} clanBonusActive={clanBonusActive} abilityActive={abilityActive} />
+            <BattleCard card={card} clanBonusActive={clanBonusActive} abilityActive={abilityActive} className={cardFaceClass} />
+            {medal}
           </div>
         ) : (
           <div
@@ -94,10 +100,26 @@ export function Hand({
             data-played={isPlayed ? "true" : "false"}
             className={state}
           >
-            <BattleCard card={card} clanBonusActive={clanBonusActive} abilityActive={abilityActive} />
+            <BattleCard card={card} clanBonusActive={clanBonusActive} abilityActive={abilityActive} className={cardFaceClass} />
+            {medal}
           </div>
         );
       })}
     </section>
+  );
+}
+
+function RoundWinnerMedal({ owner }: { owner: Side }) {
+  return (
+    <span
+      className={cn(
+        "pointer-events-none absolute right-[-10px] top-[38%] z-[8] grid aspect-square w-[clamp(24px,4vw,38px)] -translate-y-1/2 place-items-center rounded-full border-2 border-[#fff1a6] bg-[radial-gradient(circle_at_36%_28%,#fff8bd_0_24%,#ffd64e_25%_58%,#9e6312_59%_100%)] text-[clamp(14px,2.2vw,22px)] font-black leading-none text-[#2a1705] shadow-[0_0_0_2px_rgba(0,0,0,0.72),0_0_18px_rgba(255,216,82,0.78),0_8px_18px_rgba(0,0,0,0.48)] [text-shadow:0_1px_0_rgba(255,255,255,0.55)]",
+        owner === "enemy" && "right-auto left-[-10px]",
+      )}
+      aria-label="Карта виграла раунд"
+      title="Карта виграла раунд"
+    >
+      ★
+    </span>
   );
 }

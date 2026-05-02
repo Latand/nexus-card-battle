@@ -86,7 +86,7 @@ export function CardTooltip({
       <span
         ref={triggerRef}
         aria-describedby={open ? id : undefined}
-        className="inline-flex min-w-0 cursor-help rounded-[3px] outline-none focus-visible:ring-2 focus-visible:ring-[#ffe08a]/80"
+        className="inline-flex w-full min-w-0 cursor-help rounded-[3px] outline-none focus-visible:ring-2 focus-visible:ring-[#ffe08a]/80"
         role="button"
         tabIndex={0}
         onBlur={hide}

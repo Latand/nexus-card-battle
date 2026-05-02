@@ -414,7 +414,7 @@ function DuelProjectiles({ clash, finisher }: { clash: Clash; finisher: boolean 
   const throws = Math.min(DAMAGE_THROWS_CAP, clash.damage);
 
   return (
-    <div className="relative min-h-80 self-stretch overflow-visible max-[760px]:min-h-[260px]" aria-hidden="true">
+    <div className="duel-projectile-lane relative min-h-80 self-stretch overflow-visible max-[760px]:min-h-[260px]" aria-hidden="true">
       {Array.from({ length: throws }).map((_, index) => (
         <DuelProjectile key={`${clash.round}-hit-${index}`} from={clash.winner} index={index} kind={(index + 1) % 4} mode="damage" />
       ))}
@@ -427,7 +427,7 @@ function DuelExchangeProjectiles({ clash }: { clash: Clash }) {
   const throws = buildExchangeThrows(clash);
 
   return (
-    <div className="relative min-h-80 self-stretch overflow-visible max-[760px]:min-h-[260px]" aria-hidden="true" data-testid="duel-exchange-projectiles">
+    <div className="duel-projectile-lane relative min-h-80 self-stretch overflow-visible max-[760px]:min-h-[260px]" aria-hidden="true" data-testid="duel-exchange-projectiles">
       {throws.map((throwItem, index) => (
         <DuelProjectile
           key={`${clash.round}-exchange-${index}`}
@@ -492,9 +492,13 @@ function DuelProjectile({
         {
           "--duration": mode === "finish" ? "1120ms" : mode === "exchange" ? "760ms" : "820ms",
           "--delay": mode === "finish" ? "420ms" : mode === "exchange" ? `${index * 430}ms` : `${index * 240}ms`,
+          "--duel-start-x": "calc(-1 * var(--duel-throw-span))",
+          "--duel-end-x": "var(--duel-throw-span)",
+          "--duel-start-y": mode === "exchange" ? `${10 + (index % 3) * 8}px` : `${18 + (index % 4) * 7}px`,
+          "--duel-end-y": mode === "exchange" ? `${-8 + (index % 3) * 6}px` : `${-14 + (index % 4) * 6}px`,
           width: `${size}px`,
           height: `${size}px`,
-          top: mode === "exchange" ? `calc(30% + ${(index % 4) * 22}px)` : `calc(34% + ${(index % 5) * 18}px)`,
+          top: mode === "exchange" ? `calc(58% + ${(index % 4) * 12}px)` : `calc(62% + ${(index % 5) * 10}px)`,
           left: "calc(50% - 20px)",
         } as CSSProperties
       }

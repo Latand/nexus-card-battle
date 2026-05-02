@@ -10,6 +10,7 @@ const rarityLabels: Record<Rarity, string> = {
   Unique: "Унікальна",
   Legend: "Легендарна",
 };
+const FRAME_URL = "/nexus-assets/cards/nexus-card-frame-generated.png";
 
 export function BattleCard({
   card,
@@ -34,36 +35,36 @@ export function BattleCard({
     containerType: "inline-size",
     "--accent": card.accent,
     backgroundImage: [
-      "linear-gradient(180deg, rgba(255,255,255,0.08), transparent 12%)",
-      `linear-gradient(135deg, color-mix(in srgb, ${card.accent}, transparent 62%), rgba(23,17,21,0.72) 60%)`,
-      "url('/nexus-assets/cards/nexus-card-frame.png')",
+      `linear-gradient(180deg, color-mix(in srgb, ${card.accent}, transparent 82%), transparent 30%, color-mix(in srgb, ${card.accent}, transparent 88%))`,
+      `url('${FRAME_URL}')`,
     ].join(", "),
     backgroundPosition: "center",
-    backgroundSize: "auto, auto, cover",
+    backgroundSize: "100% 100%, 100% 100%",
     backgroundRepeat: "no-repeat",
     boxShadow:
-      `inset 0 0 0 3px color-mix(in srgb, ${card.accent}, #fff 20%), ` +
-      "inset 0 0 0 7px rgba(0,0,0,0.55), 0 14px 30px rgba(0,0,0,0.42)",
+      `0 0 0 1px color-mix(in srgb, ${card.accent}, #f8e7aa 20%), ` +
+      "0 14px 30px rgba(0,0,0,0.42)",
   } as CSSProperties;
 
   return (
     <article
       className={cn(
         "battle-card-face",
-        "relative min-h-[292px] overflow-hidden rounded-[10px] border-[3px] border-[#1f1510] text-left",
-        "before:pointer-events-none before:absolute before:inset-[10px] before:rounded-md before:border before:border-[rgba(255,238,184,0.35)] before:content-['']",
+        "relative aspect-[2/3] min-h-[292px] overflow-hidden rounded-[10px] text-left",
         compact && "compact battle-card-face--compact w-[min(216px,24vw)] min-h-[298px]",
         className,
       )}
       style={style}
     >
-      <div className="battle-card-meta absolute inset-x-[7.5%] top-[1.7%] z-[2] grid grid-cols-[minmax(0,1fr)_minmax(0,44%)] items-start gap-1">
-        <span className="min-w-0 truncate text-[11px] font-black uppercase tracking-[0.08em] text-[#d8bd82]">{rarityLabels[card.rarity]}</span>
-        <b className="min-w-0 truncate text-right text-[11px] leading-none text-[#fff2c1]">{card.clan}</b>
+      <div className="battle-card-meta absolute left-[14.7%] top-[5.05%] z-[3] grid h-[4.4%] w-[70.6%] grid-cols-[minmax(0,1fr)_minmax(0,42%)] items-center gap-[4%] px-[3%]">
+        <span className="min-w-0 truncate text-[clamp(4px,3.85cqw,10px)] font-black uppercase tracking-[0.08em] text-[#dec48c]">
+          {rarityLabels[card.rarity]}
+        </span>
+        <b className="min-w-0 truncate text-right text-[clamp(4px,3.75cqw,10px)] font-black leading-none text-[#fff2c1]">{card.clan}</b>
       </div>
 
       <div
-        className="battle-card-art absolute inset-x-[8.5%] top-[15%] z-[1] h-[34%] overflow-hidden rounded-[7px] border-2 border-[rgba(255,238,184,0.62)]"
+        className="battle-card-art absolute left-[11%] top-[11.1%] z-[1] h-[39.5%] w-[78%] overflow-hidden rounded-[6px]"
         style={{ background: card.portrait }}
       >
         <Image
@@ -71,64 +72,97 @@ export function BattleCard({
           alt=""
           fill
           sizes="220px"
-          className="object-cover object-top opacity-80 mix-blend-screen"
+          className="object-cover object-top opacity-82 mix-blend-screen"
         />
-        <i className="absolute inset-[18px_20px_auto_auto] h-[78px] w-14 rotate-[18deg] border-[3px] border-[rgba(255,255,255,0.38)]" />
+        <i className="absolute inset-[16%_8%_auto_auto] h-[56%] w-[22%] rotate-[18deg] border-[3px] border-[rgba(255,255,255,0.34)]" />
       </div>
 
-      <div className="battle-card-name absolute inset-x-[8%] top-[51.8%] z-[2] truncate text-[clamp(18px,8.7cqw,24px)] font-black leading-none text-[#fff6d0] [text-shadow:0_2px_0_rgba(0,0,0,0.8)]">
-        {card.name}
+      <div className="battle-card-name absolute left-[8.5%] top-[54.6%] z-[3] grid h-[6.4%] w-[83%] place-items-center overflow-hidden px-[4%] text-[clamp(5px,5.2cqw,16px)] font-black leading-none text-[#fff6d0] [text-shadow:0_2px_0_rgba(0,0,0,0.95),0_0_8px_rgba(0,0,0,0.72)]">
+        <span className="block w-full overflow-hidden text-ellipsis whitespace-nowrap text-center">{card.name}</span>
       </div>
 
-      <b className="battle-card-stat battle-card-stat--power absolute left-[7.2%] top-[72.8%] z-[2] grid aspect-square w-[21.5%] place-items-center rounded-full bg-[radial-gradient(circle_at_36%_30%,#fff7c2_0_18%,#ffe08a_20%_62%,#a96c20_64%)] pt-px text-[clamp(19px,9.3cqw,28px)] font-black leading-none text-[#160f0f] shadow-[inset_0_-5px_0_rgba(0,0,0,0.18),0_1px_0_rgba(255,255,255,0.32)]">
-        {card.power}
-      </b>
-      <b className="battle-card-stat battle-card-stat--damage absolute left-[71.2%] top-[72.8%] z-[2] grid aspect-square w-[21.5%] place-items-center rounded-full bg-[radial-gradient(circle_at_36%_30%,#ff9b83_0_18%,#e9503f_20%_62%,#8d2119_64%)] pt-px text-[clamp(19px,9.3cqw,28px)] font-black leading-none text-[#fff8e8] shadow-[inset_0_-5px_0_rgba(0,0,0,0.2),0_1px_0_rgba(255,255,255,0.26)]">
-        {card.damage}
-      </b>
+      <StatSocket centerX="20.7%" centerY="67.4%" tone="power" value={card.power} />
+      <StatSocket centerX="79.3%" centerY="67.4%" tone="damage" value={card.damage} />
 
-      <div className="battle-card-traits absolute inset-x-[30%] top-[72.9%] z-[2] grid gap-[4px]">
-        <CardTooltip
-          className="block min-w-0"
-          eyebrow="Уміння"
-          title={abilityName}
-          description={abilityDescription}
-        >
-          <span
-            data-card-ability
-            className={cn(
-              "battle-card-trait battle-card-trait--ability flex min-h-[20px] w-full min-w-0 items-center justify-center gap-[3px] truncate rounded px-[5px] py-[4px] text-center text-[clamp(8px,3.9cqw,11px)] leading-none",
-              abilityActive === false
-                ? "bg-[rgba(0,0,0,0.3)] text-[#8c836f]"
-                : "bg-[rgba(0,0,0,0.42)] text-[#eadfc5]",
-            )}
-          >
-            <em className="battle-card-trait-kind not-italic">У</em>
-            <span className="battle-card-trait-text min-w-0 truncate">{abilityName}</span>
-          </span>
-        </CardTooltip>
-        <CardTooltip
-          className="block min-w-0"
-          eyebrow="Бонус"
-          title={bonusName}
-          description={bonusDescription}
-        >
-          <span
-            data-card-bonus
-            className={cn(
-              "battle-card-trait battle-card-trait--bonus flex min-h-[20px] w-full min-w-0 items-center justify-center gap-[3px] truncate rounded border px-[5px] py-[4px] text-center text-[clamp(8px,3.9cqw,11px)] leading-none",
-              !bonusVisible
-                ? "border-white/5 bg-[rgba(0,0,0,0.3)] text-[#7f7869]"
-                : clanBonusActive === false
-                  ? "border-white/5 bg-[rgba(0,0,0,0.28)] text-[#8c836f]"
-                  : "border-[color-mix(in_srgb,var(--accent),#fff_18%)] bg-[rgba(0,0,0,0.5)] text-[#fff2c6] shadow-[0_0_9px_color-mix(in_srgb,var(--accent),transparent_56%)]",
-            )}
-          >
-            <em className="battle-card-trait-kind not-italic">Б</em>
-            <span className="battle-card-trait-text min-w-0 truncate">{bonusName}</span>
-          </span>
-        </CardTooltip>
-      </div>
+      <TraitSlot
+        active={abilityActive !== false}
+        description={abilityDescription}
+        eyebrow="Уміння"
+        title={abilityName}
+        top="75.8%"
+      />
+      <TraitSlot
+        active={bonusVisible && clanBonusActive !== false}
+        description={bonusDescription}
+        disabled={!bonusVisible}
+        eyebrow="Бонус"
+        title={bonusName}
+        top="84.9%"
+      />
     </article>
+  );
+}
+
+function StatSocket({
+  centerX,
+  centerY,
+  tone,
+  value,
+}: {
+  centerX: string;
+  centerY: string;
+  tone: "power" | "damage";
+  value: number;
+}) {
+  return (
+    <b
+      className={cn(
+        "battle-card-stat absolute z-[3] grid aspect-square w-[14.2%] -translate-x-1/2 -translate-y-1/2 place-items-center text-center text-[clamp(7px,9.4cqw,29px)] font-black leading-none",
+        tone === "power"
+          ? "battle-card-stat--power text-[#ffe08a] [text-shadow:0_2px_0_rgba(0,0,0,0.95),0_0_8px_rgba(255,224,138,0.42)]"
+          : "battle-card-stat--damage text-[#ff7668] [text-shadow:0_2px_0_rgba(0,0,0,0.95),0_0_8px_rgba(255,92,72,0.42)]",
+      )}
+      style={{ left: centerX, top: centerY }}
+    >
+      <span>{value}</span>
+    </b>
+  );
+}
+
+function TraitSlot({
+  active,
+  description,
+  disabled = false,
+  eyebrow,
+  title,
+  top,
+}: {
+  active: boolean;
+  description: string;
+  disabled?: boolean;
+  eyebrow: string;
+  title: string;
+  top: string;
+}) {
+  return (
+    <div
+      data-card-ability={eyebrow === "Уміння" ? "true" : undefined}
+      data-card-bonus={eyebrow === "Бонус" ? "true" : undefined}
+      className={cn(
+        "battle-card-trait absolute left-[8.5%] z-[3] h-[5.9%] w-[83%]",
+        disabled
+          ? "text-[#736c5e]"
+          : active
+            ? "text-[#fff2c6] [text-shadow:0_1px_0_rgba(0,0,0,0.84)]"
+            : "text-[#8f8777]",
+      )}
+      style={{ top }}
+    >
+      <CardTooltip className="block h-full w-full min-w-0" eyebrow={eyebrow} title={title} description={description}>
+        <span className="grid h-full w-full min-w-0 place-items-center overflow-hidden px-[2.1%] text-center text-[clamp(3.5px,3.35cqw,9px)] leading-none">
+          <span className="battle-card-trait-text block w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-center font-black uppercase tracking-[0.01em] [text-shadow:0_1px_0_rgba(0,0,0,0.95),0_0_6px_rgba(0,0,0,0.7)]">{title}</span>
+        </span>
+      </CardTooltip>
+    </div>
   );
 }
