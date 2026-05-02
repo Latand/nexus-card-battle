@@ -3,6 +3,7 @@ const { createServer } = require("node:http");
 const crypto = require("node:crypto");
 const next = require("next");
 const { WebSocketServer } = require("ws");
+const { cards } = require("./src/features/battle/model/cards.ts");
 
 const dev = process.argv.includes("--dev") || process.env.NODE_ENV === "development";
 const hostname = getCliValue("--hostname") || process.env.HOSTNAME || "0.0.0.0";
@@ -25,6 +26,7 @@ const BATTLE_HAND_SIZE = 4;
 const MIN_DECK_SIZE = 8;
 const TURN_SECONDS = Number.parseInt(process.env.PVP_TURN_SECONDS || "75", 10);
 const TURN_TIMEOUT_GRACE_SECONDS = Number.parseInt(process.env.PVP_TURN_TIMEOUT_GRACE_SECONDS || "10", 10);
+const activeCardIds = new Set(cards.map((card) => card.id));
 
 app.prepare().then(() => {
   requestHandler = (request, response) => {
@@ -147,6 +149,18 @@ function joinHumanQueue(session, message) {
   const deckIds = sanitizeStringArray(message.deckIds);
   const collectionIds = sanitizeStringArray(message.collectionIds);
   session.user = sanitizeUser(message.user);
+
+  const deckError = validateKnownCardIds(deckIds, "deck");
+  if (deckError) {
+    sendError(session, deckError);
+    return;
+  }
+
+  const collectionError = validateKnownCardIds(collectionIds, "collection");
+  if (collectionError) {
+    sendError(session, collectionError);
+    return;
+  }
 
   if (deckIds.length < MIN_DECK_SIZE) {
     sendError(session, `Deck must contain at least ${MIN_DECK_SIZE} cards.`);
@@ -467,6 +481,12 @@ function isOpen(ws) {
 function sanitizeStringArray(value) {
   if (!Array.isArray(value)) return [];
   return [...new Set(value.filter((item) => typeof item === "string" && item.length > 0))];
+}
+
+function validateKnownCardIds(cardIds, source) {
+  const unknown = cardIds.filter((cardId) => !activeCardIds.has(cardId));
+  if (unknown.length === 0) return null;
+  return `Unknown ${source} card ids: ${unknown.join(", ")}`;
 }
 
 function sanitizeMove(value) {

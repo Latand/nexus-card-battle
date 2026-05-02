@@ -54,9 +54,6 @@ export function BattleOverlay({
     opponentCard: clash.playerCard,
     opponentEnergyBid: clash.playerEnergy,
   });
-  const playerBonusVisible = isCopyClanBonusResolved(clash.playerCard, player.hand);
-  const enemyBonusVisible = isCopyClanBonusResolved(clash.enemyCard, enemy.hand);
-
   return (
     <section
       className="fixed inset-0 z-40 grid place-items-center bg-[#05080b] p-3 max-[760px]:p-2"
@@ -108,7 +105,6 @@ export function BattleOverlay({
               side="player"
               dimmed={isDamage && !playerTakesRealDamage}
               abilityActive={playerAbilityActive}
-              bonusVisible={playerBonusVisible}
             />
           </div>
 
@@ -131,7 +127,6 @@ export function BattleOverlay({
               side="enemy"
               dimmed={isDamage && !enemyTakesRealDamage}
               abilityActive={enemyAbilityActive}
-              bonusVisible={enemyBonusVisible}
             />
           </div>
         </div>
@@ -142,13 +137,6 @@ export function BattleOverlay({
       </div>
     </section>
   );
-}
-
-function isCopyClanBonusResolved(card: Clash["playerCard"], hand: Clash["playerCard"][]) {
-  const copyEffects = card.bonus.effects.filter((effect) => effect.key === "copy-clan-bonus");
-  if (copyEffects.length === 0) return true;
-
-  return copyEffects.some((effect) => effect.copyClan && hand.some((handCard) => handCard.clan === effect.copyClan));
 }
 
 function hasControlEffect(effects: ResolvedEffect[], target: Side) {
@@ -321,7 +309,6 @@ function DuelCombatant({
   side,
   dimmed,
   abilityActive,
-  bonusVisible,
 }: {
   fighter: Fighter;
   health: number;
@@ -331,13 +318,12 @@ function DuelCombatant({
   side: Side;
   dimmed: boolean;
   abilityActive: boolean;
-  bonusVisible: boolean;
 }) {
   if (showAvatar) return <FighterImpactAvatar fighter={fighter} health={health} damage={damage} side={side} />;
 
   return (
     <div className={cn("relative transition-[filter,opacity,transform] duration-300", dimmed && "scale-[0.94] opacity-55 brightness-75 saturate-[0.7]")}>
-      <BattleCard card={card} compact abilityActive={abilityActive} bonusVisible={bonusVisible} />
+      <BattleCard card={card} compact abilityActive={abilityActive} />
     </div>
   );
 }

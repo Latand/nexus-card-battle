@@ -44,10 +44,8 @@ export function SelectionOverlay({
   onToggleBoost: () => void;
   onConfirm: () => void;
 }) {
-  const selectedBonusVisible = isCopyClanBonusResolved(selected, player.hand);
-  const knownEnemyBonusVisible = knownEnemyCard ? isCopyClanBonusResolved(knownEnemyCard, enemy.hand) : false;
-  const selectedClanBonusActive = isClanBonusActive(player, selected) && selectedBonusVisible;
-  const knownEnemyClanBonusActive = knownEnemyCard ? isClanBonusActive(enemy, knownEnemyCard) && knownEnemyBonusVisible : false;
+  const selectedClanBonusActive = isClanBonusActive(player, selected);
+  const knownEnemyClanBonusActive = knownEnemyCard ? isClanBonusActive(enemy, knownEnemyCard) : false;
   const selectedAbilityActive = hasApplicableAbilityEffect(selected, {
     owner: player,
     opponent: enemy,
@@ -89,7 +87,6 @@ export function SelectionOverlay({
             compact
             clanBonusActive={selectedClanBonusActive}
             abilityActive={selectedAbilityActive}
-            bonusVisible={selectedBonusVisible}
           />
         </div>
 
@@ -154,9 +151,7 @@ export function SelectionOverlay({
               title={selected.bonus.name}
               description={selected.bonus.description}
             >
-              <span className={cn("block truncate rounded px-1 py-0.5", !selectedBonusVisible && "text-[#8c836f]")}>
-                {selected.bonus.name}
-              </span>
+              <span className="block truncate rounded px-1 py-0.5">{selected.bonus.name}</span>
             </CardTooltip>
           </div>
 
@@ -184,7 +179,6 @@ export function SelectionOverlay({
               compact
               clanBonusActive={knownEnemyClanBonusActive}
               abilityActive={knownEnemyAbilityActive}
-              bonusVisible={knownEnemyBonusVisible}
             />
             {knownEnemyEnergy !== undefined ? (
               <span className="min-w-[112px] rounded border border-[#7656f0]/70 bg-black/70 px-2 py-1 text-center text-xs font-black uppercase text-[#fff8df] shadow-[0_0_12px_rgba(118,86,240,0.38)]">
@@ -212,11 +206,4 @@ function stepButton(kind: "-" | "+") {
     "grid h-9 w-full cursor-pointer place-items-center rounded border-2 border-black/60 pb-0.5 text-xl font-black leading-none text-[#fff8d8] shadow-[inset_0_-4px_0_rgba(0,0,0,0.2),0_6px_12px_rgba(0,0,0,0.32)] disabled:cursor-not-allowed disabled:opacity-45 max-[620px]:h-8 max-[620px]:text-lg",
     kind === "+" ? "bg-[linear-gradient(180deg,#4de06f,#168e36)]" : "bg-[linear-gradient(180deg,#dfb44d,#8b5d18)]",
   );
-}
-
-function isCopyClanBonusResolved(card: Card, hand: Card[]) {
-  const copyEffects = card.bonus.effects.filter((effect) => effect.key === "copy-clan-bonus");
-  if (copyEffects.length === 0) return true;
-
-  return copyEffects.some((effect) => effect.copyClan && hand.some((handCard) => handCard.clan === effect.copyClan));
 }

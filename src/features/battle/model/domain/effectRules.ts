@@ -267,7 +267,6 @@ function buildEffectId(spec: EffectSpec) {
     spec.condition ?? null,
     spec.outcome ?? null,
     spec.statusKind ?? null,
-    spec.copyClan ?? null,
     spec.unblockable ? "unblockable" : null,
   ]
     .filter(Boolean)

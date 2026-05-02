@@ -89,29 +89,6 @@ export const clanList = [
     }
   },
   {
-    "slug": "corr",
-    "name": "C.O.R.R.",
-    "sourceUrl": "https://www.citadel-liga.info/nexus/lib2/corr",
-    "logoUrl": "http://nexus.ru/images/clans/20/logo.png",
-    "cardCounts": {
-      "Common": 48,
-      "Rare": 39,
-      "Unique": 23,
-      "Legend": 6
-    },
-    "bonus": {
-      "id": "бонус-toyz",
-      "name": "Бонус Toyz",
-      "description": "Копирует бонус фракції Toyz, якщо у власника картки в руке есть картки Toyz: атака суперника зменшується на 13, но не ниже 17.",
-      "effects": [
-        {
-          "key": "copy-clan-bonus",
-          "copyClan": "Toyz"
-        }
-      ]
-    }
-  },
-  {
     "slug": "chasers",
     "name": "Chasers",
     "sourceUrl": "https://www.citadel-liga.info/nexus/lib2/chasers",

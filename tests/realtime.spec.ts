@@ -74,7 +74,7 @@ test("does not leak the first PvP mover energy before reveal", async ({ baseURL 
   const firstMover = firstReady.firstPlayerId === firstReady.playerId ? first : second;
   const secondMover = firstMover === first ? second : first;
   const firstMoverReady = firstMover === first ? firstReady : secondReady;
-  const firstMoverReadyPayload = firstMoverReady as { playerId: string; players: Record<string, { handIds?: string[] }> };
+  const firstMoverReadyPayload = firstMoverReady as unknown as { playerId: string; players: Record<string, { handIds?: string[] }> };
   const firstMoverPlayer = firstMoverReadyPayload.players[firstMoverReadyPayload.playerId];
   const cardId = firstMoverPlayer.handIds?.[0] ?? deckIds[0];
 
@@ -97,6 +97,35 @@ test("does not leak the first PvP mover energy before reveal", async ({ baseURL 
 
   first.close();
   second.close();
+});
+
+test("rejects removed PvP card ids before matchmaking", async ({ baseURL }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const deckIds = cards.slice(0, 9).map((card) => card.id);
+  const staleDeckIds = ["corr-1285", ...deckIds.slice(0, 8)];
+  const staleDeckClient = await connectRealtimeClient(wsUrl, "Stale Deck", staleDeckIds);
+
+  const staleDeckError = await staleDeckClient.waitFor("error", { timeoutMs: 2_000 });
+  expect(staleDeckError.message).toBe("Unknown deck card ids: corr-1285");
+  await expectNoRealtimeMessage(staleDeckClient, "queued");
+  await expectNoRealtimeMessage(staleDeckClient, "match_ready");
+
+  const staleCollectionClient = await connectRealtimeClient(wsUrl, "Stale Collection", deckIds, {
+    collectionIds: [...deckIds, "corr-1285"],
+  });
+
+  const staleCollectionError = await staleCollectionClient.waitFor("error", { timeoutMs: 2_000 });
+  expect(staleCollectionError.message).toBe("Unknown collection card ids: corr-1285");
+  await expectNoRealtimeMessage(staleCollectionClient, "queued");
+  await expectNoRealtimeMessage(staleCollectionClient, "match_ready");
+
+  const validClient = await connectRealtimeClient(wsUrl, "Valid", deckIds);
+  await expect(validClient.waitFor("queued", { timeoutMs: 2_000 })).resolves.toMatchObject({ type: "queued" });
+  await expectNoRealtimeMessage(validClient, "match_ready");
+
+  staleDeckClient.close();
+  staleCollectionClient.close();
+  validClient.close();
 });
 
 async function resolveFirstMover(first: Page, second: Page) {
@@ -166,7 +195,9 @@ type RealtimeMessage = {
   [key: string]: unknown;
 };
 
-async function connectRealtimeClient(url: string, name: string, deckIds: string[]) {
+type RealtimeClient = Awaited<ReturnType<typeof connectRealtimeClient>>;
+
+async function connectRealtimeClient(url: string, name: string, deckIds: string[], options: { collectionIds?: string[] } = {}) {
   const socket = new WebSocket(url);
   const messages: RealtimeMessage[] = [];
   const waiters = new Map<string, ((message: RealtimeMessage) => void)[]>();
@@ -188,7 +219,7 @@ async function connectRealtimeClient(url: string, name: string, deckIds: string[
     JSON.stringify({
       type: "join_human",
       deckIds,
-      collectionIds: deckIds,
+      collectionIds: options.collectionIds ?? deckIds,
       user: { name },
     }),
   );
@@ -200,15 +231,38 @@ async function connectRealtimeClient(url: string, name: string, deckIds: string[
     close() {
       socket.close();
     },
-    waitFor(type: string) {
+    messages() {
+      return messages;
+    },
+    waitFor(type: string, waitOptions: { timeoutMs?: number } = {}) {
       const existing = messages.find((message) => message.type === type);
       if (existing) return Promise.resolve(existing);
 
-      return new Promise<RealtimeMessage>((resolve) => {
+      return new Promise<RealtimeMessage>((resolve, reject) => {
         const handlers = waiters.get(type) ?? [];
-        handlers.push(resolve);
+        let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+        const handler = (message: RealtimeMessage) => {
+          if (timeoutHandle) clearTimeout(timeoutHandle);
+          resolve(message);
+        };
+
+        handlers.push(handler);
         waiters.set(type, handlers);
+
+        if (waitOptions.timeoutMs !== undefined) {
+          timeoutHandle = setTimeout(() => {
+            const nextHandlers = waiters.get(type)?.filter((item) => item !== handler) ?? [];
+            if (nextHandlers.length > 0) waiters.set(type, nextHandlers);
+            else waiters.delete(type);
+            reject(new Error(`Timed out waiting for ${type}.`));
+          }, waitOptions.timeoutMs);
+        }
       });
     },
   };
+}
+
+async function expectNoRealtimeMessage(client: RealtimeClient, type: string) {
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  expect(client.messages().some((message) => message.type === type)).toBe(false);
 }

@@ -50,12 +50,11 @@ export function Hand({
       {cards.map((card) => {
         const isSelected = selectedId === card.id;
         const isPlayed = playedCardId === card.id;
-        const bonusVisible = isCopyClanBonusResolved(card, cards);
-        const clanBonusActive = isClanBonusActive({ hand: cards }, card) && bonusVisible;
+        const clanBonusActive = isClanBonusActive({ hand: cards }, card);
         const abilityActive =
           fighter && opponent
             ? hasApplicableAbilityEffect(card, { owner: fighter, opponent })
-            : isCopyClanAbilityResolved(card, cards);
+            : true;
         const state = cn(
           "battle-hand-card",
           "relative z-[1] block border-0 bg-transparent p-0 text-left text-inherit transition-[filter,transform,opacity] duration-500",
@@ -86,7 +85,7 @@ export function Hand({
               onPick?.(card);
             }}
           >
-            <BattleCard card={card} clanBonusActive={clanBonusActive} abilityActive={abilityActive} bonusVisible={bonusVisible} />
+            <BattleCard card={card} clanBonusActive={clanBonusActive} abilityActive={abilityActive} />
           </div>
         ) : (
           <div
@@ -95,24 +94,10 @@ export function Hand({
             data-played={isPlayed ? "true" : "false"}
             className={state}
           >
-            <BattleCard card={card} clanBonusActive={clanBonusActive} abilityActive={abilityActive} bonusVisible={bonusVisible} />
+            <BattleCard card={card} clanBonusActive={clanBonusActive} abilityActive={abilityActive} />
           </div>
         );
       })}
     </section>
   );
-}
-
-function isCopyClanAbilityResolved(card: Card, hand: Card[]) {
-  const copyEffects = card.ability.effects.filter((effect) => effect.key === "copy-clan-bonus");
-  if (copyEffects.length === 0) return true;
-
-  return copyEffects.some((effect) => effect.copyClan && hand.some((handCard) => handCard.clan === effect.copyClan));
-}
-
-function isCopyClanBonusResolved(card: Card, hand: Card[]) {
-  const copyEffects = card.bonus.effects.filter((effect) => effect.key === "copy-clan-bonus");
-  if (copyEffects.length === 0) return true;
-
-  return copyEffects.some((effect) => effect.copyClan && hand.some((handCard) => handCard.clan === effect.copyClan));
 }
