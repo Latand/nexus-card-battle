@@ -18,6 +18,7 @@ type TelegramWindow = Window & {
       expand?: () => void;
       isFullscreen?: boolean;
       isOrientationLocked?: boolean;
+      platform?: string;
       isVersionAtLeast?: (version: string) => boolean;
       requestFullscreen?: () => void;
       lockOrientation?: () => void;
@@ -55,7 +56,7 @@ export function GameRoot() {
   const [battleMode, setBattleMode] = useState<BattleMode>("ai");
   const [deckIds, setDeckIds] = useState(() => createStarterDeckIds(collectionIds));
   const [telegramPlayer, setTelegramPlayer] = useState<TelegramPlayer>(() => readTelegramPlayer());
-  const [telegramLandscapeReady, setTelegramLandscapeReady] = useState(() => !isTelegramWebAppRuntime() || isLandscapeViewport());
+  const [telegramLandscapePromptActive, setTelegramLandscapePromptActive] = useState(false);
   const playerName = telegramPlayer.name;
   const deckIdsRef = useRef(deckIds);
   const deckTouchedRef = useRef(false);
@@ -95,7 +96,7 @@ export function GameRoot() {
     let disposed = false;
     const syncLandscape = () => {
       const landscape = isLandscapeViewport();
-      setTelegramLandscapeReady(landscape);
+      setTelegramLandscapePromptActive(isMobileTelegramClient(webApp) && !landscape);
 
       if (landscape && canUseTelegramVersion(webApp, "8.0") && !webApp.isOrientationLocked) {
         try {
@@ -110,7 +111,7 @@ export function GameRoot() {
     webApp.expand?.();
     webApp.disableVerticalSwipes?.();
     requestTelegramFullscreen(webApp);
-    void requestLandscapeOrientation().finally(() => {
+    void requestLandscapeOrientation(webApp).finally(() => {
       if (!disposed) syncLandscape();
     });
 
@@ -163,7 +164,7 @@ export function GameRoot() {
             onOpenCollection={() => setScreen("collection")}
           />
         )}
-        <TelegramLandscapeOverlay active={!telegramLandscapeReady} />
+        <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
       </>
     );
   }
@@ -180,7 +181,7 @@ export function GameRoot() {
           setScreen("battle");
         }}
       />
-      <TelegramLandscapeOverlay active={!telegramLandscapeReady} />
+      <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
     </>
   );
 }
@@ -252,10 +253,6 @@ function getTelegramWebApp() {
   return (window as TelegramWindow).Telegram?.WebApp;
 }
 
-function isTelegramWebAppRuntime() {
-  return Boolean(getTelegramWebApp());
-}
-
 function requestTelegramFullscreen(webApp: NonNullable<TelegramWindow["Telegram"]>["WebApp"]) {
   if (!webApp || webApp.isFullscreen || !canUseTelegramVersion(webApp, "8.0")) return;
 
@@ -266,8 +263,9 @@ function requestTelegramFullscreen(webApp: NonNullable<TelegramWindow["Telegram"
   }
 }
 
-async function requestLandscapeOrientation() {
+async function requestLandscapeOrientation(webApp: NonNullable<TelegramWindow["Telegram"]>["WebApp"]) {
   if (typeof window === "undefined") return;
+  if (!isMobileTelegramClient(webApp)) return;
 
   try {
     await (window.screen.orientation as LockableScreenOrientation | undefined)?.lock?.("landscape");
@@ -289,6 +287,14 @@ function canUseTelegramVersion(webApp: NonNullable<TelegramWindow["Telegram"]>["
 function isLandscapeViewport() {
   if (typeof window === "undefined") return true;
   return window.matchMedia("(orientation: landscape)").matches || window.innerWidth >= window.innerHeight;
+}
+
+function isMobileTelegramClient(webApp: NonNullable<TelegramWindow["Telegram"]>["WebApp"]) {
+  const platform = webApp?.platform?.toLowerCase();
+  if (platform === "android" || platform === "ios") return true;
+  if (platform === "tdesktop" || platform === "macos" || platform === "weba" || platform === "webk") return false;
+
+  return window.matchMedia("(pointer: coarse)").matches && Math.min(window.innerWidth, window.innerHeight) < 820;
 }
 
 function TelegramLandscapeOverlay({ active }: { active: boolean }) {
