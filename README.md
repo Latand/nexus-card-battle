@@ -45,6 +45,12 @@ By default Compose binds the app to `127.0.0.1:3010` and the container listens o
 Compose also starts MongoDB with the persistent `nexus_mongodb_data` volume and provides `MONGODB_URI=mongodb://mongo:27017/nexus-card-battle` to the app. Set `MONGODB_URI` in the shell to point the app at a different MongoDB instance.
 See [docs/deploy.md](docs/deploy.md) for the Nginx WebSocket proxy block.
 
+## Known Limitations
+
+Until booster onboarding lands, empty new profiles render a non-durable starter deck fallback so the existing battle prototype remains playable. The fallback is not imported from legacy CloudStorage or `sessionStorage`.
+
+Telegram profiles currently use the client-provided `Telegram.WebApp.initDataUnsafe.user.id` for MVP bootstrap. Server-side Telegram `initData` HMAC verification is intentionally deferred and should be added before treating Telegram identity as trusted.
+
 ## Verification
 
 ```bash

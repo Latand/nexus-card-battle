@@ -12,6 +12,12 @@ import { PLAYER_DECK_SIZE } from "../../model/randomDeck";
 type Props = {
   collectionIds: string[];
   deckIds: string[];
+  profileStatus: "loading" | "ready" | "fallback";
+  profileIdentityMode?: "telegram" | "guest";
+  profileOwnedCardCount: number;
+  profileDeckCount: number;
+  deckSource: "profile" | "starter-fallback";
+  starterFreeBoostersRemaining: number;
   onDeckChange: (deckIds: string[]) => void;
   onPlay: (deckIds: string[], mode: "ai" | "human") => void;
 };
@@ -47,7 +53,18 @@ const sortModes: { id: SortMode; label: string }[] = [
   { id: "name", label: "Ім’я" },
 ];
 
-export function CollectionDeckScreen({ collectionIds, deckIds: savedDeckIds = [], onDeckChange, onPlay }: Props) {
+export function CollectionDeckScreen({
+  collectionIds,
+  deckIds: savedDeckIds = [],
+  profileStatus,
+  profileIdentityMode,
+  profileOwnedCardCount,
+  profileDeckCount,
+  deckSource,
+  starterFreeBoostersRemaining,
+  onDeckChange,
+  onPlay,
+}: Props) {
   const collectionSet = useMemo(() => new Set(collectionIds), [collectionIds]);
   const collectionCards = useMemo(() => cards.filter((card) => collectionSet.has(card.id)), [collectionSet]);
   const deckIds = useMemo(
@@ -120,7 +137,16 @@ export function CollectionDeckScreen({ collectionIds, deckIds: savedDeckIds = []
   }
 
   return (
-    <main className="min-h-screen bg-[#07090b] text-[#f9efd8]">
+    <main
+      className="min-h-screen bg-[#07090b] text-[#f9efd8]"
+      data-testid="player-profile-shell"
+      data-profile-status={profileStatus}
+      data-profile-identity-mode={profileIdentityMode ?? "unknown"}
+      data-profile-owned-card-count={profileOwnedCardCount}
+      data-profile-deck-count={profileDeckCount}
+      data-deck-source={deckSource}
+      data-starter-free-boosters-remaining={starterFreeBoostersRemaining}
+    >
       <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,rgba(11,15,17,0.96),rgba(5,7,10,0.98)),url('/nexus-assets/backgrounds/arena-bar-1024x576.png')] bg-cover bg-center px-4 py-4 max-[760px]:px-2">
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(250,199,76,0.06),transparent_24%,transparent_76%,rgba(75,204,220,0.06))]" />
 

@@ -1,14 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cards } from "@/features/battle/model/cards";
 import { BattleGame } from "@/features/battle/ui/BattleGame";
 import { RealtimeBattleGame } from "@/features/battle/ui/RealtimeBattleGame";
+import { fetchPlayerProfile, resolveClientPlayerIdentity } from "@/features/player/profile/client";
+import type { PlayerIdentity, PlayerProfile } from "@/features/player/profile/types";
 import type { TelegramPlayer } from "@/shared/lib/telegram";
 import { PLAYER_DECK_SIZE } from "../model/randomDeck";
 import { CollectionDeckScreen } from "./collection/CollectionDeckScreen";
 
 type BattleMode = "ai" | "human";
+type ProfileStatus = "loading" | "ready" | "fallback";
+type DeckSource = "profile" | "starter-fallback";
 type TelegramWindow = Window & {
   Telegram?: {
     WebApp?: {
@@ -39,12 +43,20 @@ type LockableScreenOrientation = ScreenOrientation & {
 };
 
 export function GameRoot() {
-  const [collectionIds] = useState(() => cards.map((card) => card.id));
+  const allCardIds = useMemo(() => cards.map((card) => card.id), []);
   const [screen, setScreen] = useState<"collection" | "battle">("collection");
   const [battleMode, setBattleMode] = useState<BattleMode>("ai");
-  const [deckIds, setDeckIds] = useState(() => createStarterDeckIds(collectionIds));
+  const [deckIds, setDeckIds] = useState(() => createStarterDeckIds(allCardIds));
+  const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
+  const [playerIdentity, setPlayerIdentity] = useState<PlayerIdentity | null>(null);
+  const [profileStatus, setProfileStatus] = useState<ProfileStatus>("loading");
   const [telegramPlayer, setTelegramPlayer] = useState<TelegramPlayer>(() => readTelegramPlayer());
   const [telegramLandscapePromptActive, setTelegramLandscapePromptActive] = useState(false);
+  const deckTouchedRef = useRef(false);
+  const collectionIds = useMemo(() => getCollectionIdsForProfile(playerProfile, allCardIds), [allCardIds, playerProfile]);
+  const profileDeckIds = useMemo(() => getDeckIdsForProfile(playerProfile, collectionIds), [collectionIds, playerProfile]);
+  const deckSource: DeckSource = profileDeckIds.length > 0 ? "profile" : "starter-fallback";
+  const starterFreeBoostersRemaining = playerProfile?.starterFreeBoostersRemaining ?? 0;
   const playerName = telegramPlayer.name;
 
   useEffect(() => {
@@ -54,6 +66,35 @@ export function GameRoot() {
       window.clearTimeout(telegramPlayerHandle);
     };
   }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    const identity = resolveClientPlayerIdentity();
+
+    void fetchPlayerProfile(identity)
+      .then((profile) => {
+        if (disposed) return;
+        setPlayerIdentity(identity);
+        setPlayerProfile(profile);
+        setProfileStatus("ready");
+      })
+      .catch(() => {
+        if (disposed) return;
+        setPlayerIdentity(identity);
+        setProfileStatus("fallback");
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (deckTouchedRef.current) return;
+
+    const nextDeckIds = profileDeckIds.length > 0 ? profileDeckIds : createStarterDeckIds(collectionIds);
+    setDeckIds(nextDeckIds);
+  }, [collectionIds, profileDeckIds]);
 
   useEffect(() => {
     const webApp = getTelegramWebApp();
@@ -97,6 +138,7 @@ export function GameRoot() {
     (nextDeckIds: string[]) => {
       const sanitizedDeckIds = sanitizeDeckIds(nextDeckIds, collectionIds);
 
+      deckTouchedRef.current = true;
       setDeckIds(sanitizedDeckIds);
     },
     [collectionIds],
@@ -131,6 +173,12 @@ export function GameRoot() {
       <CollectionDeckScreen
         collectionIds={collectionIds}
         deckIds={deckIds}
+        profileStatus={profileStatus}
+        profileIdentityMode={playerIdentity?.mode}
+        profileOwnedCardCount={playerProfile?.ownedCardIds.length ?? 0}
+        profileDeckCount={playerProfile?.deckIds.length ?? 0}
+        deckSource={deckSource}
+        starterFreeBoostersRemaining={starterFreeBoostersRemaining}
         onDeckChange={handleDeckChange}
         onPlay={(nextDeckIds, mode) => {
           handleDeckChange(nextDeckIds);
@@ -234,6 +282,20 @@ function TelegramLandscapeOverlay({ active }: { active: boolean }) {
       </div>
     </section>
   );
+}
+
+function getCollectionIdsForProfile(profile: PlayerProfile | null, allCardIds: string[]) {
+  if (!profile || profile.ownedCardIds.length === 0) return allCardIds;
+
+  const knownCards = new Set(allCardIds);
+  const ownedCardIds = unique(profile.ownedCardIds).filter((cardId) => knownCards.has(cardId));
+
+  return ownedCardIds.length > 0 ? ownedCardIds : allCardIds;
+}
+
+function getDeckIdsForProfile(profile: PlayerProfile | null, collectionIds: string[]) {
+  if (!profile || profile.deckIds.length === 0) return [];
+  return unique(profile.deckIds).filter((cardId) => collectionIds.includes(cardId));
 }
 
 function sanitizeDeckIds(deckIds: string[], collectionIds: string[]) {
