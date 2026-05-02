@@ -25,8 +25,13 @@ type MongoBoosterOpeningDocument = {
   createdAt: Date;
 };
 
+type MongoClientPromiseCache = {
+  key: string;
+  promise: Promise<MongoClient>;
+};
+
 const mongoGlobal = globalThis as typeof globalThis & {
-  __nexusPlayerMongoClientPromise?: Promise<MongoClient>;
+  __nexusPlayerMongoClientPromise?: MongoClientPromiseCache;
 };
 
 export function getMongoPlayerProfileStore() {
@@ -252,10 +257,25 @@ function isDuplicateKeyError(error: unknown) {
 }
 
 function getMongoClient(uri: string, serverSelectionTimeoutMS: number) {
-  mongoGlobal.__nexusPlayerMongoClientPromise ??= new MongoClient(uri, {
+  const key = `${uri}|${serverSelectionTimeoutMS}`;
+  if (mongoGlobal.__nexusPlayerMongoClientPromise?.key === key) {
+    return mongoGlobal.__nexusPlayerMongoClientPromise.promise;
+  }
+
+  const promise = new MongoClient(uri, {
     serverSelectionTimeoutMS,
-  }).connect();
-  return mongoGlobal.__nexusPlayerMongoClientPromise;
+  })
+    .connect()
+    .catch((error) => {
+      if (mongoGlobal.__nexusPlayerMongoClientPromise?.promise === promise) {
+        mongoGlobal.__nexusPlayerMongoClientPromise = undefined;
+      }
+
+      throw error;
+    });
+
+  mongoGlobal.__nexusPlayerMongoClientPromise = { key, promise };
+  return promise;
 }
 
 function getMongoConfig() {
