@@ -23,7 +23,7 @@ const sessions = new Map();
 const matches = new Map();
 let waitingSessionId = null;
 const BATTLE_HAND_SIZE = 4;
-const MIN_DECK_SIZE = 8;
+const MIN_DECK_SIZE = 9;
 const TURN_SECONDS = Number.parseInt(process.env.PVP_TURN_SECONDS || "75", 10);
 const TURN_TIMEOUT_GRACE_SECONDS = Number.parseInt(process.env.PVP_TURN_TIMEOUT_GRACE_SECONDS || "10", 10);
 const activeCardIds = new Set(cards.map((card) => card.id));
