@@ -7,13 +7,13 @@ type ResourceTone = "health" | "energy" | "attack";
 const activePillByTone: Record<ResourceTone, string> = {
   energy: "border-[#7a4810] bg-[linear-gradient(180deg,#fff08a,#ffc22e_46%,#a7600d)] shadow-[0_0_7px_rgba(255,204,63,0.58),inset_0_-2px_0_rgba(0,0,0,0.18)]",
   health: "border-[#176927] bg-[linear-gradient(180deg,#bbff83,#3fd94c_48%,#14762b)] shadow-[0_0_7px_rgba(96,227,86,0.62),inset_0_-2px_0_rgba(0,0,0,0.18)]",
-  attack: "border-[#71142e] bg-[linear-gradient(180deg,#ffc1d0,#ff4c73_48%,#8f1737)] shadow-[0_0_7px_rgba(255,77,116,0.6),inset_0_-2px_0_rgba(0,0,0,0.2)]",
+  attack: "border-[#0c5b70] bg-[linear-gradient(180deg,#c6fbff,#43c5e4_48%,#126a8c)] shadow-[0_0_7px_rgba(78,211,244,0.58),inset_0_-2px_0_rgba(0,0,0,0.2)]",
 };
 
 const counterBadgeByTone: Record<ResourceTone, string> = {
   energy: "bg-[linear-gradient(180deg,#ffe371,#c88613)]",
   health: "bg-[linear-gradient(180deg,#9dff63,#21a72d)]",
-  attack: "bg-[linear-gradient(180deg,#ff9bb2,#c71f4d)] text-[#fff8e8]",
+  attack: "bg-[linear-gradient(180deg,#aaf5ff,#1587aa)] text-[#f5feff]",
 };
 
 export function ResourceCounter({

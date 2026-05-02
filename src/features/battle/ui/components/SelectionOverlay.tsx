@@ -5,6 +5,7 @@ import { hasApplicableAbilityEffect } from "../../model/game";
 import type { Card, Fighter } from "../../model/types";
 import { BattleCard } from "./BattleCard";
 import { CardTooltip } from "./CardTooltip";
+import { ResourcePills } from "./ResourceCounter";
 
 export function SelectionOverlay({
   selected,
@@ -113,17 +114,8 @@ export function SelectionOverlay({
             </b>
           </div>
 
-          <div className="flex justify-center gap-[5px]" aria-hidden="true">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <i
-                key={index}
-                className={cn(
-                  "h-5 w-5 rounded-full border-2 border-[#2b1607] bg-[linear-gradient(180deg,#29231c,#0d0b0a)]",
-                  index < Math.min(effectiveEnergy, 4) &&
-                    "bg-[radial-gradient(circle_at_35%_28%,#fff4ac_0_18%,#ffba2e_20%_58%,#8d4b11_60%)] shadow-[0_0_10px_rgba(255,198,51,0.58)]",
-                )}
-              />
-            ))}
+          <div className="px-1" aria-hidden="true">
+            <ResourcePills value={effectiveEnergy} max={effectiveEnergy} tone="energy" dense slots={effectiveEnergy} />
           </div>
 
           <button

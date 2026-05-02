@@ -57,13 +57,13 @@ export function BattleCard({
       )}
       style={style}
     >
-      <div className="absolute inset-x-[7.5%] top-[1.7%] z-[2] flex justify-between gap-2">
+      <div className="battle-card-meta absolute inset-x-[7.5%] top-[1.7%] z-[2] flex justify-between gap-2">
         <span className="text-[11px] font-black uppercase tracking-[0.08em] text-[#d8bd82]">{rarityLabels[card.rarity]}</span>
         <b className="text-right text-[11px] leading-none text-[#fff2c1]">{card.clan}</b>
       </div>
 
       <div
-        className="absolute inset-x-[8.5%] top-[15%] z-[1] h-[34%] overflow-hidden rounded-[7px] border-2 border-[rgba(255,238,184,0.62)]"
+        className="battle-card-art absolute inset-x-[8.5%] top-[15%] z-[1] h-[34%] overflow-hidden rounded-[7px] border-2 border-[rgba(255,238,184,0.62)]"
         style={{ background: card.portrait }}
       >
         <Image
@@ -76,18 +76,18 @@ export function BattleCard({
         <i className="absolute inset-[18px_20px_auto_auto] h-[78px] w-14 rotate-[18deg] border-[3px] border-[rgba(255,255,255,0.38)]" />
       </div>
 
-      <div className="absolute inset-x-[8%] top-[51.8%] z-[2] truncate text-[clamp(18px,8.7cqw,24px)] font-black leading-none text-[#fff6d0] [text-shadow:0_2px_0_rgba(0,0,0,0.8)]">
+      <div className="battle-card-name absolute inset-x-[8%] top-[51.8%] z-[2] truncate text-[clamp(18px,8.7cqw,24px)] font-black leading-none text-[#fff6d0] [text-shadow:0_2px_0_rgba(0,0,0,0.8)]">
         {card.name}
       </div>
 
-      <b className="absolute left-[7.2%] top-[72.8%] z-[2] grid aspect-square w-[21.5%] place-items-center rounded-full bg-[radial-gradient(circle_at_36%_30%,#fff7c2_0_18%,#ffe08a_20%_62%,#a96c20_64%)] pt-px text-[clamp(19px,9.3cqw,28px)] font-black leading-none text-[#160f0f] shadow-[inset_0_-5px_0_rgba(0,0,0,0.18),0_1px_0_rgba(255,255,255,0.32)]">
+      <b className="battle-card-stat battle-card-stat--power absolute left-[7.2%] top-[72.8%] z-[2] grid aspect-square w-[21.5%] place-items-center rounded-full bg-[radial-gradient(circle_at_36%_30%,#fff7c2_0_18%,#ffe08a_20%_62%,#a96c20_64%)] pt-px text-[clamp(19px,9.3cqw,28px)] font-black leading-none text-[#160f0f] shadow-[inset_0_-5px_0_rgba(0,0,0,0.18),0_1px_0_rgba(255,255,255,0.32)]">
         {card.power}
       </b>
-      <b className="absolute left-[71.2%] top-[72.8%] z-[2] grid aspect-square w-[21.5%] place-items-center rounded-full bg-[radial-gradient(circle_at_36%_30%,#ff9b83_0_18%,#e9503f_20%_62%,#8d2119_64%)] pt-px text-[clamp(19px,9.3cqw,28px)] font-black leading-none text-[#fff8e8] shadow-[inset_0_-5px_0_rgba(0,0,0,0.2),0_1px_0_rgba(255,255,255,0.26)]">
+      <b className="battle-card-stat battle-card-stat--damage absolute left-[71.2%] top-[72.8%] z-[2] grid aspect-square w-[21.5%] place-items-center rounded-full bg-[radial-gradient(circle_at_36%_30%,#ff9b83_0_18%,#e9503f_20%_62%,#8d2119_64%)] pt-px text-[clamp(19px,9.3cqw,28px)] font-black leading-none text-[#fff8e8] shadow-[inset_0_-5px_0_rgba(0,0,0,0.2),0_1px_0_rgba(255,255,255,0.26)]">
         {card.damage}
       </b>
 
-      <div className="absolute inset-x-[30%] top-[72.9%] z-[2] grid gap-[4px]">
+      <div className="battle-card-traits absolute inset-x-[30%] top-[72.9%] z-[2] grid gap-[4px]">
         <CardTooltip
           className="block min-w-0"
           eyebrow="Уміння"
@@ -95,14 +95,16 @@ export function BattleCard({
           description={abilityDescription}
         >
           <span
+            data-card-ability
             className={cn(
-              "block min-h-[20px] w-full truncate rounded px-[5px] py-[4px] text-center text-[clamp(8px,3.9cqw,11px)] leading-none",
+              "battle-card-trait battle-card-trait--ability flex min-h-[20px] w-full min-w-0 items-center justify-center gap-[3px] truncate rounded px-[5px] py-[4px] text-center text-[clamp(8px,3.9cqw,11px)] leading-none",
               abilityActive === false
                 ? "bg-[rgba(0,0,0,0.3)] text-[#8c836f]"
                 : "bg-[rgba(0,0,0,0.42)] text-[#eadfc5]",
             )}
           >
-            {abilityName}
+            <em className="battle-card-trait-kind not-italic">У</em>
+            <span className="battle-card-trait-text min-w-0 truncate">{abilityName}</span>
           </span>
         </CardTooltip>
         <CardTooltip
@@ -112,8 +114,9 @@ export function BattleCard({
           description={bonusDescription}
         >
           <span
+            data-card-bonus
             className={cn(
-              "block min-h-[20px] w-full truncate rounded border px-[5px] py-[4px] text-center text-[clamp(8px,3.9cqw,11px)] leading-none",
+              "battle-card-trait battle-card-trait--bonus flex min-h-[20px] w-full min-w-0 items-center justify-center gap-[3px] truncate rounded border px-[5px] py-[4px] text-center text-[clamp(8px,3.9cqw,11px)] leading-none",
               !bonusVisible
                 ? "border-white/5 bg-[rgba(0,0,0,0.3)] text-[#7f7869]"
                 : clanBonusActive === false
@@ -121,7 +124,8 @@ export function BattleCard({
                   : "border-[color-mix(in_srgb,var(--accent),#fff_18%)] bg-[rgba(0,0,0,0.5)] text-[#fff2c6] shadow-[0_0_9px_color-mix(in_srgb,var(--accent),transparent_56%)]",
             )}
           >
-            {bonusName}
+            <em className="battle-card-trait-kind not-italic">Б</em>
+            <span className="battle-card-trait-text min-w-0 truncate">{bonusName}</span>
           </span>
         </CardTooltip>
       </div>

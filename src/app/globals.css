@@ -173,6 +173,12 @@ a {
   max-width: 100%;
 }
 
+.battle-hand-card {
+  justify-self: center;
+  width: 100%;
+  min-width: 0;
+}
+
 .battle-hand .battle-card-face {
   min-height: clamp(132px, 22dvh, 220px) !important;
 }
@@ -196,6 +202,107 @@ a {
   font-size: clamp(24px, 6.8dvw, 54px);
 }
 
+.battle-card-trait-kind {
+  display: inline-grid;
+  min-width: 1.35em;
+  place-items: center;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent), #fff 18%);
+  color: #160f0f;
+  font-size: 0.86em;
+  font-weight: 900;
+  line-height: 1;
+}
+
+@container (max-width: 150px) {
+  .battle-card-meta {
+    inset-inline: 7% !important;
+    top: 2.2% !important;
+    gap: 2px !important;
+  }
+
+  .battle-card-meta span,
+  .battle-card-meta b {
+    font-size: clamp(7px, 8.4cqw, 9px) !important;
+    letter-spacing: 0 !important;
+  }
+
+  .battle-card-art {
+    inset-inline: 8% !important;
+    top: 13.5% !important;
+    height: 29.5% !important;
+    border-width: 1px !important;
+    border-radius: 5px !important;
+  }
+
+  .battle-card-art > i {
+    display: none !important;
+  }
+
+  .battle-card-name {
+    inset-inline: 7% !important;
+    top: 45.8% !important;
+    font-size: clamp(13px, 17cqw, 18px) !important;
+    line-height: 0.92 !important;
+  }
+
+  .battle-card-traits {
+    inset-inline: 6.5% !important;
+    top: 58.5% !important;
+    gap: 2px !important;
+  }
+
+  .battle-card-trait {
+    min-height: 12px !important;
+    justify-content: flex-start !important;
+    border-radius: 3px !important;
+    padding: 2px 3px !important;
+    font-size: clamp(6.5px, 8.2cqw, 8px) !important;
+    letter-spacing: 0 !important;
+  }
+
+  .battle-card-trait-kind {
+    min-width: 1.45em !important;
+    font-size: 0.78em !important;
+  }
+
+  .battle-card-stat {
+    top: 82.5% !important;
+    width: 23.5% !important;
+    font-size: clamp(14px, 18cqw, 18px) !important;
+    box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18), 0 1px 0 rgba(255, 255, 255, 0.28) !important;
+  }
+
+  .battle-card-stat--power {
+    left: 6% !important;
+  }
+
+  .battle-card-stat--damage {
+    left: 70.5% !important;
+  }
+}
+
+@container (max-width: 104px) {
+  .battle-card-name {
+    font-size: clamp(12px, 17cqw, 16px) !important;
+  }
+
+  .battle-card-traits {
+    top: 58% !important;
+  }
+
+  .battle-card-trait {
+    min-height: 12px !important;
+    padding-block: 1.5px !important;
+    font-size: clamp(6px, 7.6cqw, 7px) !important;
+  }
+
+  .battle-card-stat {
+    top: 82.5% !important;
+    width: 22.5% !important;
+  }
+}
+
 @media (max-width: 620px) and (orientation: portrait) {
   .battle-screen {
     padding: 6px !important;
@@ -210,6 +317,10 @@ a {
   .battle-hand {
     gap: 4px !important;
     padding: 5px !important;
+  }
+
+  .battle-hand-card {
+    width: min(100%, 88px);
   }
 
   .battle-hand .battle-card-face {
@@ -237,6 +348,33 @@ a {
     line-height: 1.25;
   }
 
+  [data-testid="battle-overlay"] {
+    padding: 6px !important;
+  }
+
+  .battle-overlay-stage {
+    min-height: calc(100dvh - 12px) !important;
+    height: calc(100dvh - 12px) !important;
+    width: calc(100dvw - 12px) !important;
+  }
+
+  .duel-grid {
+    inset: 116px 12px 150px !important;
+    grid-template-columns: minmax(96px, 116px) minmax(58px, 1fr) minmax(96px, 116px) !important;
+    align-items: end !important;
+    gap: 6px !important;
+  }
+
+  .duel-grid :is(.battle-card-face--compact, .duel-avatar) {
+    width: min(112px, 31dvw) !important;
+    min-height: clamp(178px, 25dvh, 202px) !important;
+  }
+
+  .duel-grid > :first-child,
+  .duel-grid > :last-child {
+    transform: none !important;
+  }
+
 }
 
 @media (orientation: landscape) and (max-height: 520px) {
@@ -255,7 +393,12 @@ a {
     padding: 4px 8px !important;
   }
 
+  .battle-hand-card {
+    width: min(76px, 100%);
+  }
+
   .battle-hand .battle-card-face {
+    aspect-ratio: 2 / 3;
     min-height: 112px !important;
     border-width: 2px !important;
     border-radius: 6px !important;

@@ -57,6 +57,7 @@ export function Hand({
             ? hasApplicableAbilityEffect(card, { owner: fighter, opponent })
             : isCopyClanAbilityResolved(card, cards);
         const state = cn(
+          "battle-hand-card",
           "relative z-[1] block border-0 bg-transparent p-0 text-left text-inherit transition-[filter,transform,opacity] duration-500",
           isSelected && owner === "player" && "-translate-y-2 drop-shadow-[0_0_18px_rgba(255,210,58,0.86)]",
           isSelected && owner === "enemy" && "drop-shadow-[0_0_18px_rgba(255,91,84,0.76)]",

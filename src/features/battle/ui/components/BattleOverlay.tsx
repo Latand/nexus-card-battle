@@ -1,7 +1,7 @@
 import Image from "next/image";
 import type { CSSProperties } from "react";
 import { cn } from "@/shared/lib/cn";
-import { DAMAGE_THROWS_CAP, MAX_ENERGY, MAX_HEALTH } from "../../model/constants";
+import { BASE_ATTACK_ENERGY, DAMAGE_THROWS_CAP, MAX_HEALTH } from "../../model/constants";
 import { hasApplicableAbilityEffect, isAbilityBlocked } from "../../model/game";
 import type { Clash, Fighter, Outcome, Phase, ResolvedEffect, Side } from "../../model/types";
 import { BattleCard } from "./BattleCard";
@@ -26,10 +26,6 @@ export function BattleOverlay({
   const attackMax = Math.max(clash.playerAttack, clash.enemyAttack, 1);
   const loser: Side = clash.loser;
   const isFinisher = isDamage && (loser === "player" ? outcome.nextPlayer.hp <= 0 : outcome.nextEnemy.hp <= 0);
-  const loserCard = loser === "player" ? clash.playerCard : clash.enemyCard;
-  const damageTarget = loser === "player" ? player.name : enemy.name;
-  const statusText = getStatusText(phase, clash, isFinisher, loserCard.name, damageTarget);
-  const phaseLabel = getPhaseLabel(phase, isFinisher);
   const revealAttack = phase === "damage_apply";
   const playerTakesRealDamage = isDamage && loser === "player";
   const enemyTakesRealDamage = isDamage && loser === "enemy";
@@ -68,16 +64,18 @@ export function BattleOverlay({
       data-winner={clash.winner}
     >
       <div className="battle-overlay-stage relative min-h-[min(640px,94vh)] w-[min(980px,96vw)] overflow-hidden rounded-md border-2 border-[#d6a03b]/75 bg-[linear-gradient(180deg,rgba(5,8,11,0.1),rgba(5,8,11,0.4)),url('/nexus-assets/backgrounds/arena-bar-1024x576.png')] bg-cover bg-center shadow-[0_0_0_1px_rgba(0,0,0,0.9),0_28px_90px_rgba(0,0,0,0.78),inset_0_0_90px_rgba(0,0,0,0.48)] before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_50%_48%,transparent_0_32%,rgba(0,0,0,0.48)_76%),linear-gradient(90deg,rgba(255,55,55,0.12),transparent_28%_72%,rgba(255,212,86,0.12))] before:content-[''] max-[960px]:min-h-[min(580px,94vh)] max-[760px]:min-h-[min(560px,94vh)]">
-        <div className="absolute left-[18px] top-[18px] z-[3] w-[min(390px,42%)] max-[960px]:w-[calc(50%_-_28px)] max-[760px]:top-2.5 max-[620px]:w-[calc(50%_-_16px)]">
+        <div className="absolute left-[18px] top-[18px] z-[3] w-[min(270px,36%)] max-[960px]:w-[calc(50%_-_34px)] max-[760px]:left-2.5 max-[760px]:top-2.5 max-[620px]:w-[calc(50%_-_18px)]">
           <DuelStatus
+            align="left"
             cardEnergy={clash.playerEnergy}
             attack={clash.playerAttack}
             attackMax={attackMax}
             revealAttack={revealAttack}
           />
         </div>
-        <div className="absolute right-[18px] top-[18px] z-[3] w-[min(390px,42%)] max-[960px]:w-[calc(50%_-_28px)] max-[760px]:top-2.5 max-[620px]:w-[calc(50%_-_16px)]">
+        <div className="absolute right-[18px] top-[18px] z-[3] w-[min(270px,36%)] max-[960px]:w-[calc(50%_-_34px)] max-[760px]:right-2.5 max-[760px]:top-2.5 max-[620px]:w-[calc(50%_-_18px)]">
           <DuelStatus
+            align="right"
             cardEnergy={clash.enemyEnergy}
             attack={clash.enemyAttack}
             attackMax={attackMax}
@@ -91,6 +89,8 @@ export function BattleOverlay({
           </div>
         ) : null}
 
+        {isDamage ? <DuelResult clash={clash} player={player} enemy={enemy} finisher={isFinisher} /> : null}
+
         <div className="duel-grid absolute inset-[100px_26px_82px] z-[2] grid grid-cols-[minmax(150px,220px)_minmax(220px,1fr)_minmax(150px,220px)] items-end gap-[18px] max-[960px]:inset-[102px_18px_82px] max-[960px]:grid-cols-[minmax(132px,190px)_minmax(180px,1fr)_minmax(132px,190px)] max-[760px]:inset-[112px_10px_78px] max-[760px]:grid-cols-[minmax(96px,140px)_minmax(110px,1fr)_minmax(96px,140px)] max-[760px]:gap-2 max-[620px]:grid-cols-[92px_minmax(86px,1fr)_92px]">
           <div
             className={cn(
@@ -103,6 +103,9 @@ export function BattleOverlay({
               health={playerHp}
               card={clash.playerCard}
               showAvatar={playerTakesRealDamage}
+              damage={clash.damage}
+              side="player"
+              dimmed={isDamage && !playerTakesRealDamage}
               abilityActive={playerAbilityActive}
               bonusVisible={playerBonusVisible}
             />
@@ -121,33 +124,21 @@ export function BattleOverlay({
               health={enemyHp}
               card={clash.enemyCard}
               showAvatar={enemyTakesRealDamage}
+              damage={clash.damage}
+              side="enemy"
+              dimmed={isDamage && !enemyTakesRealDamage}
               abilityActive={enemyAbilityActive}
               bonusVisible={enemyBonusVisible}
             />
           </div>
         </div>
 
-        <div className="duel-caption absolute bottom-[22px] left-1/2 z-[3] grid min-w-[min(460px,78vw)] -translate-x-1/2 gap-1 rounded border-2 border-[#d6a03b]/60 bg-black/78 px-[18px] py-[11px] text-center shadow-[0_8px_24px_rgba(0,0,0,0.58)] max-[620px]:bottom-3.5 max-[620px]:px-2.5 max-[620px]:py-2">
-          {phaseLabel ? <strong className="text-sm uppercase text-[#ffe08a]">{phaseLabel}</strong> : null}
-          <span className="text-2xl font-black leading-none text-[#fff8df] max-[960px]:text-xl max-[620px]:text-[17px]">{statusText}</span>
+        <div className="duel-effects-strip pointer-events-none absolute bottom-[18px] left-1/2 z-[5] grid max-w-[min(640px,86vw)] -translate-x-1/2 justify-items-center gap-1 max-[620px]:bottom-3">
           <EffectList effects={clash.effects} />
         </div>
       </div>
     </section>
   );
-}
-
-function getStatusText(phase: Phase, clash: Clash, isFinisher: boolean, loserCardName: string, damageTarget: string) {
-  if (phase === "battle_intro") return `Енергія: ${clash.playerEnergy} проти ${clash.enemyEnergy}`;
-
-  const winnerCardName = clash.winner === "player" ? clash.playerCard.name : clash.enemyCard.name;
-  const winnerAttack = clash.winner === "player" ? clash.playerAttack : clash.enemyAttack;
-  const loserAttack = clash.winner === "player" ? clash.enemyAttack : clash.playerAttack;
-  const damageText = isFinisher
-    ? `${loserCardName} вибуває: ${clash.damage} урону для ${damageTarget}`
-    : `${damageTarget} отримує ${clash.damage} урону`;
-
-  return `${winnerCardName} перемагає: ${winnerAttack} проти ${loserAttack}; ${damageText}`;
 }
 
 function isCopyClanBonusResolved(card: Clash["playerCard"], hand: Clash["playerCard"][]) {
@@ -161,28 +152,94 @@ function hasControlEffect(effects: ResolvedEffect[], target: Side) {
   return effects.some((effect) => effect.id === "stop-opponent-ability" && effect.target === target);
 }
 
-function getPhaseLabel(phase: Phase, isFinisher: boolean) {
-  if (phase === "battle_intro") return "";
-  if (isFinisher) return "Останній удар";
-  return "Урон";
-}
-
 function DuelStatus({
+  align,
   cardEnergy,
   attack,
   attackMax,
   revealAttack,
 }: {
+  align: "left" | "right";
   cardEnergy: number;
   attack: number;
   attackMax: number;
   revealAttack: boolean;
 }) {
+  const effectiveEnergy = Math.max(BASE_ATTACK_ENERGY, cardEnergy + BASE_ATTACK_ENERGY);
+
   return (
-    <article className="grid gap-[5px] border-2 border-[#c7ccd1] bg-[linear-gradient(180deg,#444c50,#16191c_48%,#08090b),repeating-linear-gradient(135deg,rgba(255,255,255,0.12)_0_1px,transparent_1px_8px)] p-1.5 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.7),0_8px_22px_rgba(0,0,0,0.52)] max-[760px]:p-[5px]">
-      <DuelBar label="Енергія" value={cardEnergy} max={MAX_ENERGY} tone="energy" />
-      {revealAttack ? <DuelBar label="Сила удару" value={attack} max={attackMax} tone="attack" slots={12} hideLabel /> : null}
+    <article
+      className={cn(
+        "grid w-[min(210px,100%)] gap-1 rounded-sm border border-white/12 bg-black/38 px-2 py-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.1)] backdrop-blur-[2px] max-[620px]:gap-0.5 max-[620px]:px-1.5 max-[620px]:py-1",
+        align === "right" && "ml-auto",
+      )}
+    >
+      <DuelPillRun label="Енергія" value={effectiveEnergy} max={effectiveEnergy} tone="energy" slots={effectiveEnergy} />
+      {revealAttack ? <DuelPillRun label="Сила удару" value={attack} max={attackMax} tone="attack" emphasis={attack === attackMax} /> : null}
     </article>
+  );
+}
+
+function DuelPillRun({
+  label,
+  value,
+  max,
+  slots,
+  tone,
+  emphasis = false,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  slots?: number;
+  tone: "energy" | "attack";
+  emphasis?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "grid min-h-[14px] grid-cols-[16px_minmax(0,1fr)_24px] items-center gap-1.5 max-[620px]:grid-cols-[12px_minmax(0,1fr)_20px] max-[620px]:gap-1",
+        emphasis && "drop-shadow-[0_0_10px_rgba(78,211,244,0.34)]",
+      )}
+      aria-label={`${label}: ${value}`}
+      title={`${label}: ${value}`}
+    >
+      <DuelToneMark tone={tone} compact />
+      <ResourcePills value={value} max={max} tone={tone} dense slots={slots ?? 12} />
+      <strong className="text-right text-[11px] font-black leading-none text-[#fff8df] [text-shadow:0_1px_0_#000] max-[620px]:text-[9px]">{Math.max(0, value)}</strong>
+    </div>
+  );
+}
+
+function DuelResult({
+  clash,
+  player,
+  enemy,
+  finisher,
+}: {
+  clash: Clash;
+  player: Fighter;
+  enemy: Fighter;
+  finisher: boolean;
+}) {
+  const winnerAttack = clash.winner === "player" ? clash.playerAttack : clash.enemyAttack;
+  const loserAttack = clash.winner === "player" ? clash.enemyAttack : clash.playerAttack;
+  const winnerName = clash.winner === "player" ? player.name : enemy.name;
+  const loserName = clash.loser === "player" ? player.name : enemy.name;
+
+  return (
+    <div className="pointer-events-none absolute left-1/2 top-[54%] z-[5] grid -translate-x-1/2 -translate-y-1/2 justify-items-center gap-1 text-center max-[760px]:top-[55%] max-[620px]:top-[57%]">
+      <div className="flex items-baseline gap-2 px-3 py-1.5 drop-shadow-[0_10px_22px_rgba(0,0,0,0.5)] max-[620px]:gap-1.5 max-[620px]:px-1">
+        <strong className="text-[clamp(38px,6vw,62px)] font-black leading-none text-[#f7ffff] [text-shadow:0_2px_0_#062b38,0_0_18px_rgba(73,213,244,0.52),0_0_32px_rgba(0,0,0,0.72)]">
+          {winnerAttack}
+        </strong>
+        <b className="text-[clamp(22px,4vw,38px)] font-black leading-none text-[#ffe08a] [text-shadow:0_1px_0_#000]">&gt;</b>
+        <span className="text-[clamp(24px,4.4vw,42px)] font-black leading-none text-[#9cb3b8] [text-shadow:0_1px_0_#000]">{loserAttack}</span>
+      </div>
+      <span className="rounded-full border border-white/10 bg-black/36 px-2.5 py-1 text-[10px] font-black uppercase leading-none text-[#fff1b9] shadow-[0_6px_14px_rgba(0,0,0,0.3)] max-[620px]:px-2 max-[620px]:text-[8px]">
+        {finisher ? "Останній удар" : `${winnerName} -> ${loserName}`}
+      </span>
+    </div>
   );
 }
 
@@ -191,6 +248,9 @@ function DuelCombatant({
   health,
   card,
   showAvatar,
+  damage,
+  side,
+  dimmed,
   abilityActive,
   bonusVisible,
 }: {
@@ -198,25 +258,41 @@ function DuelCombatant({
   health: number;
   card: Clash["playerCard"];
   showAvatar: boolean;
+  damage: number;
+  side: Side;
+  dimmed: boolean;
   abilityActive: boolean;
   bonusVisible: boolean;
 }) {
-  if (showAvatar) return <FighterImpactAvatar fighter={fighter} health={health} />;
+  if (showAvatar) return <FighterImpactAvatar fighter={fighter} health={health} damage={damage} side={side} />;
 
-  return <BattleCard card={card} compact abilityActive={abilityActive} bonusVisible={bonusVisible} />;
+  return (
+    <div className={cn("relative transition-[filter,opacity,transform] duration-300", dimmed && "scale-[0.94] opacity-55 brightness-75 saturate-[0.7]")}>
+      <BattleCard card={card} compact abilityActive={abilityActive} bonusVisible={bonusVisible} />
+    </div>
+  );
 }
 
-function FighterImpactAvatar({ fighter, health }: { fighter: Fighter; health: number }) {
+function FighterImpactAvatar({ fighter, health, damage, side }: { fighter: Fighter; health: number; damage: number; side: Side }) {
   return (
     <article
-      className="compact duel-avatar relative grid min-h-[292px] w-[min(214px,22vw)] place-items-center overflow-hidden rounded-[28px] border-2 border-[#d6a03b]/75 bg-[radial-gradient(circle_at_50%_18%,rgba(255,224,138,0.28),transparent_31%),linear-gradient(180deg,rgba(42,48,50,0.92),rgba(8,9,11,0.96))] p-[10%] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.72),0_14px_30px_rgba(0,0,0,0.48)] before:pointer-events-none before:absolute before:inset-[7%] before:rounded-[22px] before:border before:border-white/12 before:content-['']"
+      className="compact duel-avatar relative grid min-h-[292px] w-[min(214px,22vw)] place-items-center overflow-visible rounded-none p-[7%]"
       aria-label={`${fighter.name} отримує урон`}
       data-testid={`duel-avatar-${fighter.id}`}
     >
-      <div className="relative aspect-square w-[78%] overflow-hidden rounded-full border-[3px] border-[#ffe08a]/75 bg-black shadow-[0_0_28px_rgba(255,224,138,0.26),inset_0_0_0_4px_rgba(0,0,0,0.5)] max-[620px]:w-[84%] max-[620px]:border-2">
+      <div className="relative aspect-square w-[92%] overflow-hidden rounded-full border-[3px] border-[#ffe08a]/80 bg-black shadow-[0_0_0_6px_rgba(0,0,0,0.36),0_0_38px_rgba(255,224,138,0.34),inset_0_0_0_4px_rgba(0,0,0,0.5)] max-[620px]:w-[96%] max-[620px]:border-2">
         <Image src={fighter.avatarUrl} alt="" fill sizes="220px" className="object-cover" />
+        <i className="absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,transparent_0_38%,rgba(255,42,44,0.28)_62%,rgba(255,42,44,0.58)_100%)] mix-blend-screen" aria-hidden="true" />
       </div>
-      <div className="absolute inset-x-[9%] bottom-[8%] grid grid-cols-[minmax(0,1fr)_24px] items-center gap-1 rounded-sm border border-white/12 bg-black/70 px-1.5 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] max-[620px]:grid-cols-[minmax(0,1fr)_18px] max-[620px]:px-1">
+      <b
+        className={cn(
+          "absolute left-1/2 top-[9%] z-[2] -translate-x-1/2 rounded-sm border border-[#ffd6c9]/55 bg-[linear-gradient(180deg,#ff554d,#941b19)] px-2.5 py-1 text-[clamp(18px,3.3vw,28px)] font-black leading-none text-[#fff5dc] shadow-[0_8px_18px_rgba(0,0,0,0.5),0_0_18px_rgba(255,64,48,0.42)] [text-shadow:0_2px_0_rgba(0,0,0,0.38)] max-[620px]:px-1.5 max-[620px]:text-[15px]",
+          side === "player" ? "rotate-[-3deg]" : "rotate-[3deg]",
+        )}
+      >
+        -{damage}
+      </b>
+      <div className="absolute inset-x-[7%] bottom-[9%] grid grid-cols-[minmax(0,1fr)_24px] items-center gap-1 rounded-sm border border-white/12 bg-black/70 px-1.5 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] max-[620px]:grid-cols-[minmax(0,1fr)_18px] max-[620px]:px-1">
         <ResourcePills value={health} max={MAX_HEALTH} tone="health" dense />
         <b className="text-center text-[10px] font-black leading-none text-[#dfffce] [text-shadow:0_1px_0_#000] max-[620px]:text-[8px]">{Math.max(0, health)}</b>
       </div>
@@ -255,41 +331,14 @@ function formatSigned(value: number) {
   return value > 0 ? `+${value}` : String(value);
 }
 
-function DuelBar({
-  label,
-  value,
-  max,
-  tone,
-  slots,
-  hideLabel = false,
-}: {
-  label: string;
-  value: number;
-  max: number;
-  tone: "health" | "energy" | "attack";
-  slots?: number;
-  hideLabel?: boolean;
-}) {
-  return (
-    <div className="relative grid min-h-[18px] grid-cols-[54px_minmax(0,1fr)_28px] items-center gap-1.5 max-[760px]:grid-cols-[38px_minmax(0,1fr)_22px] max-[620px]:grid-cols-[minmax(0,1fr)_20px]">
-      {hideLabel ? (
-        <DuelToneMark tone={tone} />
-      ) : (
-        <span className="text-[10px] font-black uppercase text-[#fff7d6] [text-shadow:0_1px_0_#000] max-[620px]:hidden">{label}</span>
-      )}
-      <ResourcePills value={value} max={max} tone={tone} dense slots={slots} />
-      <b className="text-[10px] font-black uppercase text-[#fff7d6] [text-shadow:0_1px_0_#000]">{value}</b>
-    </div>
-  );
-}
-
-function DuelToneMark({ tone }: { tone: "health" | "energy" | "attack" }) {
+function DuelToneMark({ tone, compact = false }: { tone: "health" | "energy" | "attack"; compact?: boolean }) {
   return (
     <span
       className={cn(
-        "mx-auto h-[9px] w-[22px] rounded-[2px] border shadow-[0_0_9px_rgba(0,0,0,0.62)] max-[760px]:w-[18px] max-[620px]:hidden",
+        "mx-auto rounded-[2px] border shadow-[0_0_9px_rgba(0,0,0,0.62)]",
+        compact ? "h-[10px] w-[14px]" : "h-[9px] w-[22px] max-[760px]:w-[18px] max-[620px]:hidden",
         tone === "attack"
-          ? "border-[#ff9bb2]/80 bg-[linear-gradient(180deg,#ff94aa,#b51d44)]"
+          ? "border-[#91efff]/80 bg-[linear-gradient(180deg,#bdf8ff,#168bad)]"
           : tone === "energy"
             ? "border-[#ffe08a]/70 bg-[linear-gradient(180deg,#fff08a,#c88613)]"
             : "border-[#9dff63]/70 bg-[linear-gradient(180deg,#bbff83,#21a72d)]",
