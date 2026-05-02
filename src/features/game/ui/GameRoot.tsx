@@ -242,6 +242,7 @@ export function GameRoot() {
           <RealtimeBattleGame
             playerCollectionIds={ownedCardIds}
             playerDeckIds={deckIds}
+            playerIdentity={playerIdentity ?? undefined}
             playerName={playerName}
             telegramPlayer={telegramPlayer}
             onOpenCollection={() => setScreen("collection")}

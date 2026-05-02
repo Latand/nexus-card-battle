@@ -2,6 +2,7 @@ import type { Page, Route } from "@playwright/test";
 import { getBoosterCatalogForPlayer } from "../../src/features/boosters/catalog";
 import type { PlayerIdentity } from "../../src/features/player/profile/types";
 
+const GUEST_ID_STORAGE_KEY = "nexus:player-guest-id:v1";
 export const PROFILE_DECK_IDS = [
   "dahack-1645",
   "dahack-110",
@@ -29,11 +30,23 @@ type MockDeckReadyProfileOptions = Partial<TestPlayerProfileInput> & {
 };
 
 export async function mockDeckReadyProfile(page: Page, options: MockDeckReadyProfileOptions = {}) {
+  const defaultIdentity: PlayerIdentity = options.identity ?? { mode: "guest", guestId: "guest-deck-ready-e2e" };
+  const initialProfile = createTestProfileInput(options, defaultIdentity);
   let profile: TestPlayerProfileInput | undefined;
+
+  if (defaultIdentity.mode === "guest") {
+    await page.addInitScript(
+      ({ key, value }) => {
+        window.localStorage.setItem(key, value);
+      },
+      { key: GUEST_ID_STORAGE_KEY, value: defaultIdentity.guestId },
+    );
+  }
+  await seedServerPlayerProfile(page, initialProfile);
 
   await page.route("**/api/player/deck", async (route) => {
     const requestBody = route.request().postDataJSON() as { identity?: PlayerIdentity; deckIds?: string[] };
-    const identity = options.identity ?? requestBody.identity ?? profile?.identity ?? { mode: "guest", guestId: "guest-deck-ready-e2e" };
+    const identity = options.identity ?? requestBody.identity ?? profile?.identity ?? defaultIdentity;
     profile = {
       id: options.id ?? profile?.id ?? "player-deck-ready-e2e",
       identity,
@@ -45,12 +58,13 @@ export async function mockDeckReadyProfile(page: Page, options: MockDeckReadyPro
     const handled = await options.onDeckSave?.(route, profile);
     if (handled === false) return;
 
+    await seedServerPlayerProfile(page, profile);
     await fulfillPlayerProfile(route, profile);
   });
 
   await page.route("**/api/player", async (route) => {
     const requestBody = route.request().postDataJSON() as { identity?: PlayerIdentity };
-    const identity = options.identity ?? requestBody.identity ?? { mode: "guest", guestId: "guest-deck-ready-e2e" };
+    const identity = options.identity ?? requestBody.identity ?? defaultIdentity;
 
     profile = {
       id: options.id ?? profile?.id ?? "player-deck-ready-e2e",
@@ -60,6 +74,7 @@ export async function mockDeckReadyProfile(page: Page, options: MockDeckReadyPro
       starterFreeBoostersRemaining: options.starterFreeBoostersRemaining ?? profile?.starterFreeBoostersRemaining ?? 0,
       openedBoosterIds: options.openedBoosterIds ?? profile?.openedBoosterIds ?? ["neon-breach", "factory-shift"],
     };
+    await seedServerPlayerProfile(page, profile);
     await fulfillPlayerProfile(route, profile);
   });
 }
@@ -102,4 +117,25 @@ function createPlayerProfileBody(profile: TestPlayerProfileInput) {
       completed: collectionReady && deckReady && profile.starterFreeBoostersRemaining === 0,
     },
   };
+}
+
+function createTestProfileInput(options: MockDeckReadyProfileOptions, identity: PlayerIdentity): TestPlayerProfileInput {
+  return {
+    id: options.id ?? "player-deck-ready-e2e",
+    identity,
+    ownedCardIds: options.ownedCardIds ?? PROFILE_OWNED_CARD_IDS,
+    deckIds: options.deckIds ?? PROFILE_DECK_IDS,
+    starterFreeBoostersRemaining: options.starterFreeBoostersRemaining ?? 0,
+    openedBoosterIds: options.openedBoosterIds ?? ["neon-breach", "factory-shift"],
+  };
+}
+
+export async function seedServerPlayerProfile(page: Page, profile: TestPlayerProfileInput) {
+  const response = await page.request.post("/__test/player-profile", {
+    data: profile,
+  });
+
+  if (!response.ok()) {
+    throw new Error(`Failed to seed server player profile: ${response.status()} ${await response.text()}`);
+  }
 }
