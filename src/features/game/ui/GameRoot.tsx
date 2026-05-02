@@ -5,7 +5,7 @@ import { cards } from "@/features/battle/model/cards";
 import { BattleGame } from "@/features/battle/ui/BattleGame";
 import { RealtimeBattleGame } from "@/features/battle/ui/RealtimeBattleGame";
 import { STARTER_BOOSTER_CARD_COUNT } from "@/features/boosters/types";
-import { fetchPlayerProfile, resolveClientPlayerIdentity } from "@/features/player/profile/client";
+import { fetchPlayerProfile, resolveClientPlayerIdentity, savePlayerDeck } from "@/features/player/profile/client";
 import { STARTER_FREE_BOOSTERS, type PlayerIdentity, type PlayerProfile } from "@/features/player/profile/types";
 import type { TelegramPlayer } from "@/shared/lib/telegram";
 import { PLAYER_DECK_SIZE } from "../model/randomDeck";
@@ -15,6 +15,7 @@ import { StarterBoosterOnboarding } from "./onboarding/StarterBoosterOnboarding"
 type BattleMode = "ai" | "human";
 type ProfileStatus = "loading" | "ready" | "unavailable";
 type DeckSource = "profile" | "starter-fallback";
+type DeckSaveStatus = "idle" | "saving" | "saved" | "error";
 const STARTER_KIT_CARD_COUNT = STARTER_FREE_BOOSTERS * STARTER_BOOSTER_CARD_COUNT;
 type TelegramWindow = Window & {
   Telegram?: {
@@ -49,18 +50,25 @@ export function GameRoot() {
   const allCardIds = useMemo(() => cards.map((card) => card.id), []);
   const [screen, setScreen] = useState<"collection" | "battle">("collection");
   const [battleMode, setBattleMode] = useState<BattleMode>("ai");
-  const [deckIds, setDeckIds] = useState(() => createStarterDeckIds(allCardIds));
+  const [deckIds, setDeckIds] = useState<string[]>([]);
   const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
   const [playerIdentity, setPlayerIdentity] = useState<PlayerIdentity | null>(null);
   const [profileStatus, setProfileStatus] = useState<ProfileStatus>("loading");
+  const [deckSaveStatus, setDeckSaveStatus] = useState<DeckSaveStatus>("idle");
   const [profileRetryKey, setProfileRetryKey] = useState(0);
   const [starterDeckReadyVisible, setStarterDeckReadyVisible] = useState(false);
   const [telegramPlayer, setTelegramPlayer] = useState<TelegramPlayer>(() => readTelegramPlayer());
   const [telegramLandscapePromptActive, setTelegramLandscapePromptActive] = useState(false);
   const deckTouchedRef = useRef(false);
-  const collectionIds = useMemo(() => getCollectionIdsForProfile(playerProfile, allCardIds), [allCardIds, playerProfile]);
-  const profileDeckIds = useMemo(() => getDeckIdsForProfile(playerProfile, collectionIds), [collectionIds, playerProfile]);
+  const deckSaveRequestRef = useRef(0);
+  const lastConfirmedDeckIdsRef = useRef<string[]>([]);
+  const ownedCardIds = useMemo(() => getOwnedCardIdsForProfile(playerProfile, allCardIds), [allCardIds, playerProfile]);
+  const profileDeckIds = useMemo(() => getDeckIdsForProfile(playerProfile, ownedCardIds), [ownedCardIds, playerProfile]);
   const deckSource: DeckSource = profileDeckIds.length > 0 ? "profile" : "starter-fallback";
+  const deckReadyToPlay =
+    profileDeckIds.length >= PLAYER_DECK_SIZE &&
+    sameStringArray(deckIds, profileDeckIds) &&
+    deckSaveStatus !== "saving";
   const starterFreeBoostersRemaining = playerProfile?.starterFreeBoostersRemaining ?? 0;
   const playerName = telegramPlayer.name;
   const showStarterOnboarding =
@@ -85,28 +93,32 @@ export function GameRoot() {
     void fetchPlayerProfile(identity)
       .then((profile) => {
         if (disposed) return;
+        lastConfirmedDeckIdsRef.current = getConfirmedDeckIds(profile, allCardIds);
         setPlayerIdentity(identity);
         setPlayerProfile(profile);
         setProfileStatus("ready");
+        setDeckSaveStatus("idle");
       })
       .catch(() => {
         if (disposed) return;
         setPlayerIdentity(identity);
         setPlayerProfile(null);
         setProfileStatus("unavailable");
+        lastConfirmedDeckIdsRef.current = [];
+        setDeckSaveStatus("idle");
       });
 
     return () => {
       disposed = true;
     };
-  }, [profileRetryKey]);
+  }, [allCardIds, profileRetryKey]);
 
   useEffect(() => {
     if (deckTouchedRef.current) return;
 
-    const nextDeckIds = profileDeckIds.length > 0 ? profileDeckIds : createStarterDeckIds(collectionIds);
+    const nextDeckIds = profileDeckIds.length > 0 ? profileDeckIds : createStarterDeckIds(ownedCardIds);
     setDeckIds(nextDeckIds);
-  }, [collectionIds, profileDeckIds]);
+  }, [ownedCardIds, profileDeckIds]);
 
   useEffect(() => {
     const webApp = getTelegramWebApp();
@@ -148,18 +160,44 @@ export function GameRoot() {
 
   const handleDeckChange = useCallback(
     (nextDeckIds: string[]) => {
-      const sanitizedDeckIds = sanitizeDeckIds(nextDeckIds, collectionIds);
+      const sanitizedDeckIds = sanitizeDeckIds(nextDeckIds, ownedCardIds);
+      const changed = !sameStringArray(deckIds, sanitizedDeckIds);
 
       deckTouchedRef.current = true;
       setDeckIds(sanitizedDeckIds);
+
+      if (!changed || !playerIdentity || !playerProfile || profileStatus !== "ready" || sanitizedDeckIds.length < PLAYER_DECK_SIZE) {
+        return;
+      }
+
+      const requestId = deckSaveRequestRef.current + 1;
+      deckSaveRequestRef.current = requestId;
+      setDeckSaveStatus("saving");
+
+      void savePlayerDeck(playerIdentity, sanitizedDeckIds)
+        .then((nextProfile) => {
+          if (deckSaveRequestRef.current !== requestId) return;
+          const confirmedDeckIds = getConfirmedDeckIds(nextProfile, allCardIds);
+          lastConfirmedDeckIdsRef.current = confirmedDeckIds;
+          setPlayerProfile(nextProfile);
+          setDeckIds(confirmedDeckIds);
+          setDeckSaveStatus("saved");
+        })
+        .catch(() => {
+          if (deckSaveRequestRef.current !== requestId) return;
+          setDeckIds(lastConfirmedDeckIdsRef.current);
+          setDeckSaveStatus("error");
+        });
     },
-    [collectionIds],
+    [allCardIds, deckIds, ownedCardIds, playerIdentity, playerProfile, profileStatus],
   );
   const handleStarterProfileChange = useCallback((nextProfile: PlayerProfile) => {
     deckTouchedRef.current = false;
+    lastConfirmedDeckIdsRef.current = getConfirmedDeckIds(nextProfile, allCardIds);
     setPlayerProfile(nextProfile);
+    setDeckSaveStatus("idle");
     setStarterDeckReadyVisible(isStarterKitReady(nextProfile));
-  }, []);
+  }, [allCardIds]);
   const handleStarterDeckPlay = useCallback((starterDeckIds: string[]) => {
     deckTouchedRef.current = true;
     setDeckIds(starterDeckIds);
@@ -170,17 +208,31 @@ export function GameRoot() {
   const handleStarterDeckEdit = useCallback(
     (starterDeckIds: string[]) => {
       deckTouchedRef.current = true;
-      setDeckIds(sanitizeDeckIds(starterDeckIds, collectionIds));
+      setDeckIds(sanitizeDeckIds(starterDeckIds, ownedCardIds));
       setStarterDeckReadyVisible(false);
       setScreen("collection");
     },
-    [collectionIds],
+    [ownedCardIds],
+  );
+  const handleSavedDeckPlay = useCallback(
+    (nextDeckIds: string[], mode: BattleMode) => {
+      const sanitizedDeckIds = sanitizeDeckIds(nextDeckIds, ownedCardIds);
+      if (!deckReadyToPlay || !sameStringArray(sanitizedDeckIds, profileDeckIds)) return;
+
+      deckTouchedRef.current = true;
+      setDeckIds(profileDeckIds);
+      setBattleMode(mode);
+      setScreen("battle");
+    },
+    [deckReadyToPlay, ownedCardIds, profileDeckIds],
   );
   const retryProfileLoad = useCallback(() => {
     deckTouchedRef.current = false;
     setStarterDeckReadyVisible(false);
     setPlayerProfile(null);
     setProfileStatus("loading");
+    lastConfirmedDeckIdsRef.current = [];
+    setDeckSaveStatus("idle");
     setProfileRetryKey((current) => current + 1);
   }, []);
 
@@ -189,7 +241,7 @@ export function GameRoot() {
       <>
         {battleMode === "human" ? (
           <RealtimeBattleGame
-            playerCollectionIds={collectionIds}
+            playerCollectionIds={ownedCardIds}
             playerDeckIds={deckIds}
             playerName={playerName}
             telegramPlayer={telegramPlayer}
@@ -197,7 +249,7 @@ export function GameRoot() {
           />
         ) : (
           <BattleGame
-            playerCollectionIds={collectionIds}
+            playerCollectionIds={ownedCardIds}
             playerDeckIds={deckIds}
             playerName={playerName}
             onOpenCollection={() => setScreen("collection")}
@@ -247,20 +299,18 @@ export function GameRoot() {
   return (
     <>
       <CollectionDeckScreen
-        collectionIds={collectionIds}
+        collectionIds={ownedCardIds}
         deckIds={deckIds}
         profileStatus={profileStatus}
         profileIdentityMode={playerIdentity?.mode}
         profileOwnedCardCount={playerProfile?.ownedCardIds.length ?? 0}
         profileDeckCount={playerProfile?.deckIds.length ?? 0}
         deckSource={deckSource}
+        deckSaveStatus={deckSaveStatus}
+        deckReadyToPlay={deckReadyToPlay}
         starterFreeBoostersRemaining={starterFreeBoostersRemaining}
         onDeckChange={handleDeckChange}
-        onPlay={(nextDeckIds, mode) => {
-          handleDeckChange(nextDeckIds);
-          setBattleMode(mode);
-          setScreen("battle");
-        }}
+        onPlay={handleSavedDeckPlay}
       />
       <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
     </>
@@ -422,18 +472,22 @@ function TelegramLandscapeOverlay({ active }: { active: boolean }) {
   );
 }
 
-function getCollectionIdsForProfile(profile: PlayerProfile | null, allCardIds: string[]) {
-  if (!profile || profile.ownedCardIds.length === 0) return allCardIds;
+function getOwnedCardIdsForProfile(profile: PlayerProfile | null, allCardIds: string[]) {
+  if (!profile || profile.ownedCardIds.length === 0) return [];
 
   const knownCards = new Set(allCardIds);
   const ownedCardIds = unique(profile.ownedCardIds).filter((cardId) => knownCards.has(cardId));
 
-  return ownedCardIds.length > 0 ? ownedCardIds : allCardIds;
+  return ownedCardIds;
 }
 
 function getDeckIdsForProfile(profile: PlayerProfile | null, collectionIds: string[]) {
   if (!profile || profile.deckIds.length === 0) return [];
   return unique(profile.deckIds).filter((cardId) => collectionIds.includes(cardId));
+}
+
+function getConfirmedDeckIds(profile: PlayerProfile, allCardIds: string[]) {
+  return getDeckIdsForProfile(profile, getOwnedCardIdsForProfile(profile, allCardIds));
 }
 
 function isStarterKitReady(profile: PlayerProfile) {
@@ -469,4 +523,9 @@ function createStarterDeckIds(collectionIds: string[]) {
 
 function unique(values: string[]) {
   return [...new Set(values)];
+}
+
+function sameStringArray(left: string[], right: string[]) {
+  if (left.length !== right.length) return false;
+  return left.every((item, index) => item === right[index]);
 }

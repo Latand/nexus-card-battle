@@ -24,19 +24,43 @@ export type TestPlayerProfileInput = {
   openedBoosterIds?: string[];
 };
 
-export async function mockDeckReadyProfile(page: Page, options: Partial<TestPlayerProfileInput> = {}) {
+type MockDeckReadyProfileOptions = Partial<TestPlayerProfileInput> & {
+  onDeckSave?: (route: Route, profile: TestPlayerProfileInput) => Promise<boolean | void> | boolean | void;
+};
+
+export async function mockDeckReadyProfile(page: Page, options: MockDeckReadyProfileOptions = {}) {
+  let profile: TestPlayerProfileInput | undefined;
+
+  await page.route("**/api/player/deck", async (route) => {
+    const requestBody = route.request().postDataJSON() as { identity?: PlayerIdentity; deckIds?: string[] };
+    const identity = options.identity ?? requestBody.identity ?? profile?.identity ?? { mode: "guest", guestId: "guest-deck-ready-e2e" };
+    profile = {
+      id: options.id ?? profile?.id ?? "player-deck-ready-e2e",
+      identity,
+      ownedCardIds: options.ownedCardIds ?? profile?.ownedCardIds ?? PROFILE_OWNED_CARD_IDS,
+      deckIds: requestBody.deckIds ?? options.deckIds ?? profile?.deckIds ?? PROFILE_DECK_IDS,
+      starterFreeBoostersRemaining: options.starterFreeBoostersRemaining ?? profile?.starterFreeBoostersRemaining ?? 0,
+      openedBoosterIds: options.openedBoosterIds ?? profile?.openedBoosterIds ?? ["neon-breach", "factory-shift"],
+    };
+    const handled = await options.onDeckSave?.(route, profile);
+    if (handled === false) return;
+
+    await fulfillPlayerProfile(route, profile);
+  });
+
   await page.route("**/api/player", async (route) => {
     const requestBody = route.request().postDataJSON() as { identity?: PlayerIdentity };
     const identity = options.identity ?? requestBody.identity ?? { mode: "guest", guestId: "guest-deck-ready-e2e" };
 
-    await fulfillPlayerProfile(route, {
-      id: options.id ?? "player-deck-ready-e2e",
+    profile = {
+      id: options.id ?? profile?.id ?? "player-deck-ready-e2e",
       identity,
-      ownedCardIds: options.ownedCardIds ?? PROFILE_OWNED_CARD_IDS,
-      deckIds: options.deckIds ?? PROFILE_DECK_IDS,
-      starterFreeBoostersRemaining: options.starterFreeBoostersRemaining ?? 0,
-      openedBoosterIds: options.openedBoosterIds ?? ["neon-breach", "factory-shift"],
-    });
+      ownedCardIds: options.ownedCardIds ?? profile?.ownedCardIds ?? PROFILE_OWNED_CARD_IDS,
+      deckIds: options.deckIds ?? profile?.deckIds ?? PROFILE_DECK_IDS,
+      starterFreeBoostersRemaining: options.starterFreeBoostersRemaining ?? profile?.starterFreeBoostersRemaining ?? 0,
+      openedBoosterIds: options.openedBoosterIds ?? profile?.openedBoosterIds ?? ["neon-breach", "factory-shift"],
+    };
+    await fulfillPlayerProfile(route, profile);
   });
 }
 

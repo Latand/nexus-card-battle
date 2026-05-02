@@ -2,7 +2,7 @@ import { MongoClient, MongoServerError, ObjectId, type Collection, type Filter, 
 import { BoosterOpeningError } from "@/features/boosters/opening";
 import type { BoosterOpeningSource, PersistStarterBoosterOpeningInput, PersistedStarterBoosterOpening, StoredBoosterOpeningRecord } from "@/features/boosters/types";
 import { createNewStoredPlayerProfile, type PlayerIdentity, type StoredPlayerProfile } from "./types";
-import type { PlayerProfileStore } from "./api";
+import type { PlayerDeckStore } from "./api";
 
 const DEFAULT_MONGODB_URI = "mongodb://127.0.0.1:27017/nexus-card-battle";
 const DEFAULT_MONGODB_DB = "nexus-card-battle";
@@ -40,7 +40,7 @@ export function getMongoPlayerProfileStore() {
   return new MongoPlayerProfileStore(clientPromise, dbName);
 }
 
-export class MongoPlayerProfileStore implements PlayerProfileStore {
+export class MongoPlayerProfileStore implements PlayerDeckStore {
   private indexesReady?: Promise<void>;
   private boosterOpeningIndexesReady?: Promise<void>;
 
@@ -98,6 +98,42 @@ export class MongoPlayerProfileStore implements PlayerProfileStore {
 
       throw error;
     }
+  }
+
+  async saveDeck(identity: PlayerIdentity, deckIds: string[]): Promise<StoredPlayerProfile> {
+    const players = await this.getPlayersCollection();
+    const updatedPlayer = await players.findOneAndUpdate(
+      {
+        ...identityFilter(identity),
+        ownedCardIds: { $all: deckIds },
+      },
+      {
+        $set: {
+          deckIds,
+          updatedAt: new Date(),
+        },
+      },
+      {
+        returnDocument: "after",
+      },
+    );
+
+    if (updatedPlayer) {
+      return fromMongoDocument(updatedPlayer);
+    }
+
+    const currentPlayer = await players.findOne(identityFilter(identity));
+    if (!currentPlayer) {
+      throw new Error("Player profile did not exist for deck save.");
+    }
+
+    const ownedCardIds = new Set(currentPlayer.ownedCardIds);
+    const missingOwnedIds = deckIds.filter((cardId) => !ownedCardIds.has(cardId));
+    if (missingOwnedIds.length > 0) {
+      throw new Error(`Deck contains non-owned card ids: ${missingOwnedIds.join(", ")}`);
+    }
+
+    throw new Error("Player deck could not be saved.");
   }
 
   private async getPlayersCollection() {
