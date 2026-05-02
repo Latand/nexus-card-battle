@@ -6,7 +6,7 @@ Players build a deck, fight AI locally, or queue into a live PvP match. Inside T
 
 ## Features
 
-- Deck builder and MongoDB-backed player profile API.
+- Owned-card deck builder with read-only full-base browsing and MongoDB-backed player profile API.
 - AI battle mode for single-player testing.
 - Human-vs-human matchmaking over `/ws`.
 - Telegram Mini App integration for user names, fullscreen launch, and Telegram-id profile lookup.
@@ -47,7 +47,7 @@ See [docs/deploy.md](docs/deploy.md) for the Nginx WebSocket proxy block.
 
 ## Known Limitations
 
-Until booster onboarding lands, empty new profiles render a non-durable starter deck fallback so the existing battle prototype remains playable. The fallback is not imported from legacy CloudStorage or `sessionStorage`.
+Deck edits are saved through the player profile API and must use known, unique, owned cards with at least 9 cards. Legacy CloudStorage and `sessionStorage` deck keys are ignored without being deleted.
 
 Telegram profiles currently use the client-provided `Telegram.WebApp.initDataUnsafe.user.id` for MVP bootstrap. Server-side Telegram `initData` HMAC verification is intentionally deferred and should be added before treating Telegram identity as trusted.
 

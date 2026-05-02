@@ -50,6 +50,28 @@ export async function fetchPlayerProfile(identity: PlayerIdentity = resolveClien
   return body.player;
 }
 
+export async function savePlayerDeck(identity: PlayerIdentity, deckIds: string[]): Promise<PlayerProfile> {
+  const response = await fetch("/api/player/deck", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ identity, deckIds }),
+  });
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as { message?: string } | undefined;
+    throw new Error(body?.message ?? `Failed to save player deck: ${response.status}`);
+  }
+
+  const body = (await response.json()) as { player?: PlayerProfile };
+  if (!body.player) {
+    throw new Error("Player deck response did not include player.");
+  }
+
+  return body.player;
+}
+
 function readTelegramId() {
   if (typeof window === "undefined") return undefined;
 
