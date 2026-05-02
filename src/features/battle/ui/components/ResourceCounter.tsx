@@ -153,10 +153,10 @@ export function StatusBadges({ statuses, compact = false }: { statuses: FighterS
 function getStatusLabel(status: FighterStatus) {
   const stack = status.stacks > 1 ? ` x${status.stacks}` : "";
   if (status.kind === "poison") {
-    return `яд ${status.amount}${status.min !== undefined ? `/${status.min}` : ""}${stack}`;
+    return `Отрута ${status.amount}${status.min !== undefined ? `/${status.min}` : ""}${stack}`;
   }
 
-  return `благо +${status.amount}${stack}`;
+  return `Благословення +${status.amount}${stack}`;
 }
 
 function CompactResource({

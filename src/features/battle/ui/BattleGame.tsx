@@ -256,7 +256,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, onOpenCollectio
         <div className={barButtonClass()} data-testid="turn-timer">⌛ {turnSeconds} сек</div>
         <NamePlate name={game.enemy.name} energy={game.enemy.energy} health={game.enemy.hp} statuses={game.enemy.statuses} />
         <button className={barButtonClass("border-l border-white/10 hover:bg-[linear-gradient(180deg,#ffe08a,#c98326)] hover:text-[#15100a]")} type="button" onClick={onOpenCollection}>
-          Деки
+          Колоди
         </button>
       </section>
 
@@ -325,7 +325,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, onOpenCollectio
         </div>
         <NamePlate name={game.player.name} player energy={game.player.energy} health={game.player.hp} statuses={game.player.statuses} />
         <button className={barButtonClass("border-l border-white/10 hover:bg-[linear-gradient(180deg,#ffe08a,#c98326)] hover:text-[#15100a]")} onClick={reset} type="button">
-          Новый бой
+          Новий бій
         </button>
       </section>
       </div>
@@ -417,7 +417,7 @@ function RewardOverlay({
   rewards?: RewardSummary;
   onReset: () => void;
 }) {
-  const title = result === "player" ? "Награды победы" : result === "draw" ? "Награды ничьей" : "Награды боя";
+  const title = result === "player" ? "Винагороди за перемогу" : result === "draw" ? "Винагороди за нічию" : "Винагороди за бій";
 
   return (
     <section className="fixed inset-0 z-50 grid place-items-center bg-[#05080b] p-3 backdrop-blur-[4px]" data-testid="reward-summary">
@@ -433,7 +433,7 @@ function RewardOverlay({
             type="button"
             onClick={onReset}
           >
-            Новый бой
+            Новий бій
           </button>
         </div>
 
@@ -441,7 +441,7 @@ function RewardOverlay({
           {(rewards?.cardRewards ?? []).map((reward) => (
             <div key={reward.cardId} className="grid grid-cols-[minmax(112px,180px)_minmax(0,1fr)_54px] items-center gap-3 rounded border border-white/12 bg-black/28 px-3 py-2 max-[620px]:grid-cols-1">
               <strong className="truncate text-sm font-black uppercase text-[#fff8df]">{reward.cardName}</strong>
-              <ProgressBar value={reward.levelProgress} label={`карта +${reward.xp}`} compact />
+              <ProgressBar value={reward.levelProgress} label={`картка +${reward.xp}`} compact />
               <span className="text-right text-sm font-black text-[#ffe08a] max-[620px]:text-left">+{reward.xp}</span>
             </div>
           ))}
@@ -472,7 +472,7 @@ function OpponentThinkingIndicator() {
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#ff5f58]/55" />
         <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#ff5f58] shadow-[0_0_10px_rgba(255,95,88,0.9)]" />
       </span>
-      <span>Соперник выбирает ответ</span>
+      <span>Суперник обирає відповідь</span>
       <span className="flex items-end gap-0.5" aria-hidden="true">
         <i className="block h-1.5 w-1.5 animate-bounce rounded-full bg-[#ffd7d2]" />
         <i className="block h-1.5 w-1.5 animate-bounce rounded-full bg-[#ffd7d2] [animation-delay:120ms]" />
@@ -494,66 +494,66 @@ function getActiveHand(phase: Phase): Side | null {
 
 function getArenaText(game: GameState, clash: Clash | null, verdict: string) {
   if (!clash) {
-    if (game.phase === "match_intro") return "Загрузка матча: бойцы выходят на арену.";
-    if (game.phase === "round_intro") return `Раунд ${game.round.round}. Арена свободна, карты ждут выбора.`;
-    return "Выбери бойца, вложи энергию и выпусти его на улицу.";
+    if (game.phase === "match_intro") return "Матч завантажується: бійці виходять на арену.";
+    if (game.phase === "round_intro") return `Раунд ${game.round.round}. Арена вільна, картки чекають на вибір.`;
+    return "Обери бійця, вклади енергію й випусти його на арену.";
   }
 
-  if (game.phase === "opponent_turn") return "Карта выбрана. Соперник отвечает своим ходом.";
-  if (game.phase === "damage_apply") return `${clash.winner === "player" ? clash.playerCard.name : clash.enemyCard.name} победил. ${clash.damage} урона нанесено.`;
-  if (game.phase === "match_result" || game.phase === "reward_summary") return `${verdict}. ${clash.damage} урона нанесено.`;
-  if (game.phase === "round_result") return `${roundResultText(clash.winner)} ${clash.damage} урона нанесено.`;
+  if (game.phase === "opponent_turn") return "Картку обрано. Суперник відповідає своїм ходом.";
+  if (game.phase === "damage_apply") return `${clash.winner === "player" ? clash.playerCard.name : clash.enemyCard.name} перемагає. Завдано ${clash.damage} шкоди.`;
+  if (game.phase === "match_result" || game.phase === "reward_summary") return `${verdict}. Завдано ${clash.damage} шкоди.`;
+  if (game.phase === "round_result") return `${roundResultText(clash.winner)} Завдано ${clash.damage} шкоди.`;
 
-  return "Выбирай следующую карту.";
+  return "Обирай наступну картку.";
 }
 
 function getPhaseTitle(phase: Phase, _first: Side, verdict: string) {
   if (phase === "match_result" || phase === "reward_summary") return verdict;
   if (phase === "round_intro") return "Раунд";
-  if (phase === "opponent_turn") return "Ход соперника";
+  if (phase === "opponent_turn") return "Хід суперника";
   if (phase === "battle_intro") return "Бой";
-  if (phase === "damage_apply") return "Урон";
-  if (phase === "round_result") return "Итог раунда";
-  return "Твой ход";
+  if (phase === "damage_apply") return "Шкода";
+  if (phase === "round_result") return "Підсумок раунду";
+  return "Твій хід";
 }
 
 function getOverlayTitle(phase: Phase, round: number, verdict: string) {
   if (phase === "match_intro") return "Матч";
   if (phase === "round_intro") return `Раунд ${round}`;
-  if (phase === "opponent_turn") return "Ход соперника";
-  if (phase === "round_result") return "Раунд завершен";
+  if (phase === "opponent_turn") return "Хід суперника";
+  if (phase === "round_result") return "Раунд завершено";
   if (phase === "match_result") return verdict;
   return "";
 }
 
 function getOverlaySubtitle(game: GameState, verdict: string) {
-  if (game.phase === "match_intro") return `${game.player.name} vs ${game.enemy.name} · HP ${game.player.hp}/${game.enemy.hp} · энергия ${game.player.energy}/${game.enemy.energy}`;
-  if (game.phase === "round_intro") return "Карты готовы. Выбирай бойца.";
-  if (game.phase === "opponent_turn") return "Карта игрока заблокирована, соперник выбирает ответ";
-  if (game.phase === "round_result" && game.lastClash) return `${game.lastClash.damage} урона. Следующий раунд через мгновение.`;
-  if (game.phase === "match_result") return verdict ? "Бой завершен." : "";
+  if (game.phase === "match_intro") return `${game.player.name} vs ${game.enemy.name} · HP ${game.player.hp}/${game.enemy.hp} · енергія ${game.player.energy}/${game.enemy.energy}`;
+  if (game.phase === "round_intro") return "Картки готові. Обери бійця.";
+  if (game.phase === "opponent_turn") return "Картку гравця зафіксовано, суперник обирає відповідь";
+  if (game.phase === "round_result" && game.lastClash) return `${game.lastClash.damage} шкоди. Наступний раунд за мить.`;
+  if (game.phase === "match_result") return verdict ? "Бій завершено." : "";
   return "";
 }
 
 function getBanner(phase: Phase, round: number, winner?: Side) {
   if (phase === "round_result" && winner) {
     return winner === "player"
-      ? { src: "/nexus-assets/banners/round-won.png", alt: "Раунд выигран", width: 520, height: 104 }
-      : { src: "/nexus-assets/banners/round-lost.png", alt: "Раунд проигран", width: 520, height: 104 };
+      ? { src: "/nexus-assets/banners/round-won.png", alt: "Раунд виграно", width: 520, height: 104 }
+      : { src: "/nexus-assets/banners/round-lost.png", alt: "Раунд програно", width: 520, height: 104 };
   }
-  if (phase === "match_result" && winner === "enemy") return { src: "/nexus-assets/banners/defeat.png", alt: "Поражение", width: 430, height: 108 };
+  if (phase === "match_result" && winner === "enemy") return { src: "/nexus-assets/banners/defeat.png", alt: "Поразка", width: 430, height: 108 };
   if (phase === "round_intro" && [1, 3, 4].includes(round)) return { src: `/nexus-assets/banners/round-${round}.png`, alt: `Раунд ${round}`, width: 360, height: 104 };
   return null;
 }
 
 function roundResultText(winner: Side) {
-  return winner === "player" ? "Раунд выигран!" : "Раунд проигран.";
+  return winner === "player" ? "Раунд виграно!" : "Раунд програно.";
 }
 
 function getVerdict(result?: MatchResult) {
   if (!result) return "";
-  if (result === "draw") return "Ничья";
-  return result === "player" ? "Победа" : "Поражение";
+  if (result === "draw") return "Нічия";
+  return result === "player" ? "Перемога" : "Поразка";
 }
 
 function topBarClass() {

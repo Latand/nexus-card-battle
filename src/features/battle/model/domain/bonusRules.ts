@@ -41,7 +41,7 @@ export function bonusControlEffects(playerBonus: BonusState, enemyBonus: BonusSt
     effects.push({
       id: "stop-opponent-bonus",
       source: playerBonus.blockedBy,
-      label: "- бонус соперника",
+      label: "- бонус суперника",
       timing: "control",
       stat: "bonus",
       target: "player",
@@ -52,7 +52,7 @@ export function bonusControlEffects(playerBonus: BonusState, enemyBonus: BonusSt
     effects.push({
       id: "stop-opponent-bonus",
       source: enemyBonus.blockedBy,
-      label: "- бонус соперника",
+      label: "- бонус суперника",
       timing: "control",
       stat: "bonus",
       target: "enemy",

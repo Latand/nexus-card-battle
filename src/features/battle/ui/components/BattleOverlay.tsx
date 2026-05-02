@@ -1,6 +1,7 @@
 import Image from "next/image";
 import type { CSSProperties } from "react";
 import { cn } from "@/shared/lib/cn";
+import { visibleText } from "@/shared/lib/visibleText";
 import { DAMAGE_THROWS_CAP, MAX_ENERGY } from "../../model/constants";
 import { hasApplicableAbilityEffect, isAbilityBlocked } from "../../model/game";
 import type { Clash, Fighter, Outcome, Phase, ResolvedEffect, Side } from "../../model/types";
@@ -146,16 +147,16 @@ export function BattleOverlay({
 }
 
 function getStatusText(phase: Phase, clash: Clash, isFinisher: boolean, loserCardName: string, damageTarget: string) {
-  if (phase === "battle_intro") return `Энергия: ${clash.playerEnergy} против ${clash.enemyEnergy}`;
+  if (phase === "battle_intro") return `Енергія: ${clash.playerEnergy} проти ${clash.enemyEnergy}`;
 
   const winnerCardName = clash.winner === "player" ? clash.playerCard.name : clash.enemyCard.name;
   const winnerAttack = clash.winner === "player" ? clash.playerAttack : clash.enemyAttack;
   const loserAttack = clash.winner === "player" ? clash.enemyAttack : clash.playerAttack;
   const damageText = isFinisher
-    ? `${loserCardName} на нуле; добивание ${clash.damage} урона по ${damageTarget}`
-    : `${damageTarget} получает ${clash.damage} урона`;
+    ? `${visibleText(loserCardName)} вибуває: ${clash.damage} шкоди для ${damageTarget}`
+    : `${damageTarget} отримує ${clash.damage} шкоди`;
 
-  return `${winnerCardName} побеждает: ${winnerAttack} против ${loserAttack}; ${damageText}`;
+  return `${visibleText(winnerCardName)} перемагає: ${winnerAttack} проти ${loserAttack}; ${damageText}`;
 }
 
 function isCopyClanBonusResolved(card: Clash["playerCard"], hand: Clash["playerCard"][]) {
@@ -171,8 +172,8 @@ function hasControlEffect(effects: ResolvedEffect[], target: Side) {
 
 function getPhaseLabel(phase: Phase, isFinisher: boolean) {
   if (phase === "battle_intro") return "";
-  if (isFinisher) return "Последний удар";
-  return "Урон";
+  if (isFinisher) return "Останній удар";
+  return "Шкода";
 }
 
 function getVirtualCardLife(clash: Clash, phase: Phase, side: Side) {
@@ -213,12 +214,12 @@ function DuelStatus({
       </strong>
       {revealAttack ? <DuelBar label="Карта" value={cardLife} max={cardLifeMax} tone="health" slots={12} /> : null}
       <div className="grid grid-cols-3 gap-1 max-[760px]:grid-cols-2 [&>span:last-child]:max-[760px]:col-span-full">
-        <span className={duelNumber()}>{cardName}</span>
+        <span className={duelNumber()}>{visibleText(cardName)}</span>
         <span className={duelNumber()}>HP {humanHp}</span>
         <span className={duelNumber()}>{revealAttack ? `Атака ${attack}` : "Атака ?"}</span>
       </div>
       <StatusBadges statuses={statuses} compact />
-      <DuelBar label="Энергия" value={cardEnergy} max={MAX_ENERGY} tone="energy" />
+      <DuelBar label="Енергія" value={cardEnergy} max={MAX_ENERGY} tone="energy" />
     </article>
   );
 }
@@ -239,10 +240,10 @@ function EffectList({ effects }: { effects: ResolvedEffect[] }) {
               ? "border-[#ffe08a]/45 bg-[#49370e]/78 text-[#ffe9a8]"
               : "border-white/12 bg-white/8 text-[#f4e7c4]",
           )}
-          title={`${effect.source}: ${effect.label}`}
+          title={`${visibleText(effect.source)}: ${visibleText(effect.label)}`}
         >
-          {effect.target ? `${effect.target === "player" ? "Игрок" : "Соперник"}: ` : ""}
-          {effect.label}
+          {effect.target ? `${effect.target === "player" ? "Гравець" : "Суперник"}: ` : ""}
+          {visibleText(effect.label)}
           {effect.value !== undefined ? ` ${formatSigned(effect.value)}` : ""}
         </span>
       ))}

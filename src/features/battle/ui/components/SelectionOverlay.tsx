@@ -68,15 +68,15 @@ export function SelectionOverlay({
     <section
       className="fixed inset-0 z-[34] grid place-items-center bg-black/50 p-[min(26px,3vw)] backdrop-blur-[5px] backdrop-saturate-[0.78]"
       data-testid="selection-overlay"
-      aria-label="Выбор карты"
+      aria-label="Вибір картки"
     >
-      <button className="absolute inset-0 cursor-default border-0 bg-transparent" type="button" aria-label="Закрыть выбор" onClick={onClose} />
+      <button className="absolute inset-0 cursor-default border-0 bg-transparent" type="button" aria-label="Закрити вибір" onClick={onClose} />
 
       <div className="relative z-[1] grid min-h-[360px] w-[min(760px,94vw)] grid-cols-[minmax(170px,238px)_188px_minmax(138px,188px)] items-center gap-[18px] rounded-lg border-2 border-[rgba(225,231,224,0.62)] bg-[linear-gradient(180deg,rgba(31,34,35,0.92),rgba(8,9,10,0.9)),repeating-linear-gradient(135deg,rgba(255,255,255,0.08)_0_1px,transparent_1px_8px)] px-[22px] py-5 shadow-[0_24px_70px_rgba(0,0,0,0.72),inset_0_0_0_2px_rgba(255,255,255,0.08)] max-[960px]:grid-cols-[minmax(160px,210px)_180px_minmax(122px,160px)] max-[960px]:gap-3 max-[760px]:w-[min(520px,94vw)] max-[760px]:grid-cols-[minmax(148px,200px)_minmax(164px,1fr)] max-[620px]:w-[min(360px,94vw)] max-[620px]:grid-cols-1 max-[620px]:gap-2.5 max-[620px]:p-3.5">
         <button
           className="absolute right-2.5 top-2 z-[4] h-7 w-7 cursor-pointer rounded-full border border-white/25 bg-black/45 text-xl leading-none text-[#fff7d8]"
           type="button"
-          aria-label="Закрыть выбор"
+          aria-label="Закрити вибір"
           onClick={onClose}
         >
           ×
@@ -99,13 +99,13 @@ export function SelectionOverlay({
           </div>
 
           <div className="grid grid-cols-[34px_minmax(0,1fr)_34px_34px] items-center gap-[5px]">
-            <button className={stepButton("-")} type="button" data-testid="energy-minus" aria-label="Меньше энергии" onClick={onMinus} disabled={energy <= 0}>
+            <button className={stepButton("-")} type="button" data-testid="energy-minus" aria-label="Менше енергії" onClick={onMinus} disabled={energy <= 0}>
               -
             </button>
             <strong className="grid min-h-7 place-items-center border border-white/20 bg-black/50 text-center text-[12px] font-black leading-none text-[#f8f8f8]" data-testid="selection-energy">
               {effectiveEnergy}
             </strong>
-            <button className={stepButton("+")} type="button" data-testid="energy-plus" aria-label="Больше энергии" onClick={onPlus} disabled={energy >= maxEnergy}>
+            <button className={stepButton("+")} type="button" data-testid="energy-plus" aria-label="Більше енергії" onClick={onPlus} disabled={energy >= maxEnergy}>
               +
             </button>
             <b className="grid min-h-7 place-items-center rounded-md bg-[linear-gradient(180deg,#7656f0,#3e2bb1)] text-lg font-black text-white shadow-[0_1px_0_rgba(0,0,0,0.52)]">
@@ -136,13 +136,13 @@ export function SelectionOverlay({
             onClick={onToggleBoost}
             disabled={!damageBoost && !canBoost}
           >
-            <span>+2 урона</span>
+            <span>+2 шкоди</span>
             <b className="grid min-h-7 place-items-center rounded-md bg-[linear-gradient(180deg,#7656f0,#3e2bb1)] text-lg text-white">{boostCost}</b>
           </button>
 
           <div className="grid grid-cols-2 gap-[5px]">
             <span className="grid min-h-7 place-items-center border border-white/15 bg-black/35 text-[11px] font-black uppercase text-[#f5e9c8]">Атака {previewAttack}</span>
-            <span className="grid min-h-7 place-items-center border border-white/15 bg-black/35 text-[11px] font-black uppercase text-[#f5e9c8]">Урон {previewDamage}</span>
+            <span className="grid min-h-7 place-items-center border border-white/15 bg-black/35 text-[11px] font-black uppercase text-[#f5e9c8]">Шкода {previewDamage}</span>
           </div>
 
           <div className="grid gap-[5px] text-[10px] font-bold leading-tight text-[#d9ceb2]">
@@ -182,7 +182,7 @@ export function SelectionOverlay({
             />
             {knownEnemyEnergy !== undefined ? (
               <span className="min-w-[112px] rounded border border-[#7656f0]/70 bg-black/70 px-2 py-1 text-center text-xs font-black uppercase text-[#fff8df] shadow-[0_0_12px_rgba(118,86,240,0.38)]">
-                энергия {knownEnemyEnergy + BASE_ATTACK_ENERGY}
+                енергія {knownEnemyEnergy + BASE_ATTACK_ENERGY}
               </span>
             ) : null}
           </div>

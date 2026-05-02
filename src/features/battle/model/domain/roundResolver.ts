@@ -67,7 +67,7 @@ export function resolveRound(
       ? [{
           id: "stop-opponent-ability",
           source: enemyChoice.card.name,
-          label: "- способность соперника",
+          label: "- уміння суперника",
           timing: "control" as const,
           stat: "ability" as const,
           target: "player" as Side,
@@ -77,7 +77,7 @@ export function resolveRound(
       ? [{
           id: "stop-opponent-ability",
           source: playerCard.name,
-          label: "- способность соперника",
+          label: "- уміння суперника",
           timing: "control" as const,
           stat: "ability" as const,
           target: "enemy" as Side,
@@ -114,7 +114,7 @@ export function resolveRound(
 
   if (winner === "player" && damageBoost) {
     damage += 2;
-    effects.push({ source: playerCard.name, label: "+2 урона за ярость", value: 2, target: "enemy" });
+    effects.push({ source: playerCard.name, label: "+2 шкоди за ривок", value: 2, target: "enemy" });
   }
 
   damage = applyQueuedNumberEffects(damage, loserScore.opponentDamageEffects, winner, effects);
@@ -148,7 +148,7 @@ export function resolveRound(
     damage,
     effects,
     tieBreaker: tie.tieBreaker,
-    text: `${winnerCard.name} пробивает ${winner === "player" ? enemy.name : player.name}: ${damage} урона нанесено`,
+    text: `${winnerCard.name} пробиває ${winner === "player" ? enemy.name : player.name}: завдано ${damage} шкоди`,
   };
 
   const matchResult = getMatchResult(nextPlayer, nextEnemy, round);
@@ -356,8 +356,8 @@ function applyStatusTicks(fighter: Fighter, side: Side) {
 }
 
 function getStatusTickLabel(status: FighterStatus) {
-  if (status.kind === "poison") return `яд ${status.amount}${status.min !== undefined ? `, мин. ${status.min}` : ""}`;
-  return `благословение +${status.amount}`;
+  if (status.kind === "poison") return `отрута ${status.amount}${status.min !== undefined ? `, мін. ${status.min}` : ""}`;
+  return `благословення +${status.amount}`;
 }
 
 function resolveTie({

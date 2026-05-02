@@ -29,23 +29,23 @@ const rarityOrder: Record<Rarity, number> = {
   Common: 1,
 };
 const rarityLabels: Record<Rarity, string> = {
-  Common: "Обычная",
-  Rare: "Редкая",
-  Unique: "Уникальная",
-  Legend: "Легенда",
+  Common: "Звичайна",
+  Rare: "Рідкісна",
+  Unique: "Унікальна",
+  Legend: "Легендарна",
 };
 const rarityFilters: { id: RarityFilter; label: string }[] = [
-  { id: "all", label: "Все" },
-  { id: "Legend", label: "Legend" },
-  { id: "Unique", label: "Unique" },
-  { id: "Rare", label: "Rare" },
-  { id: "Common", label: "Common" },
+  { id: "all", label: "Усі" },
+  { id: "Legend", label: "Легендарні" },
+  { id: "Unique", label: "Унікальні" },
+  { id: "Rare", label: "Рідкісні" },
+  { id: "Common", label: "Звичайні" },
 ];
 const sortModes: { id: SortMode; label: string }[] = [
-  { id: "rarity", label: "Редкость" },
+  { id: "rarity", label: "Рідкість" },
   { id: "power", label: "Сила" },
-  { id: "damage", label: "Урон" },
-  { id: "name", label: "Имя" },
+  { id: "damage", label: "Шкода" },
+  { id: "name", label: "Ім’я" },
 ];
 
 export function CollectionDeckScreen({ collectionIds, deckIds: savedDeckIds = [], onDeckChange, onPlay }: Props) {
@@ -128,7 +128,7 @@ export function CollectionDeckScreen({ collectionIds, deckIds: savedDeckIds = []
         <section className="relative z-10 mx-auto grid max-w-[1480px] gap-3">
           <header className="grid min-h-[68px] grid-cols-[220px_minmax(240px,1fr)_auto] items-center gap-3 rounded-md border border-[#d3a248]/45 bg-[linear-gradient(180deg,rgba(20,25,28,0.92),rgba(8,10,13,0.96))] px-4 shadow-[0_18px_44px_rgba(0,0,0,0.46),inset_0_1px_0_rgba(255,235,165,0.12)] max-[980px]:grid-cols-1">
             <div className="grid gap-1">
-              <b className="text-[12px] font-black uppercase tracking-[0.18em] text-[#d4b06a]">Тактическая картотека</b>
+              <b className="text-[12px] font-black uppercase tracking-[0.18em] text-[#d4b06a]">Бойова картотека</b>
               <h1 className="text-[34px] font-black uppercase leading-none text-[#fff0ad] [text-shadow:0_3px_0_rgba(0,0,0,0.72)]">
                 {GAME_TITLE}
               </h1>
@@ -141,7 +141,7 @@ export function CollectionDeckScreen({ collectionIds, deckIds: savedDeckIds = []
                   className="h-full min-w-0 bg-transparent text-sm font-bold text-[#fff7e4] outline-none placeholder:text-[#91866f]"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Поиск карты, фракции, умения"
+                  placeholder="Пошук за карткою, фракцією або умінням"
                   data-testid="collection-search"
                 />
               </label>
@@ -150,20 +150,20 @@ export function CollectionDeckScreen({ collectionIds, deckIds: savedDeckIds = []
                 value={rarity}
                 items={rarityFilters}
                 onChange={(value) => setRarity(value as RarityFilter)}
-                label="Редкость"
+                label="Рідкість"
               />
               <Segmented
                 value={sortMode}
                 items={sortModes}
                 onChange={(value) => setSortMode(value as SortMode)}
-                label="Сортировка"
+                label="Сортування"
               />
             </div>
 
             <div className="grid grid-cols-3 gap-2 text-center">
-              <Metric label="Карт" value={collectionCards.length} />
-              <Metric label="Фракций" value={ownedFactions.length} />
-              <Metric label="В деке" value={deckIds.length} />
+              <Metric label="Карток" value={collectionCards.length} />
+              <Metric label="Фракцій" value={ownedFactions.length} />
+              <Metric label="У колоді" value={deckIds.length} />
             </div>
           </header>
 
@@ -183,13 +183,13 @@ export function CollectionDeckScreen({ collectionIds, deckIds: savedDeckIds = []
           <div className="grid grid-cols-[220px_minmax(0,1fr)_312px] gap-3 max-[1120px]:grid-cols-[190px_minmax(0,1fr)] max-[860px]:grid-cols-1">
             <aside className="grid content-start gap-2 rounded-md border border-white/10 bg-black/42 p-2 shadow-[inset_0_0_32px_rgba(0,0,0,0.34)] max-[1120px]:order-1 max-[860px]:order-3">
               <div className="flex items-center justify-between gap-2 px-2 py-1">
-                <strong className="text-xs font-black uppercase tracking-[0.14em] text-[#d4b06a]">Фракции</strong>
+                <strong className="text-xs font-black uppercase tracking-[0.14em] text-[#d4b06a]">Фракції</strong>
                 <button
                   className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-black uppercase text-[#efe3c5] hover:bg-white/10"
                   type="button"
                   onClick={() => setActiveFaction("all")}
                 >
-                  Все
+                  Усі
                 </button>
               </div>
 
@@ -198,7 +198,7 @@ export function CollectionDeckScreen({ collectionIds, deckIds: savedDeckIds = []
                 type="button"
                 onClick={() => setActiveFaction("all")}
               >
-                <span>Вся база</span>
+                <span>Уся база</span>
                 <b>{collectionCards.length}</b>
               </button>
 
@@ -223,9 +223,9 @@ export function CollectionDeckScreen({ collectionIds, deckIds: savedDeckIds = []
             <section className="grid min-h-[560px] content-start gap-3 rounded-md border border-[#d3a248]/32 bg-[rgba(6,8,11,0.66)] p-3 shadow-[inset_0_0_70px_rgba(0,0,0,0.28)] max-[1120px]:order-2 max-[860px]:order-1 max-[860px]:col-span-1">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="grid gap-1">
-                  <strong className="text-xl font-black uppercase leading-none text-[#fff0ad]">Коллекция</strong>
+                  <strong className="text-xl font-black uppercase leading-none text-[#fff0ad]">Колекція</strong>
                   <span className="text-xs font-bold uppercase tracking-[0.08em] text-[#a99d85]">
-                    Показано {visibleCards.length} из {filteredCards.length}
+                    Показано {visibleCards.length} з {filteredCards.length}
                   </span>
                 </div>
 
@@ -234,7 +234,7 @@ export function CollectionDeckScreen({ collectionIds, deckIds: savedDeckIds = []
                     Авто
                   </button>
                   <button className={utilityButtonClass()} type="button" onClick={trimDeckToMinimum} disabled={!canRemoveCard}>
-                    Оставить 9
+                    До мінімуму
                   </button>
                 </div>
               </div>
@@ -300,7 +300,7 @@ function CollectionCardTile({
       style={style}
       data-testid={`collection-card-${card.id}`}
     >
-      <button className="absolute inset-0 z-[1] rounded-md" type="button" onClick={onSelect} aria-label={`Выбрать ${card.name}`} />
+      <button className="absolute inset-0 z-[1] rounded-md" type="button" onClick={onSelect} aria-label={`Обрати ${visibleText(card.name)}`} />
       <MiniBattleCard card={card} size="collection" />
 
       {inDeck ? (
@@ -317,7 +317,7 @@ function CollectionCardTile({
         type="button"
         disabled={inDeck && !canRemove}
         onClick={onToggle}
-        aria-label={inDeck ? `Убрать ${card.name} из деки` : `Добавить ${card.name} в деку`}
+        aria-label={inDeck ? `Прибрати ${visibleText(card.name)} з колоди` : `Додати ${visibleText(card.name)} до колоди`}
         data-testid={`collection-toggle-${card.id}`}
       >
         <span
@@ -365,9 +365,9 @@ function DeckDock({
       <div className="min-w-0">
         <div className="mb-2 flex items-end justify-between gap-3">
           <div>
-            <strong className="block text-xl font-black uppercase leading-none text-[#fff0ad]">Дека</strong>
+            <strong className="block text-xl font-black uppercase leading-none text-[#fff0ad]">Колода</strong>
             <span className="text-xs font-bold uppercase tracking-[0.08em] text-[#a99d85]">
-              Минимум {PLAYER_DECK_SIZE}, в деке {deckCards.length}
+              Мінімум {PLAYER_DECK_SIZE}, у колоді {deckCards.length}
             </span>
           </div>
           <button className={utilityButtonClass()} type="button" onClick={onAutofill}>
@@ -394,7 +394,7 @@ function DeckDock({
                 className="grid h-[118px] w-[82px] place-items-center rounded-md border border-dashed border-white/14 bg-white/[0.03] p-2 text-xs font-black uppercase text-[#746b5a] transition hover:border-[#ffe08a]/40 hover:text-[#efe3c5]"
                 type="button"
                 onClick={onAutofill}
-                aria-label="Автозаполнить деку"
+                aria-label="Автозаповнити колоду"
               >
                 <span className="grid aspect-square w-9 place-items-center rounded-full border border-white/12 bg-black/30 text-lg">+</span>
               </button>
@@ -416,7 +416,7 @@ function DeckDock({
           onClick={onPlayAi}
           data-testid="play-selected-deck"
         >
-          Играть
+          Грати
         </button>
 
         <button
@@ -436,8 +436,8 @@ function DeckDock({
 
         <div className="grid grid-cols-3 gap-2">
           <Metric label="Сила" value={deckStats.power} />
-          <Metric label="Урон" value={deckStats.damage} />
-          <Metric label="Легенд" value={deckStats.legends} />
+          <Metric label="Шкода" value={deckStats.damage} />
+          <Metric label="Легенд." value={deckStats.legends} />
         </div>
       </div>
     </section>
@@ -467,7 +467,7 @@ function DeckDockSlot({
       )}
       data-testid={`deck-card-${card.id}`}
     >
-      <button className="absolute inset-0 z-[1] rounded-md" type="button" onClick={onSelect} aria-label={`Выбрать ${card.name}`} />
+      <button className="absolute inset-0 z-[1] rounded-md" type="button" onClick={onSelect} aria-label={`Обрати ${visibleText(card.name)}`} />
       <MiniBattleCard card={card} size="dock" />
       <b className="pointer-events-none absolute left-1.5 top-1.5 z-[3] grid aspect-square w-6 place-items-center rounded-full bg-[#111820] text-xs font-black text-[#ffe08a] shadow-[0_4px_12px_rgba(0,0,0,0.42)]">
         {index + 1}
@@ -483,7 +483,7 @@ function DeckDockSlot({
         disabled={!canRemove}
         onClick={onRemove}
         data-testid={`deck-remove-${card.id}`}
-        aria-label={`Убрать ${card.name} из деки`}
+        aria-label={`Прибрати ${visibleText(card.name)} з колоди`}
       >
         −
       </button>
@@ -538,17 +538,17 @@ function CardDetails({
           <span className="mt-1 block text-xs font-black uppercase tracking-[0.1em] text-[#9ed6e4]">{visibleText(card.clan)} · {rarityLabels[card.rarity]}</span>
         </div>
         <button className={utilityButtonClass()} type="button" onClick={onToggle} disabled={disableRemove}>
-          {inDeck ? "Убрать" : "В деку"}
+          {inDeck ? "Прибрати" : "До колоди"}
         </button>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
         <Metric label="Сила" value={card.power} />
-        <Metric label="Урон" value={card.damage} />
+        <Metric label="Шкода" value={card.damage} />
       </div>
 
       <dl className="mt-3 grid gap-2">
-        <DetailRow label="Умение" title={card.ability.name} description={card.ability.description} />
+        <DetailRow label="Уміння" title={card.ability.name} description={card.ability.description} />
         <DetailRow label="Бонус" title={card.bonus.name} description={card.bonus.description} />
       </dl>
     </section>
@@ -558,7 +558,7 @@ function CardDetails({
 function DeckLinksPanel({ activeLinks }: { activeLinks: { faction: string; bonus: string }[] }) {
   return (
     <section className="rounded-md border border-white/10 bg-black/36 p-3 shadow-[inset_0_0_34px_rgba(0,0,0,0.28)]">
-      <strong className="text-xs font-black uppercase tracking-[0.12em] text-[#d4b06a]">Связки</strong>
+      <strong className="text-xs font-black uppercase tracking-[0.12em] text-[#d4b06a]">Зв’язки</strong>
       <div className="mt-2 grid gap-2">
         {activeLinks.length > 0 ? (
           activeLinks.map((link) => (
@@ -569,7 +569,7 @@ function DeckLinksPanel({ activeLinks }: { activeLinks: { faction: string; bonus
           ))
         ) : (
           <span className="rounded border border-white/10 bg-black/22 px-2 py-2 text-xs font-bold text-[#91866f]">
-            Добавь пары одной фракции
+            Додай пари однієї фракції
           </span>
         )}
       </div>

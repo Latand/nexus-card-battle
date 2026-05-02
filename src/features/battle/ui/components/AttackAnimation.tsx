@@ -8,7 +8,7 @@ export function AttackAnimation({ clash, phase }: { clash: Clash | null; phase: 
     return (
       <div className="relative h-[78px] w-[min(420px,100%)] overflow-visible" data-phase="idle">
         <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-black uppercase tracking-[0.12em] text-[rgba(255,232,137,0.38)]">
-          готово
+          Готово
         </span>
       </div>
     );
@@ -17,7 +17,7 @@ export function AttackAnimation({ clash, phase }: { clash: Clash | null; phase: 
   return (
     <div className="relative h-[78px] w-[min(420px,100%)] overflow-visible" data-phase="damage">
       <strong className="absolute left-1/2 top-1/2 z-[2] -translate-x-1/2 -translate-y-1/2 animate-[nexus-caption-pop_340ms_ease_both] rounded-full border border-[rgba(255,224,138,0.45)] bg-black/60 px-3 py-[7px] text-base text-[#ffe08a]">
-        {clash.damage} урона нанесено
+        Завдано {clash.damage} шкоди
       </strong>
       {Array.from({ length: clash.damage }).map((_, index) => (
         <Projectile key={`${clash.round}-damage-${index}`} from={clash.winner} index={index} kind={index + 1} />

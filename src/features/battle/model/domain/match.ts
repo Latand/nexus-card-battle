@@ -19,8 +19,8 @@ export function createInitialGame(options: CreateInitialGameOptions = {}): GameS
 
   return {
     phase: "match_intro",
-    player: makeFighter("player", "Игрок", "Лидер улицы", nextPlayerCollectionIds, nextPlayerDeckIds),
-    enemy: makeFighter("enemy", "Соперник", "Гость арены", nextEnemyCollectionIds, nextEnemyDeckIds),
+    player: makeFighter("player", "Гравець", "Лідер вулиці", nextPlayerCollectionIds, nextPlayerDeckIds),
+    enemy: makeFighter("enemy", "Суперник", "Гість арени", nextEnemyCollectionIds, nextEnemyDeckIds),
     round: createRound(1),
     first: "player",
   };
