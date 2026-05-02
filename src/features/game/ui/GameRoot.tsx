@@ -16,6 +16,12 @@ type TelegramWindow = Window & {
     WebApp?: {
       ready?: () => void;
       expand?: () => void;
+      isFullscreen?: boolean;
+      isOrientationLocked?: boolean;
+      isVersionAtLeast?: (version: string) => boolean;
+      requestFullscreen?: () => void;
+      lockOrientation?: () => void;
+      disableVerticalSwipes?: () => void;
       initDataUnsafe?: {
         user?: {
           id?: number;
@@ -39,12 +45,17 @@ type PersistenceWindow = {
   clearTimeout: Window["clearTimeout"];
 };
 
+type LockableScreenOrientation = ScreenOrientation & {
+  lock?: (orientation: "landscape" | "portrait" | "any" | "natural") => Promise<void>;
+};
+
 export function GameRoot() {
   const [collectionIds] = useState(() => cards.map((card) => card.id));
   const [screen, setScreen] = useState<"collection" | "battle">("collection");
   const [battleMode, setBattleMode] = useState<BattleMode>("ai");
   const [deckIds, setDeckIds] = useState(() => createStarterDeckIds(collectionIds));
   const [telegramPlayer, setTelegramPlayer] = useState<TelegramPlayer>(() => readTelegramPlayer());
+  const [telegramLandscapeReady, setTelegramLandscapeReady] = useState(() => !isTelegramWebAppRuntime() || isLandscapeViewport());
   const playerName = telegramPlayer.name;
   const deckIdsRef = useRef(deckIds);
   const deckTouchedRef = useRef(false);
@@ -55,9 +66,6 @@ export function GameRoot() {
   }, [deckIds]);
 
   useEffect(() => {
-    const webApp = getTelegramWebApp();
-    webApp?.ready?.();
-    webApp?.expand?.();
     const telegramPlayerHandle = window.setTimeout(() => setTelegramPlayer(readTelegramPlayer()), 0);
 
     const cancelPersistenceTask = schedulePersistenceTask(() => {
@@ -81,6 +89,44 @@ export function GameRoot() {
   }, [collectionIds]);
 
   useEffect(() => {
+    const webApp = getTelegramWebApp();
+    if (!webApp) return;
+
+    let disposed = false;
+    const syncLandscape = () => {
+      const landscape = isLandscapeViewport();
+      setTelegramLandscapeReady(landscape);
+
+      if (landscape && canUseTelegramVersion(webApp, "8.0") && !webApp.isOrientationLocked) {
+        try {
+          webApp.lockOrientation?.();
+        } catch {
+          // Telegram clients may expose the method while rejecting the current platform.
+        }
+      }
+    };
+
+    webApp.ready?.();
+    webApp.expand?.();
+    webApp.disableVerticalSwipes?.();
+    requestTelegramFullscreen(webApp);
+    void requestLandscapeOrientation().finally(() => {
+      if (!disposed) syncLandscape();
+    });
+
+    const syncHandle = window.setTimeout(syncLandscape, 0);
+    window.addEventListener("resize", syncLandscape);
+    window.screen.orientation?.addEventListener?.("change", syncLandscape);
+
+    return () => {
+      disposed = true;
+      window.clearTimeout(syncHandle);
+      window.removeEventListener("resize", syncLandscape);
+      window.screen.orientation?.removeEventListener?.("change", syncLandscape);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!persistenceReadyRef.current) return;
     return schedulePersistenceTask(() => {
       void saveDeckIds(deckIds);
@@ -99,39 +145,43 @@ export function GameRoot() {
   );
 
   if (screen === "battle") {
-    if (battleMode === "human") {
-      return (
-        <RealtimeBattleGame
-          playerCollectionIds={collectionIds}
-          playerDeckIds={deckIds}
-          playerName={playerName}
-          telegramPlayer={telegramPlayer}
-          onOpenCollection={() => setScreen("collection")}
-        />
-      );
-    }
-
     return (
-      <BattleGame
-        playerCollectionIds={collectionIds}
-        playerDeckIds={deckIds}
-        playerName={playerName}
-        onOpenCollection={() => setScreen("collection")}
-      />
+      <>
+        {battleMode === "human" ? (
+          <RealtimeBattleGame
+            playerCollectionIds={collectionIds}
+            playerDeckIds={deckIds}
+            playerName={playerName}
+            telegramPlayer={telegramPlayer}
+            onOpenCollection={() => setScreen("collection")}
+          />
+        ) : (
+          <BattleGame
+            playerCollectionIds={collectionIds}
+            playerDeckIds={deckIds}
+            playerName={playerName}
+            onOpenCollection={() => setScreen("collection")}
+          />
+        )}
+        <TelegramLandscapeOverlay active={!telegramLandscapeReady} />
+      </>
     );
   }
 
   return (
-    <CollectionDeckScreen
-      collectionIds={collectionIds}
-      deckIds={deckIds}
-      onDeckChange={handleDeckChange}
-      onPlay={(nextDeckIds, mode) => {
-        handleDeckChange(nextDeckIds);
-        setBattleMode(mode);
-        setScreen("battle");
-      }}
-    />
+    <>
+      <CollectionDeckScreen
+        collectionIds={collectionIds}
+        deckIds={deckIds}
+        onDeckChange={handleDeckChange}
+        onPlay={(nextDeckIds, mode) => {
+          handleDeckChange(nextDeckIds);
+          setBattleMode(mode);
+          setScreen("battle");
+        }}
+      />
+      <TelegramLandscapeOverlay active={!telegramLandscapeReady} />
+    </>
   );
 }
 
@@ -200,6 +250,62 @@ async function saveDeckIds(deckIds: string[]) {
 function getTelegramWebApp() {
   if (typeof window === "undefined") return undefined;
   return (window as TelegramWindow).Telegram?.WebApp;
+}
+
+function isTelegramWebAppRuntime() {
+  return Boolean(getTelegramWebApp());
+}
+
+function requestTelegramFullscreen(webApp: NonNullable<TelegramWindow["Telegram"]>["WebApp"]) {
+  if (!webApp || webApp.isFullscreen || !canUseTelegramVersion(webApp, "8.0")) return;
+
+  try {
+    webApp.requestFullscreen?.();
+  } catch {
+    // Fullscreen can be unsupported on a Telegram client even when the JS bridge exists.
+  }
+}
+
+async function requestLandscapeOrientation() {
+  if (typeof window === "undefined") return;
+
+  try {
+    await (window.screen.orientation as LockableScreenOrientation | undefined)?.lock?.("landscape");
+  } catch {
+    // Browsers commonly require fullscreen/user activation before allowing orientation lock.
+  }
+}
+
+function canUseTelegramVersion(webApp: NonNullable<TelegramWindow["Telegram"]>["WebApp"], version: string) {
+  if (!webApp?.isVersionAtLeast) return false;
+
+  try {
+    return webApp.isVersionAtLeast(version);
+  } catch {
+    return false;
+  }
+}
+
+function isLandscapeViewport() {
+  if (typeof window === "undefined") return true;
+  return window.matchMedia("(orientation: landscape)").matches || window.innerWidth >= window.innerHeight;
+}
+
+function TelegramLandscapeOverlay({ active }: { active: boolean }) {
+  if (!active) return null;
+
+  return (
+    <section className="fixed inset-0 z-[100] grid place-items-center bg-[#05080b] px-5 text-center text-[#f8eed8]">
+      <div className="grid max-w-[420px] gap-3">
+        <strong className="text-3xl font-black uppercase leading-none text-[#ffe08a] [font-family:Impact,Arial_Narrow,sans-serif]">
+          Поверни екран
+        </strong>
+        <p className="text-sm font-black uppercase tracking-[0.04em] text-[#d9ceb2]">
+          Арена відкривається на весь екран і найкраще працює горизонтально.
+        </p>
+      </div>
+    </section>
+  );
 }
 
 async function readCloudDeckIds(collectionIds: string[]) {
