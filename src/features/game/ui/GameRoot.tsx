@@ -61,9 +61,14 @@ export function GameRoot() {
   const [telegramLandscapePromptActive, setTelegramLandscapePromptActive] = useState(false);
   const deckTouchedRef = useRef(false);
   const deckSaveRequestRef = useRef(0);
+  const lastConfirmedDeckIdsRef = useRef<string[]>([]);
   const ownedCardIds = useMemo(() => getOwnedCardIdsForProfile(playerProfile, allCardIds), [allCardIds, playerProfile]);
   const profileDeckIds = useMemo(() => getDeckIdsForProfile(playerProfile, ownedCardIds), [ownedCardIds, playerProfile]);
   const deckSource: DeckSource = profileDeckIds.length > 0 ? "profile" : "starter-fallback";
+  const deckReadyToPlay =
+    profileDeckIds.length >= PLAYER_DECK_SIZE &&
+    sameStringArray(deckIds, profileDeckIds) &&
+    deckSaveStatus !== "saving";
   const starterFreeBoostersRemaining = playerProfile?.starterFreeBoostersRemaining ?? 0;
   const playerName = telegramPlayer.name;
   const showStarterOnboarding =
@@ -88,6 +93,7 @@ export function GameRoot() {
     void fetchPlayerProfile(identity)
       .then((profile) => {
         if (disposed) return;
+        lastConfirmedDeckIdsRef.current = getConfirmedDeckIds(profile, allCardIds);
         setPlayerIdentity(identity);
         setPlayerProfile(profile);
         setProfileStatus("ready");
@@ -98,13 +104,14 @@ export function GameRoot() {
         setPlayerIdentity(identity);
         setPlayerProfile(null);
         setProfileStatus("unavailable");
+        lastConfirmedDeckIdsRef.current = [];
         setDeckSaveStatus("idle");
       });
 
     return () => {
       disposed = true;
     };
-  }, [profileRetryKey]);
+  }, [allCardIds, profileRetryKey]);
 
   useEffect(() => {
     if (deckTouchedRef.current) return;
@@ -155,7 +162,6 @@ export function GameRoot() {
     (nextDeckIds: string[]) => {
       const sanitizedDeckIds = sanitizeDeckIds(nextDeckIds, ownedCardIds);
       const changed = !sameStringArray(deckIds, sanitizedDeckIds);
-      const previousDeckIds = deckIds;
 
       deckTouchedRef.current = true;
       setDeckIds(sanitizedDeckIds);
@@ -171,23 +177,27 @@ export function GameRoot() {
       void savePlayerDeck(playerIdentity, sanitizedDeckIds)
         .then((nextProfile) => {
           if (deckSaveRequestRef.current !== requestId) return;
+          const confirmedDeckIds = getConfirmedDeckIds(nextProfile, allCardIds);
+          lastConfirmedDeckIdsRef.current = confirmedDeckIds;
           setPlayerProfile(nextProfile);
+          setDeckIds(confirmedDeckIds);
           setDeckSaveStatus("saved");
         })
         .catch(() => {
           if (deckSaveRequestRef.current !== requestId) return;
-          setDeckIds(previousDeckIds);
+          setDeckIds(lastConfirmedDeckIdsRef.current);
           setDeckSaveStatus("error");
         });
     },
-    [deckIds, ownedCardIds, playerIdentity, playerProfile, profileStatus],
+    [allCardIds, deckIds, ownedCardIds, playerIdentity, playerProfile, profileStatus],
   );
   const handleStarterProfileChange = useCallback((nextProfile: PlayerProfile) => {
     deckTouchedRef.current = false;
+    lastConfirmedDeckIdsRef.current = getConfirmedDeckIds(nextProfile, allCardIds);
     setPlayerProfile(nextProfile);
     setDeckSaveStatus("idle");
     setStarterDeckReadyVisible(isStarterKitReady(nextProfile));
-  }, []);
+  }, [allCardIds]);
   const handleStarterDeckPlay = useCallback((starterDeckIds: string[]) => {
     deckTouchedRef.current = true;
     setDeckIds(starterDeckIds);
@@ -204,11 +214,24 @@ export function GameRoot() {
     },
     [ownedCardIds],
   );
+  const handleSavedDeckPlay = useCallback(
+    (nextDeckIds: string[], mode: BattleMode) => {
+      const sanitizedDeckIds = sanitizeDeckIds(nextDeckIds, ownedCardIds);
+      if (!deckReadyToPlay || !sameStringArray(sanitizedDeckIds, profileDeckIds)) return;
+
+      deckTouchedRef.current = true;
+      setDeckIds(profileDeckIds);
+      setBattleMode(mode);
+      setScreen("battle");
+    },
+    [deckReadyToPlay, ownedCardIds, profileDeckIds],
+  );
   const retryProfileLoad = useCallback(() => {
     deckTouchedRef.current = false;
     setStarterDeckReadyVisible(false);
     setPlayerProfile(null);
     setProfileStatus("loading");
+    lastConfirmedDeckIdsRef.current = [];
     setDeckSaveStatus("idle");
     setProfileRetryKey((current) => current + 1);
   }, []);
@@ -284,13 +307,10 @@ export function GameRoot() {
         profileDeckCount={playerProfile?.deckIds.length ?? 0}
         deckSource={deckSource}
         deckSaveStatus={deckSaveStatus}
+        deckReadyToPlay={deckReadyToPlay}
         starterFreeBoostersRemaining={starterFreeBoostersRemaining}
         onDeckChange={handleDeckChange}
-        onPlay={(nextDeckIds, mode) => {
-          handleDeckChange(nextDeckIds);
-          setBattleMode(mode);
-          setScreen("battle");
-        }}
+        onPlay={handleSavedDeckPlay}
       />
       <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
     </>
@@ -464,6 +484,10 @@ function getOwnedCardIdsForProfile(profile: PlayerProfile | null, allCardIds: st
 function getDeckIdsForProfile(profile: PlayerProfile | null, collectionIds: string[]) {
   if (!profile || profile.deckIds.length === 0) return [];
   return unique(profile.deckIds).filter((cardId) => collectionIds.includes(cardId));
+}
+
+function getConfirmedDeckIds(profile: PlayerProfile, allCardIds: string[]) {
+  return getDeckIdsForProfile(profile, getOwnedCardIdsForProfile(profile, allCardIds));
 }
 
 function isStarterKitReady(profile: PlayerProfile) {

@@ -18,6 +18,7 @@ type Props = {
   profileDeckCount: number;
   deckSource: "profile" | "starter-fallback";
   deckSaveStatus: "idle" | "saving" | "saved" | "error";
+  deckReadyToPlay: boolean;
   starterFreeBoostersRemaining: number;
   onDeckChange: (deckIds: string[]) => void;
   onPlay: (deckIds: string[], mode: "ai" | "human") => void;
@@ -68,6 +69,7 @@ export function CollectionDeckScreen({
   profileDeckCount,
   deckSource,
   deckSaveStatus,
+  deckReadyToPlay,
   starterFreeBoostersRemaining,
   onDeckChange,
   onPlay,
@@ -76,7 +78,7 @@ export function CollectionDeckScreen({
   const ownedCards = useMemo(() => cards.filter((card) => ownedSet.has(card.id)), [ownedSet]);
   const [collectionMode, setCollectionMode] = useState<CollectionMode>("owned");
   const browsingCards = collectionMode === "owned" ? ownedCards : cards;
-  const canEditDeck = collectionMode === "owned";
+  const canEditDeck = collectionMode === "owned" && deckSaveStatus !== "saving";
   const deckIds = useMemo(
     () => savedDeckIds.filter((cardId) => ownedSet.has(cardId)),
     [ownedSet, savedDeckIds],
@@ -86,6 +88,7 @@ export function CollectionDeckScreen({
   const [activeFaction, setActiveFaction] = useState("all");
   const [rarity, setRarity] = useState<RarityFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("rarity");
+  const [visiblePage, setVisiblePage] = useState({ key: "", limit: GRID_LIMIT });
 
   const deckCards = useMemo(() => deckIds.map((cardId) => cards.find((card) => card.id === cardId)).filter(Boolean) as Card[], [deckIds]);
   const browsingCardIds = useMemo(() => new Set(browsingCards.map((card) => card.id)), [browsingCards]);
@@ -105,8 +108,11 @@ export function CollectionDeckScreen({
       })
       .sort((left, right) => sortCards(left, right, sortMode));
   }, [activeFaction, browsingCards, query, rarity, sortMode]);
-  const visibleCards = filteredCards.slice(0, GRID_LIMIT);
-  const canPlay = deckIds.length >= PLAYER_DECK_SIZE;
+  const visibleScopeKey = [collectionMode, activeFaction, query, rarity, sortMode].join("\u0000");
+  const visibleLimit = visiblePage.key === visibleScopeKey ? visiblePage.limit : GRID_LIMIT;
+  const visibleCards = filteredCards.slice(0, visibleLimit);
+  const canLoadMoreCards = visibleCards.length < filteredCards.length;
+  const canPlay = deckIds.length >= PLAYER_DECK_SIZE && deckReadyToPlay;
   const canRemoveCard = canEditDeck && deckIds.length > PLAYER_DECK_SIZE;
   const deckStats = getDeckStats(deckCards);
   const activeLinks = getActiveLinks(deckCards);
@@ -162,6 +168,8 @@ export function CollectionDeckScreen({
       data-profile-deck-count={profileDeckCount}
       data-deck-source={deckSource}
       data-collection-mode={collectionMode}
+      data-visible-card-count={visibleCards.length}
+      data-filtered-card-count={filteredCards.length}
       data-starter-free-boosters-remaining={starterFreeBoostersRemaining}
     >
       <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,rgba(11,15,17,0.96),rgba(5,7,10,0.98)),url('/nexus-assets/backgrounds/arena-bar-1024x576.png')] bg-cover bg-center px-4 py-4 max-[760px]:px-2">
@@ -318,6 +326,24 @@ export function CollectionDeckScreen({
                   </div>
                 )}
               </div>
+
+              {canLoadMoreCards ? (
+                <div className="grid justify-items-center border-t border-white/10 pt-3">
+                  <button
+                    className="min-h-[42px] rounded-md border-2 border-[#d3a248]/42 bg-[linear-gradient(180deg,rgba(255,224,138,0.16),rgba(211,162,72,0.1))] px-5 text-xs font-black uppercase text-[#ffe8a6] transition hover:border-[#ffe08a]/70 hover:bg-[#ffe08a]/14"
+                    type="button"
+                    onClick={() =>
+                      setVisiblePage({
+                        key: visibleScopeKey,
+                        limit: Math.min(visibleLimit + GRID_LIMIT, filteredCards.length),
+                      })
+                    }
+                    data-testid="collection-load-more"
+                  >
+                    Показати ще · {visibleCards.length}/{filteredCards.length}
+                  </button>
+                </div>
+              ) : null}
             </section>
 
             <aside className="grid content-start gap-3 self-start max-[1120px]:order-1 max-[1120px]:col-span-2 max-[860px]:col-span-1">

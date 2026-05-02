@@ -24,7 +24,11 @@ export type TestPlayerProfileInput = {
   openedBoosterIds?: string[];
 };
 
-export async function mockDeckReadyProfile(page: Page, options: Partial<TestPlayerProfileInput> = {}) {
+type MockDeckReadyProfileOptions = Partial<TestPlayerProfileInput> & {
+  onDeckSave?: (route: Route, profile: TestPlayerProfileInput) => Promise<boolean | void> | boolean | void;
+};
+
+export async function mockDeckReadyProfile(page: Page, options: MockDeckReadyProfileOptions = {}) {
   let profile: TestPlayerProfileInput | undefined;
 
   await page.route("**/api/player/deck", async (route) => {
@@ -38,6 +42,9 @@ export async function mockDeckReadyProfile(page: Page, options: Partial<TestPlay
       starterFreeBoostersRemaining: options.starterFreeBoostersRemaining ?? profile?.starterFreeBoostersRemaining ?? 0,
       openedBoosterIds: options.openedBoosterIds ?? profile?.openedBoosterIds ?? ["neon-breach", "factory-shift"],
     };
+    const handled = await options.onDeckSave?.(route, profile);
+    if (handled === false) return;
+
     await fulfillPlayerProfile(route, profile);
   });
 
