@@ -167,11 +167,17 @@ function joinHumanQueue(session, message) {
     return;
   }
 
+  const missingCollectionIds = getMissingCollectionDeckIds(deckIds, collectionIds);
+  if (missingCollectionIds.length > 0) {
+    sendError(session, `Deck contains cards outside the collection: ${missingCollectionIds.join(", ")}`);
+    return;
+  }
+
   leaveMatch(session);
   cancelQueue(session, { silent: true });
 
   session.queuedDeckIds = deckIds;
-  session.queuedCollectionIds = collectionIds.length > 0 ? collectionIds : deckIds;
+  session.queuedCollectionIds = collectionIds;
 
   if (waitingSessionId && waitingSessionId !== session.id) {
     const opponent = sessions.get(waitingSessionId);
@@ -487,6 +493,11 @@ function validateKnownCardIds(cardIds, source) {
   const unknown = cardIds.filter((cardId) => !activeCardIds.has(cardId));
   if (unknown.length === 0) return null;
   return `Unknown ${source} card ids: ${unknown.join(", ")}`;
+}
+
+function getMissingCollectionDeckIds(deckIds, collectionIds) {
+  const collection = new Set(collectionIds);
+  return deckIds.filter((cardId) => !collection.has(cardId));
 }
 
 function sanitizeMove(value) {

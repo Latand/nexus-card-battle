@@ -144,6 +144,22 @@ test("rejects PvP decks below the nine-card minimum", async ({ baseURL }) => {
   client.close();
 });
 
+test("rejects PvP deck cards outside the provided collection", async ({ baseURL }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const deckIds = cards.slice(0, 9).map((card) => card.id);
+  const missingCollectionCardId = deckIds[8];
+  const client = await connectRealtimeClient(wsUrl, "Non Owned Deck", deckIds, {
+    collectionIds: deckIds.slice(0, 8),
+  });
+
+  const error = await client.waitFor("error", { timeoutMs: 2_000 });
+  expect(error.message).toBe(`Deck contains cards outside the collection: ${missingCollectionCardId}`);
+  await expectNoRealtimeMessage(client, "queued");
+  await expectNoRealtimeMessage(client, "match_ready");
+
+  client.close();
+});
+
 async function resolveFirstMover(first: Page, second: Page) {
   await expect
     .poll(
