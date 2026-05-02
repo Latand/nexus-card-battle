@@ -4,6 +4,7 @@ import type { PlayerProfileStore } from "./api";
 
 const DEFAULT_MONGODB_URI = "mongodb://127.0.0.1:27017/nexus-card-battle";
 const DEFAULT_MONGODB_DB = "nexus-card-battle";
+const DEFAULT_MONGODB_SERVER_SELECTION_TIMEOUT_MS = 1_500;
 const PLAYERS_COLLECTION = "players";
 
 type MongoPlayerDocument = Omit<StoredPlayerProfile, "id"> & {
@@ -16,8 +17,8 @@ const mongoGlobal = globalThis as typeof globalThis & {
 };
 
 export function getMongoPlayerProfileStore() {
-  const { uri, dbName } = getMongoConfig();
-  const clientPromise = getMongoClient(uri);
+  const { uri, dbName, serverSelectionTimeoutMS } = getMongoConfig();
+  const clientPromise = getMongoClient(uri, serverSelectionTimeoutMS);
   return new MongoPlayerProfileStore(clientPromise, dbName);
 }
 
@@ -91,8 +92,10 @@ export class MongoPlayerProfileStore implements PlayerProfileStore {
   }
 }
 
-function getMongoClient(uri: string) {
-  mongoGlobal.__nexusPlayerMongoClientPromise ??= new MongoClient(uri).connect();
+function getMongoClient(uri: string, serverSelectionTimeoutMS: number) {
+  mongoGlobal.__nexusPlayerMongoClientPromise ??= new MongoClient(uri, {
+    serverSelectionTimeoutMS,
+  }).connect();
   return mongoGlobal.__nexusPlayerMongoClientPromise;
 }
 
@@ -101,6 +104,10 @@ function getMongoConfig() {
   return {
     uri,
     dbName: process.env.MONGODB_DB || parseDatabaseName(uri) || DEFAULT_MONGODB_DB,
+    serverSelectionTimeoutMS: parsePositiveInteger(
+      process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS,
+      DEFAULT_MONGODB_SERVER_SELECTION_TIMEOUT_MS,
+    ),
   };
 }
 
@@ -111,6 +118,13 @@ function parseDatabaseName(uri: string) {
   } catch {
     return undefined;
   }
+}
+
+function parsePositiveInteger(value: string | undefined, fallback: number) {
+  if (!value) return fallback;
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function identityFilter(identity: PlayerIdentity): Filter<MongoPlayerDocument> {
