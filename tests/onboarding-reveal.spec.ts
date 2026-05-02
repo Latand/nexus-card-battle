@@ -75,6 +75,7 @@ test("opens two different starter boosters, reveals saved cards, and edits the t
   await expect(page.getByTestId("collection-search")).toBeVisible();
   await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(10);
   await expect(page.getByTestId("play-selected-deck")).toBeEnabled();
+  await expect(page.getByTestId("play-human-match")).toBeEnabled();
 });
 
 test("starts an AI battle from the ten-card starter deck-ready state", async ({ page }) => {
@@ -103,6 +104,7 @@ test("starts an AI battle from the ten-card starter deck-ready state", async ({ 
   await page.getByTestId("starter-deck-ready-play").click();
   await expect(page.getByTestId("round-status")).toBeVisible({ timeout: 10_000 });
   await expect(page.locator('[data-testid^="player-card-"]')).toHaveCount(4);
+  await expectPlayerHandToUseDeck(page, fullStarterDeckIds);
 });
 
 async function setupStarterOnboarding(page: Page, guestId = identity.guestId) {
@@ -267,4 +269,16 @@ async function fulfillOpenBooster(route: Route, boosterId: string, openingCards:
 function getCardsForClans(clans: string[]) {
   const clanSet = new Set(clans);
   return cards.filter((card) => clanSet.has(card.clan)).slice(0, 5);
+}
+
+async function expectPlayerHandToUseDeck(page: Page, deckIds: string[]) {
+  const playerCards = page.locator('[data-testid^="player-card-"]');
+  await expect(playerCards).toHaveCount(4);
+
+  const handIds = await playerCards.evaluateAll((elements) =>
+    elements.map((element) => element.getAttribute("data-testid")?.replace("player-card-", "")),
+  );
+
+  expect(handIds).toHaveLength(4);
+  expect(handIds.every((cardId) => Boolean(cardId) && deckIds.includes(cardId))).toBe(true);
 }

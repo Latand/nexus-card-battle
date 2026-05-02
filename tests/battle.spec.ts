@@ -1,7 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
+import { cards } from "../src/features/battle/model/cards";
 import { mockDeckReadyProfile } from "./fixtures/playerProfile";
 
 const DECK_SESSION_STORAGE_KEY = "nexus:deck-session:v1";
+const PROFILE_ONLY_DECK_IDS = cards
+  .filter((card) => card.clan === "Workers")
+  .slice(0, 9)
+  .map((card) => card.id);
+const PROFILE_ONLY_OWNED_CARD_IDS = [
+  ...PROFILE_ONLY_DECK_IDS,
+  cards.find((card) => card.clan === "Workers" && !PROFILE_ONLY_DECK_IDS.includes(card.id))?.id,
+].filter((cardId): cardId is string => Boolean(cardId));
 
 test("keeps the minimum deck locked", async ({ page }) => {
   await mockDeckReadyProfile(page);
@@ -15,6 +24,23 @@ test("keeps the minimum deck locked", async ({ page }) => {
   expect(firstCardId).toBeTruthy();
 
   await expect(page.getByTestId(`deck-remove-${firstCardId}`)).toBeDisabled();
+});
+
+test("keeps starter-fallback decks visible but unavailable for AI and PvP", async ({ page }) => {
+  await mockDeckReadyProfile(page, {
+    ownedCardIds: PROFILE_ONLY_OWNED_CARD_IDS,
+    deckIds: [],
+    starterFreeBoostersRemaining: 0,
+    openedBoosterIds: ["neon-breach", "factory-shift"],
+  });
+
+  await page.goto("/");
+
+  await expect(page.getByTestId("player-profile-shell")).toHaveAttribute("data-deck-source", "starter-fallback");
+  await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(9);
+  await expect(page.getByTestId("play-selected-deck")).toBeDisabled();
+  await expect(page.getByTestId("play-human-match")).toBeDisabled();
+  await expect(page.getByTestId("round-status")).toHaveCount(0);
 });
 
 test("ignores legacy deck session storage without deleting it", async ({ page }) => {
@@ -42,6 +68,33 @@ test("ignores legacy deck session storage without deleting it", async ({ page })
 
   const deckCards = page.locator('[data-testid^="deck-card-"]');
   await expect(deckCards).toHaveCount(9);
+  await expect.poll(() => readSavedDeckIds(page)).toEqual(legacyDeckIds);
+});
+
+test("starts AI battles from the saved owned profile deck", async ({ page }) => {
+  const legacyDeckIds = cards
+    .filter((card) => card.clan === "Toyz")
+    .slice(0, 9)
+    .map((card) => card.id);
+
+  await mockDeckReadyProfile(page, {
+    ownedCardIds: PROFILE_ONLY_OWNED_CARD_IDS,
+    deckIds: PROFILE_ONLY_DECK_IDS,
+  });
+  await page.addInitScript(
+    ({ storageKey, deckIds }) => {
+      window.sessionStorage.setItem(storageKey, JSON.stringify(deckIds));
+      window.localStorage.setItem("nexus_deck_v1", JSON.stringify(deckIds));
+    },
+    { storageKey: DECK_SESSION_STORAGE_KEY, deckIds: legacyDeckIds },
+  );
+
+  await page.goto("/");
+  await expect(page.getByTestId("player-profile-shell")).toHaveAttribute("data-deck-source", "profile");
+  await page.getByTestId("play-selected-deck").click();
+
+  await expect(page.getByTestId("round-status")).toBeVisible({ timeout: 10_000 });
+  await expectPlayerHandToUseDeck(page, PROFILE_ONLY_DECK_IDS);
   await expect.poll(() => readSavedDeckIds(page)).toEqual(legacyDeckIds);
 });
 
@@ -164,4 +217,16 @@ async function readSavedDeckIds(page: Page) {
     const raw = window.sessionStorage.getItem(storageKey);
     return raw ? (JSON.parse(raw) as string[]) : [];
   }, DECK_SESSION_STORAGE_KEY);
+}
+
+async function expectPlayerHandToUseDeck(page: Page, deckIds: string[]) {
+  const playerCards = page.locator('[data-testid^="player-card-"]');
+  await expect(playerCards).toHaveCount(4);
+
+  const handIds = await playerCards.evaluateAll((elements) =>
+    elements.map((element) => element.getAttribute("data-testid")?.replace("player-card-", "")),
+  );
+
+  expect(handIds).toHaveLength(4);
+  expect(handIds.every((cardId) => Boolean(cardId) && deckIds.includes(cardId))).toBe(true);
 }

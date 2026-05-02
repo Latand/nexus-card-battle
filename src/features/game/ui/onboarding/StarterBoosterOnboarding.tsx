@@ -301,13 +301,14 @@ function StarterDeckReady({
   onPlayDeck: (deckIds: string[]) => void;
   onEditDeck: (deckIds: string[]) => void;
 }) {
-  const deckCards = profile.deckIds
+  const savedOwnedDeckIds = getSavedOwnedDeckIds(profile);
+  const deckCards = savedOwnedDeckIds
     .map((cardId) => cardCatalog.find((card) => card.id === cardId))
     .filter(Boolean) as Card[];
   const clans = new Set(deckCards.map((card) => card.clan));
   const totalPower = deckCards.reduce((sum, card) => sum + card.power, 0);
   const totalDamage = deckCards.reduce((sum, card) => sum + card.damage, 0);
-  const deckReady = deckCards.length >= STARTER_KIT_CARD_COUNT;
+  const deckReady = savedOwnedDeckIds.length >= STARTER_KIT_CARD_COUNT;
 
   return (
     <section
@@ -360,7 +361,7 @@ function StarterDeckReady({
             )}
             type="button"
             disabled={!deckReady}
-            onClick={() => onPlayDeck(profile.deckIds)}
+            onClick={() => onPlayDeck(savedOwnedDeckIds)}
             data-testid="starter-deck-ready-play"
           >
             Грати
@@ -369,7 +370,7 @@ function StarterDeckReady({
           <button
             className="min-h-[48px] rounded-md border-2 border-[#65d7e9]/60 bg-[linear-gradient(180deg,#68e5f5,#218aa3_56%,#0d4151)] px-5 text-sm font-black uppercase text-[#061116] transition hover:brightness-110"
             type="button"
-            onClick={() => onEditDeck(profile.deckIds)}
+            onClick={() => onEditDeck(savedOwnedDeckIds)}
             data-testid="starter-deck-ready-edit"
           >
             Редагувати колоду
@@ -665,6 +666,17 @@ function isStarterKitReady(profile: PlayerProfile) {
   return (
     profile.starterFreeBoostersRemaining === 0 &&
     profile.openedBoosterIds.length >= STARTER_FREE_BOOSTERS &&
-    profile.deckIds.length >= STARTER_KIT_CARD_COUNT
+    getSavedOwnedDeckIds(profile).length >= STARTER_KIT_CARD_COUNT
   );
+}
+
+function getSavedOwnedDeckIds(profile: PlayerProfile) {
+  const knownCardIds = new Set(cardCatalog.map((card) => card.id));
+  const ownedCardIds = new Set(profile.ownedCardIds);
+
+  return unique(profile.deckIds).filter((cardId) => knownCardIds.has(cardId) && ownedCardIds.has(cardId));
+}
+
+function unique(values: string[]) {
+  return [...new Set(values)];
 }

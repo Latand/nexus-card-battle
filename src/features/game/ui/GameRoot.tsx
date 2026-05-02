@@ -65,10 +65,7 @@ export function GameRoot() {
   const ownedCardIds = useMemo(() => getOwnedCardIdsForProfile(playerProfile, allCardIds), [allCardIds, playerProfile]);
   const profileDeckIds = useMemo(() => getDeckIdsForProfile(playerProfile, ownedCardIds), [ownedCardIds, playerProfile]);
   const deckSource: DeckSource = profileDeckIds.length > 0 ? "profile" : "starter-fallback";
-  const deckReadyToPlay =
-    profileDeckIds.length >= PLAYER_DECK_SIZE &&
-    sameStringArray(deckIds, profileDeckIds) &&
-    deckSaveStatus !== "saving";
+  const deckReadyToPlay = isSavedOwnedDeckReady(profileDeckIds, deckIds, deckSaveStatus);
   const starterFreeBoostersRemaining = playerProfile?.starterFreeBoostersRemaining ?? 0;
   const playerName = telegramPlayer.name;
   const showStarterOnboarding =
@@ -196,15 +193,17 @@ export function GameRoot() {
     lastConfirmedDeckIdsRef.current = getConfirmedDeckIds(nextProfile, allCardIds);
     setPlayerProfile(nextProfile);
     setDeckSaveStatus("idle");
-    setStarterDeckReadyVisible(isStarterKitReady(nextProfile));
+    setStarterDeckReadyVisible(isStarterKitReady(nextProfile, allCardIds));
   }, [allCardIds]);
-  const handleStarterDeckPlay = useCallback((starterDeckIds: string[]) => {
+  const handleStarterDeckPlay = useCallback(() => {
+    if (profileDeckIds.length < PLAYER_DECK_SIZE) return;
+
     deckTouchedRef.current = true;
-    setDeckIds(starterDeckIds);
+    setDeckIds(profileDeckIds);
     setStarterDeckReadyVisible(false);
     setBattleMode("ai");
     setScreen("battle");
-  }, []);
+  }, [profileDeckIds]);
   const handleStarterDeckEdit = useCallback(
     (starterDeckIds: string[]) => {
       deckTouchedRef.current = true;
@@ -490,11 +489,23 @@ function getConfirmedDeckIds(profile: PlayerProfile, allCardIds: string[]) {
   return getDeckIdsForProfile(profile, getOwnedCardIdsForProfile(profile, allCardIds));
 }
 
-function isStarterKitReady(profile: PlayerProfile) {
+function isSavedOwnedDeckReady(
+  savedOwnedDeckIds: string[],
+  currentDeckIds: string[],
+  deckSaveStatus: DeckSaveStatus,
+) {
+  return (
+    savedOwnedDeckIds.length >= PLAYER_DECK_SIZE &&
+    sameStringArray(currentDeckIds, savedOwnedDeckIds) &&
+    deckSaveStatus !== "saving"
+  );
+}
+
+function isStarterKitReady(profile: PlayerProfile, allCardIds: string[]) {
   return (
     profile.starterFreeBoostersRemaining === 0 &&
     profile.openedBoosterIds.length >= STARTER_FREE_BOOSTERS &&
-    profile.deckIds.length >= STARTER_KIT_CARD_COUNT
+    getConfirmedDeckIds(profile, allCardIds).length >= STARTER_KIT_CARD_COUNT
   );
 }
 
