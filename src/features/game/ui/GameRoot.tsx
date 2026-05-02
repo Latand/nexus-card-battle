@@ -9,6 +9,7 @@ import type { PlayerIdentity, PlayerProfile } from "@/features/player/profile/ty
 import type { TelegramPlayer } from "@/shared/lib/telegram";
 import { PLAYER_DECK_SIZE } from "../model/randomDeck";
 import { CollectionDeckScreen } from "./collection/CollectionDeckScreen";
+import { StarterBoosterOnboarding } from "./onboarding/StarterBoosterOnboarding";
 
 type BattleMode = "ai" | "human";
 type ProfileStatus = "loading" | "ready" | "fallback";
@@ -58,6 +59,11 @@ export function GameRoot() {
   const deckSource: DeckSource = profileDeckIds.length > 0 ? "profile" : "starter-fallback";
   const starterFreeBoostersRemaining = playerProfile?.starterFreeBoostersRemaining ?? 0;
   const playerName = telegramPlayer.name;
+  const showStarterOnboarding =
+    profileStatus === "ready" &&
+    Boolean(playerIdentity) &&
+    Boolean(playerProfile) &&
+    (playerProfile?.starterFreeBoostersRemaining ?? 0) > 0;
 
   useEffect(() => {
     const telegramPlayerHandle = window.setTimeout(() => setTelegramPlayer(readTelegramPlayer()), 0);
@@ -168,6 +174,34 @@ export function GameRoot() {
     );
   }
 
+  if (profileStatus === "loading") {
+    return (
+      <>
+        <ProfileLoadingScreen />
+        <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
+      </>
+    );
+  }
+
+  if (showStarterOnboarding && playerIdentity && playerProfile) {
+    return (
+      <>
+        <StarterBoosterOnboarding
+          identity={playerIdentity}
+          profile={playerProfile}
+          profileStatus={profileStatus}
+          profileIdentityMode={playerIdentity.mode}
+          deckSource={deckSource}
+          onProfileChange={(nextProfile) => {
+            deckTouchedRef.current = false;
+            setPlayerProfile(nextProfile);
+          }}
+        />
+        <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
+      </>
+    );
+  }
+
   return (
     <>
       <CollectionDeckScreen
@@ -188,6 +222,26 @@ export function GameRoot() {
       />
       <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
     </>
+  );
+}
+
+function ProfileLoadingScreen() {
+  return (
+    <main
+      className="grid min-h-screen place-items-center bg-[#080907] px-4 text-[#f7efd7]"
+      data-testid="player-profile-shell"
+      data-profile-status="loading"
+      data-profile-identity-mode="unknown"
+      data-profile-owned-card-count="0"
+      data-profile-deck-count="0"
+      data-deck-source="starter-fallback"
+      data-starter-free-boosters-remaining="0"
+    >
+      <section className="grid w-full max-w-[420px] gap-3 rounded-md border border-[#d4aa4d]/45 bg-[linear-gradient(180deg,rgba(28,27,19,0.94),rgba(9,11,11,0.97))] p-4 text-center shadow-[0_18px_42px_rgba(0,0,0,0.42)]">
+        <b className="text-[11px] font-black uppercase tracking-[0.16em] text-[#d6b66d]">Нексус</b>
+        <span className="text-lg font-black uppercase text-[#fff0ad]">Завантаження профілю</span>
+      </section>
+    </main>
   );
 }
 

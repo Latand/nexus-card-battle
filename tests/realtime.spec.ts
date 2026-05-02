@@ -1,9 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 import { cards } from "../src/features/battle/model/cards";
+import { mockDeckReadyProfile } from "./fixtures/playerProfile";
 
 test("pairs two tabs and resolves the first human round", async ({ context, page }) => {
   const first = page;
   const second = await context.newPage();
+  await mockDeckReadyProfile(first);
+  await mockDeckReadyProfile(second);
 
   await first.goto("/");
   await second.goto("/");
