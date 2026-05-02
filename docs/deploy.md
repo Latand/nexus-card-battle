@@ -43,6 +43,63 @@ docker compose config --quiet
 MONGODB_URI=mongodb://external.example:27017/custom docker compose config --quiet
 ```
 
+## Botfather Deployment
+
+Production currently runs from the `BotfatherDEV` SSH host.
+
+- Remote path: `/home/botfather/bots/nexus-card-battle`
+- Git remote: `git@github.com:Latand/nexus-card-battle.git`
+- Host bind: `127.0.0.1:3010`
+- App container: `nexus-card-battle`
+- Mongo container: `nexus-card-battle-mongo`
+- Mongo volume: `nexus-card-battle_nexus_mongodb_data`
+
+Use one persistent login shell so the working directory and command output stay easy to audit:
+
+```bash
+ssh -tt BotfatherDEV 'bash -l'
+cd /home/botfather/bots/nexus-card-battle
+```
+
+Update to the latest `main` with a clean fast-forward only:
+
+```bash
+git fetch origin main --prune
+git status --short --branch
+git rev-parse HEAD origin/main
+git log --oneline --decorate HEAD..origin/main --max-count=20
+git merge --ff-only origin/main
+git status --short --branch
+git rev-parse HEAD
+```
+
+Validate and deploy with Docker Compose:
+
+```bash
+docker compose config --quiet
+docker compose up -d --build
+```
+
+Post-deploy checks:
+
+```bash
+for i in {1..30}; do
+  h=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' nexus-card-battle 2>/dev/null || true)
+  echo "app_health=$h"
+  [ "$h" = healthy ] && break
+  sleep 2
+done
+
+docker compose ps
+curl -fsS -o /tmp/nexus-root.html -w 'root:%{http_code}\n' http://127.0.0.1:3010/
+curl -fsS -o /tmp/nexus-boosters.json -w 'boosters:%{http_code}\n' http://127.0.0.1:3010/api/boosters
+wc -c /tmp/nexus-root.html /tmp/nexus-boosters.json
+docker compose logs --tail=120 nexus-card-battle | grep -Ei 'error|exception|failed' || true
+docker compose logs --tail=120 mongo | grep -Ei 'error|exception|failed' || true
+```
+
+Do not print `.env` files or environment dumps in the terminal output. If `git status` is dirty or `git merge --ff-only` fails, stop and inspect before deploying.
+
 ## Nginx
 
 Put Nginx in front of the Compose port. The WebSocket endpoint is `/ws`, so the proxy must pass upgrade headers.
