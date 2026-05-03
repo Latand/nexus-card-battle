@@ -99,7 +99,7 @@ export function createNewStoredPlayerProfile(id: string, identity: PlayerIdentit
 
 export function toPlayerProfile(profile: StoredPlayerProfile): PlayerProfile {
   const legacyOwnedCardIds = readLegacyOwnedCardIds(profile);
-  const ownedCards = normalizeOwnedCards(profile.ownedCards, legacyOwnedCardIds);
+  const ownedCards = normalizeOwnedCards(profile.ownedCards, legacyOwnedCardIds, profile.id);
   const deckIds = normalizeStringArray(profile.deckIds);
   const openedBoosterIds = normalizeStringArray(profile.openedBoosterIds);
   const starterFreeBoostersRemaining = normalizeNonNegativeInteger(profile.starterFreeBoostersRemaining, STARTER_FREE_BOOSTERS);
@@ -230,19 +230,23 @@ function readLegacyOwnedCardIds(profile: StoredPlayerProfile): string[] {
   return normalizeStringArray(legacy);
 }
 
-function normalizeOwnedCards(value: unknown, legacyOwnedCardIds: readonly string[]): OwnedCardEntry[] {
+function normalizeOwnedCards(value: unknown, legacyOwnedCardIds: readonly string[], profileId: string): OwnedCardEntry[] {
   if (!Array.isArray(value)) {
     return legacyOwnedCardIds.map((cardId) => ({ cardId, count: 1 }));
   }
 
   const merged = new Map<string, number>();
   for (const item of value) {
-    if (!isRecord(item)) continue;
-    const cardId = item.cardId;
-    const count = item.count;
-    if (typeof cardId !== "string" || !cardId) continue;
-    if (typeof count !== "number" || !Number.isInteger(count) || count <= 0) continue;
-    merged.set(cardId, (merged.get(cardId) ?? 0) + count);
+    if (!isRecord(item) || typeof item.cardId !== "string" || !item.cardId
+      || typeof item.count !== "number" || !Number.isInteger(item.count) || item.count <= 0) {
+      console.warn("toPlayerProfile: dropping malformed ownedCards entry.", { profileId, entry: item });
+      continue;
+    }
+    const previous = merged.get(item.cardId) ?? 0;
+    if (previous > 0) {
+      console.warn("toPlayerProfile: merging duplicate ownedCards entry.", { profileId, cardId: item.cardId });
+    }
+    merged.set(item.cardId, previous + item.count);
   }
 
   return [...merged.entries()].map(([cardId, count]) => ({ cardId, count }));

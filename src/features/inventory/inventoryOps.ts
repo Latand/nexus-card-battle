@@ -9,7 +9,7 @@ export function addToInventory(
   count = 1,
 ): OwnedCardEntry[] {
   assertCount(count, "count");
-  if (count === 0) return inventory.map((entry) => ({ ...entry }));
+  if (count === 0) return [...inventory];
 
   const next: OwnedCardEntry[] = [];
   let found = false;
@@ -32,7 +32,7 @@ export function removeFromInventory(
   count = 1,
 ): OwnedCardEntry[] {
   assertCount(count, "count");
-  if (count === 0) return inventory.map((entry) => ({ ...entry }));
+  if (count === 0) return [...inventory];
 
   const owned = getOwnedCount(inventory, cardId);
   if (count > owned) {

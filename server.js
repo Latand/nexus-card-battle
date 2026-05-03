@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+// bun runtime resolves .ts requires natively via the bun server.js start
+// command (see package.json `start`/`dev`); do not switch to plain node here.
 const { createServer } = require("node:http");
 const crypto = require("node:crypto");
 const next = require("next");
@@ -836,8 +838,13 @@ function parseOwnedCardsInput(ownedCards, legacyOwnedCardIds) {
   if (Array.isArray(ownedCards)) {
     let result = [];
     for (const entry of ownedCards) {
-      if (!entry || typeof entry.cardId !== "string" || !entry.cardId) continue;
-      if (!Number.isInteger(entry.count) || entry.count <= 0) continue;
+      if (!entry || typeof entry.cardId !== "string" || !entry.cardId
+        || !Number.isInteger(entry.count) || entry.count <= 0) {
+        // Test seed endpoint — log loudly so a malformed fixture surfaces in
+        // CI rather than silently producing an empty inventory.
+        console.warn("/__test/player-profile: dropping malformed ownedCards entry.", { entry });
+        continue;
+      }
       result = addToInventory(result, entry.cardId, entry.count);
     }
     return result;
