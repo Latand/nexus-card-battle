@@ -18,6 +18,7 @@ const { makeFighter } = require("./src/features/battle/model/domain/fighters.ts"
 const { resolveRound } = require("./src/features/battle/model/domain/roundResolver.ts");
 const { DAMAGE_BOOST_COST } = require("./src/features/battle/model/constants.ts");
 const { MatchmakingQueue } = require("./src/features/matchmaking/queue.ts");
+const { OnlinePresence } = require("./src/features/presence/onlinePresence.ts");
 
 const dev = process.argv.includes("--dev") || process.env.NODE_ENV === "development";
 const hostname = getCliValue("--hostname") || process.env.HOSTNAME || "0.0.0.0";
@@ -38,6 +39,7 @@ const sessions = new Map();
 const matches = new Map();
 const testPlayerProfileStore = process.env.NEXUS_TEST_PROFILE_STORE === "1" ? createMemoryPlayerProfileStore() : null;
 const matchmakingQueue = new MatchmakingQueue();
+const onlinePresence = new OnlinePresence();
 const BATTLE_HAND_SIZE = 4;
 const MIN_DECK_SIZE = 9;
 const TURN_SECONDS = Number.parseInt(process.env.PVP_TURN_SECONDS || "75", 10);
@@ -76,7 +78,9 @@ app.prepare().then(() => {
     };
 
     sessions.set(session.id, session);
+    onlinePresence.add(session);
     send(session, { type: "session", clientId: session.id });
+    broadcastOnlineCount();
 
     ws.on("pong", () => {
       session.alive = true;
@@ -712,6 +716,8 @@ function cleanupSession(session) {
   }
 
   sessions.delete(session.id);
+  onlinePresence.remove(session);
+  broadcastOnlineCount();
 }
 
 function forfeitMatchByDisconnect(match, loserId) {
@@ -753,6 +759,17 @@ function broadcast(match, message) {
 function send(session, message) {
   if (!session || !isOpen(session.ws)) return;
   session.ws.send(JSON.stringify(message));
+}
+
+function broadcastOnlineCount() {
+  onlinePresence.broadcastCount({
+    send: (sessionId, payload) => {
+      send(sessions.get(sessionId), payload);
+    },
+    onSendError: ({ sessionId, error }) => {
+      console.error("Online presence broadcast failed for session.", { sessionId, error });
+    },
+  });
 }
 
 function sendError(session, message) {
