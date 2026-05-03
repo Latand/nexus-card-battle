@@ -5,6 +5,7 @@ export const DEFAULT_PLAYER_LEVEL = 1;
 export const DEFAULT_PLAYER_WINS = 0;
 export const DEFAULT_PLAYER_LOSSES = 0;
 export const DEFAULT_PLAYER_DRAWS = 0;
+export const DEFAULT_PLAYER_ELO_RATING = 1000;
 
 // Quadratic curve: XP to advance from level N-1 to N is LEVEL_XP_BASE * N^2.
 // Lives here (not in progression.ts) so toPlayerProfile() can derive level
@@ -68,6 +69,7 @@ export type PlayerProfile = {
   wins: number;
   losses: number;
   draws: number;
+  eloRating: number;
   onboarding: PlayerOnboardingState;
 };
 
@@ -86,6 +88,7 @@ export function createNewStoredPlayerProfile(id: string, identity: PlayerIdentit
     wins: DEFAULT_PLAYER_WINS,
     losses: DEFAULT_PLAYER_LOSSES,
     draws: DEFAULT_PLAYER_DRAWS,
+    eloRating: DEFAULT_PLAYER_ELO_RATING,
   };
 }
 
@@ -99,6 +102,7 @@ export function toPlayerProfile(profile: StoredPlayerProfile): PlayerProfile {
   const wins = normalizeNonNegativeInteger(profile.wins, DEFAULT_PLAYER_WINS);
   const losses = normalizeNonNegativeInteger(profile.losses, DEFAULT_PLAYER_LOSSES);
   const draws = normalizeNonNegativeInteger(profile.draws, DEFAULT_PLAYER_DRAWS);
+  const eloRating = normalizeEloRating(profile.eloRating, DEFAULT_PLAYER_ELO_RATING);
   const level = computeLevelFromXp(totalXp).level;
 
   return {
@@ -114,6 +118,7 @@ export function toPlayerProfile(profile: StoredPlayerProfile): PlayerProfile {
     wins,
     losses,
     draws,
+    eloRating,
     onboarding: createOnboardingState({
       ownedCardIds,
       deckIds,
@@ -207,6 +212,11 @@ function normalizeStringArray(value: unknown) {
 function normalizeNonNegativeInteger(value: unknown, fallback: number) {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) return fallback;
   return value;
+}
+
+function normalizeEloRating(value: unknown, fallback: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.round(value));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

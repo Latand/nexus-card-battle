@@ -171,6 +171,65 @@ test("emits server-authoritative reward_summary to both PvP sessions on a forfei
   second.close();
 });
 
+test("PvP forfeit emits matched ELO deltas computed against each opponent's pre-match rating", async ({ baseURL, request }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const winnerIdentity = testIdentity("elo-winner");
+  const loserIdentity = testIdentity("elo-loser");
+
+  // Seed asymmetric ELOs so the test would visibly fail if either side used
+  // its own rating as the opponent rating, or used a post-update value.
+  await seedRealtimeProfile(request, winnerIdentity, { eloRating: 1200 });
+  await seedRealtimeProfile(request, loserIdentity, { eloRating: 1000 });
+
+  const first = await connectRealtimeClient(wsUrl, "ELO A", PROTOCOL_OWNED_DECK_IDS, { identity: winnerIdentity });
+  const second = await connectRealtimeClient(wsUrl, "ELO B", PROTOCOL_OWNED_DECK_IDS, { identity: loserIdentity });
+
+  const firstReady = await first.waitFor("match_ready");
+  const secondReady = await second.waitFor("match_ready");
+  const firstMover = firstReady.firstPlayerId === firstReady.playerId ? first : second;
+  const firstMoverReady = firstMover === first ? firstReady : secondReady;
+  const firstMoverIdentity = firstMover === first ? winnerIdentity : loserIdentity;
+
+  firstMover.send({
+    type: "turn_timeout",
+    matchId: firstMoverReady.matchId,
+    round: firstMoverReady.round,
+  });
+
+  const firstReward = await first.waitFor("reward_summary", { timeoutMs: 5_000 });
+  const secondReward = await second.waitFor("reward_summary", { timeoutMs: 5_000 });
+
+  const firstPayload = firstReward.payload as RewardSummary;
+  const secondPayload = secondReward.payload as RewardSummary;
+
+  // Whoever timed out is the loser; the other is the server-declared winner.
+  const losingPayload = firstMoverIdentity === winnerIdentity ? firstPayload : secondPayload;
+  const winningPayload = firstMoverIdentity === winnerIdentity ? secondPayload : firstPayload;
+  const winningStartElo = firstMoverIdentity === winnerIdentity ? 1000 : 1200;
+  const losingStartElo = firstMoverIdentity === winnerIdentity ? 1200 : 1000;
+
+  // Both sides receive a finite ELO delta and absolute new rating.
+  expect(typeof winningPayload.deltaElo).toBe("number");
+  expect(typeof losingPayload.deltaElo).toBe("number");
+  expect(typeof winningPayload.newTotals.eloRating).toBe("number");
+  expect(typeof losingPayload.newTotals.eloRating).toBe("number");
+
+  // Symmetry: zero-sum across the match.
+  expect((winningPayload.deltaElo ?? 0) + (losingPayload.deltaElo ?? 0)).toBe(0);
+
+  // Each new rating equals start + delta — proves both sides used the
+  // opposite side's PRE-match rating, not their own and not a post-update one.
+  expect(winningPayload.newTotals.eloRating).toBe(winningStartElo + (winningPayload.deltaElo ?? 0));
+  expect(losingPayload.newTotals.eloRating).toBe(losingStartElo + (losingPayload.deltaElo ?? 0));
+
+  // Sign sanity: the winner gains, the loser drops.
+  expect(winningPayload.deltaElo ?? 0).toBeGreaterThan(0);
+  expect(losingPayload.deltaElo ?? 0).toBeLessThan(0);
+
+  first.close();
+  second.close();
+});
+
 test("match_ready never carries server-only identity or fighter state", async ({ baseURL, request }) => {
   const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
   const firstIdentity = testIdentity("payload-leak-a");
@@ -656,9 +715,10 @@ async function seedRealtimeProfile(
     deckIds: string[];
     starterFreeBoostersRemaining: number;
     openedBoosterIds: string[];
+    eloRating: number;
   }> = {},
 ) {
-  const profile = {
+  const profile: Record<string, unknown> = {
     id: `player-${identity.mode === "guest" ? identity.guestId : identity.telegramId}`,
     identity,
     ownedCardIds: overrides.ownedCardIds ?? PROTOCOL_OWNED_COLLECTION_IDS,
@@ -666,12 +726,15 @@ async function seedRealtimeProfile(
     starterFreeBoostersRemaining: overrides.starterFreeBoostersRemaining ?? 0,
     openedBoosterIds: overrides.openedBoosterIds ?? ["neon-breach", "factory-shift"],
   };
+  if (typeof overrides.eloRating === "number") {
+    profile.eloRating = overrides.eloRating;
+  }
   const response = await request.post("/__test/player-profile", {
     data: profile,
   });
 
   expect(response.ok()).toBe(true);
-  return profile;
+  return profile as typeof profile & { ownedCardIds: string[]; deckIds: string[] };
 }
 
 function expectMatchReadyPlayerLoadout(message: RealtimeMessage, deckIds: string[], collectionIds: string[]) {

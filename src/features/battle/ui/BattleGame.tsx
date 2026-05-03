@@ -1224,6 +1224,12 @@ function RewardOverlay({
   const crystalsDelta = rewards?.deltaCrystals ?? 0;
   const newCrystals = rewards?.newTotals?.crystals ?? 0;
   const showCrystalsTile = showPersistedDetails && crystalsDelta > 0;
+  const eloDelta = rewards?.deltaElo;
+  const newElo = rewards?.newTotals?.eloRating;
+  const showEloTile = showPersistedDetails && typeof eloDelta === "number" && typeof newElo === "number";
+  const eloLoss = typeof eloDelta === "number" && eloDelta < 0;
+  const previousElo = typeof eloDelta === "number" && typeof newElo === "number" ? newElo - eloDelta : null;
+  const formattedEloDelta = typeof eloDelta === "number" ? (eloDelta > 0 ? `+${eloDelta}` : `${eloDelta}`) : "";
 
   return (
     <section className="fixed inset-0 z-50 grid place-items-center bg-[#05080b] p-3 backdrop-blur-[4px]" data-testid="reward-summary">
@@ -1273,6 +1279,30 @@ function RewardOverlay({
               </span>
             </div>
             <span className="text-2xl font-black text-[#65d7e9]">+{crystalsDelta} 💎</span>
+          </div>
+        ) : null}
+
+        {showEloTile ? (
+          <div
+            className={cn(
+              "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded border px-3 py-2",
+              eloLoss
+                ? "border-[#ff7d6e]/45 bg-[linear-gradient(180deg,rgba(48,12,12,0.88),rgba(20,4,4,0.88))]"
+                : "border-[#ffe08a]/45 bg-[linear-gradient(180deg,rgba(40,30,8,0.88),rgba(18,12,2,0.88))]",
+            )}
+            data-testid="reward-elo-tile"
+            data-delta-elo={eloDelta}
+            data-new-elo={newElo}
+          >
+            <div className="grid gap-1">
+              <span className={cn("text-xs font-black uppercase tracking-[0.08em]", eloLoss ? "text-[#ffb1a8]" : "text-[#ffe08a]")}>Рейтинг ELO</span>
+              <span className="text-base font-black text-[#fff8df]" data-testid="reward-elo-line">
+                {formattedEloDelta} ELO · {previousElo} → {newElo}
+              </span>
+            </div>
+            <span className={cn("text-2xl font-black", eloLoss ? "text-[#ff8a7c]" : "text-[#ffe08a]")}>
+              {formattedEloDelta} 🏆
+            </span>
           </div>
         ) : null}
 

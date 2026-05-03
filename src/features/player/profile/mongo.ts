@@ -4,6 +4,7 @@ import type { BoosterOpeningSource, PersistStarterBoosterOpeningInput, Persisted
 import {
   DEFAULT_PLAYER_CRYSTALS,
   DEFAULT_PLAYER_DRAWS,
+  DEFAULT_PLAYER_ELO_RATING,
   DEFAULT_PLAYER_LOSSES,
   DEFAULT_PLAYER_TOTAL_XP,
   DEFAULT_PLAYER_WINS,
@@ -24,7 +25,7 @@ const BOOSTER_OPENINGS_COLLECTION = "boosterOpenings";
 // Progression fields are optional so pre-existing documents read cleanly.
 // `level` is intentionally absent — it is derived from totalXp on read,
 // because storing an absolute level would race against $inc(totalXp).
-type MongoPlayerDocument = Omit<StoredPlayerProfile, "id" | "crystals" | "totalXp" | "wins" | "losses" | "draws"> & {
+type MongoPlayerDocument = Omit<StoredPlayerProfile, "id" | "crystals" | "totalXp" | "wins" | "losses" | "draws" | "eloRating"> & {
   createdAt: Date;
   updatedAt: Date;
   crystals?: number;
@@ -32,6 +33,7 @@ type MongoPlayerDocument = Omit<StoredPlayerProfile, "id" | "crystals" | "totalX
   wins?: number;
   losses?: number;
   draws?: number;
+  eloRating?: number;
 };
 
 type MongoBoosterOpeningDocument = {
@@ -87,6 +89,7 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
           wins: insertedProfile.wins,
           losses: insertedProfile.losses,
           draws: insertedProfile.draws,
+          eloRating: insertedProfile.eloRating,
           createdAt: now,
           updatedAt: now,
         },
@@ -110,8 +113,15 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
     const resultCounterField =
       rewards.result === "win" ? "wins" : rewards.result === "loss" ? "losses" : "draws";
 
-    // Op A is $inc-only so concurrent calls compose; mixing $set of an
-    // absolute total here would let a stale read clobber another caller.
+    // Op A is $inc-only on additive fields so concurrent calls compose;
+    // ELO is $set because the caller already resolved it against an
+    // authoritative pre-match opponent snapshot (callers racing on the
+    // same player necessarily race on opponent identity too).
+    const setFields: Record<string, unknown> = { updatedAt: now };
+    if (typeof rewards.eloRating === "number" && Number.isFinite(rewards.eloRating)) {
+      setFields.eloRating = Math.max(0, Math.round(rewards.eloRating));
+    }
+
     const afterIncrement = await players.findOneAndUpdate(
       identityFilter(identity),
       {
@@ -120,7 +130,7 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
           crystals: rewards.matchCrystals,
           [resultCounterField]: 1,
         },
-        $set: { updatedAt: now },
+        $set: setFields,
       },
       { returnDocument: "after" },
     );
@@ -441,7 +451,13 @@ function fromMongoDocument(document: WithId<MongoPlayerDocument>): StoredPlayerP
     wins: nonNegativeIntegerOrDefault(document.wins, DEFAULT_PLAYER_WINS),
     losses: nonNegativeIntegerOrDefault(document.losses, DEFAULT_PLAYER_LOSSES),
     draws: nonNegativeIntegerOrDefault(document.draws, DEFAULT_PLAYER_DRAWS),
+    eloRating: eloRatingOrDefault(document.eloRating, DEFAULT_PLAYER_ELO_RATING),
   };
+}
+
+function eloRatingOrDefault(value: unknown, fallback: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.round(value));
 }
 
 function nonNegativeIntegerOrDefault(value: unknown, fallback: number) {

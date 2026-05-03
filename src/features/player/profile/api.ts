@@ -26,6 +26,9 @@ export type ApplyMatchRewardsInput = {
   // Baseline match crystals (NOT the level-up bonus — that is recomputed
   // inside the store from the authoritative post-$inc totalXp).
   matchCrystals: number;
+  // Absolute post-match ELO. PvE callers omit this; PvP callers pass the
+  // value computed against an authoritative pre-match opponent snapshot.
+  eloRating?: number;
 };
 
 export type PlayerMatchRewardsStore = PlayerProfileStore & {
@@ -78,14 +81,23 @@ export async function handlePlayerMatchFinishedPost(request: Request, store: Pla
   }
 }
 
+export type ApplyMatchRewardsContext =
+  | { mode: "pve"; result: MatchResultBucket }
+  | { mode: "pvp"; result: MatchResultBucket; opponentEloBefore?: number };
+
 export async function applyAndSummarizeMatchRewards(
   store: PlayerMatchRewardsStore,
   identity: PlayerIdentity,
-  matchInfo: { mode: "pve" | "pvp"; result: MatchResultBucket },
+  matchInfo: ApplyMatchRewardsContext,
 ): Promise<{ summary: RewardSummary; persisted: PlayerProfile }> {
   const profile = toPlayerProfile(await store.findOrCreateByIdentity(identity));
   const rewards = computeMatchRewards(
-    { crystals: profile.crystals, totalXp: profile.totalXp, level: profile.level },
+    {
+      crystals: profile.crystals,
+      totalXp: profile.totalXp,
+      level: profile.level,
+      eloRating: profile.eloRating,
+    },
     matchInfo,
   );
 
@@ -94,6 +106,7 @@ export async function applyAndSummarizeMatchRewards(
       result: matchInfo.result,
       deltaXp: rewards.deltaXp,
       matchCrystals: rewards.matchCrystals,
+      ...(rewards.newTotals.eloRating !== undefined ? { eloRating: rewards.newTotals.eloRating } : {}),
     }),
   );
 
@@ -105,12 +118,14 @@ export async function applyAndSummarizeMatchRewards(
     cardRewards: [],
     deltaXp: rewards.deltaXp,
     deltaCrystals: rewards.deltaCrystals,
+    ...(rewards.deltaElo !== undefined ? { deltaElo: rewards.deltaElo } : {}),
     leveledUp: rewards.leveledUp,
     levelUpBonusCrystals: rewards.levelUpBonusCrystals,
     newTotals: {
       crystals: persisted.crystals,
       totalXp: persisted.totalXp,
       level: persisted.level,
+      ...(rewards.deltaElo !== undefined ? { eloRating: persisted.eloRating } : {}),
     },
   };
 

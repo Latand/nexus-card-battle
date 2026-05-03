@@ -6,6 +6,7 @@ const { WebSocketServer } = require("ws");
 const { cards } = require("./src/features/battle/model/cards.ts");
 const { getMongoPlayerProfileStore } = require("./src/features/player/profile/mongo.ts");
 const {
+  DEFAULT_PLAYER_ELO_RATING,
   computeLevelFromXp,
   createNewStoredPlayerProfile,
   isSamePlayerIdentity,
@@ -517,16 +518,24 @@ async function finalizePvpMatch(match, outcome) {
   clearTurnTimer(match);
 
   const store = getPlayerProfileStore();
+  // Snapshot both ELOs BEFORE applying any rewards so each side's delta is
+  // computed against the opponent's pre-match rating, not a post-update one.
+  const preMatchElos = await readPreMatchElos(store, match);
+
   const summaries = await Promise.all(
     match.playerIds.map(async (playerId) => {
       const player = match.players[playerId];
       const result = bucketForPlayer(playerId, outcome);
       if (!player?.identity) return { playerId, summary: null };
 
+      const opponentId = getOpponentId(match, playerId);
+      const opponentEloBefore = preMatchElos[opponentId] ?? DEFAULT_PLAYER_ELO_RATING;
+
       try {
         const { summary } = await applyAndSummarizeMatchRewards(store, player.identity, {
           mode: "pvp",
           result,
+          opponentEloBefore,
         });
         return { playerId, summary };
       } catch (error) {
@@ -555,6 +564,26 @@ async function finalizePvpMatch(match, outcome) {
 function bucketForPlayer(playerId, outcome) {
   if (outcome.matchResult === "draw") return "draw";
   return outcome.winnerSessionId === playerId ? "win" : "loss";
+}
+
+async function readPreMatchElos(store, match) {
+  const entries = await Promise.all(
+    match.playerIds.map(async (playerId) => {
+      const player = match.players[playerId];
+      if (!player?.identity) return [playerId, DEFAULT_PLAYER_ELO_RATING];
+
+      try {
+        const profile = await store.findOrCreateByIdentity(player.identity);
+        const rating = profile?.eloRating;
+        return [playerId, typeof rating === "number" && Number.isFinite(rating) ? rating : DEFAULT_PLAYER_ELO_RATING];
+      } catch (error) {
+        console.error("PvP ELO read failed for player.", { playerId, error });
+        return [playerId, DEFAULT_PLAYER_ELO_RATING];
+      }
+    }),
+  );
+
+  return Object.fromEntries(entries);
 }
 
 function submitTurnTimeout(session, message) {
@@ -887,6 +916,7 @@ function handleTestProfileRequest(request, response) {
         wins: nonNegativeIntegerOrUndefined(body.wins),
         losses: nonNegativeIntegerOrUndefined(body.losses),
         draws: nonNegativeIntegerOrUndefined(body.draws),
+        eloRating: nonNegativeIntegerOrUndefined(body.eloRating),
       });
 
       response.statusCode = 200;
@@ -968,6 +998,9 @@ function createMemoryPlayerProfileStore() {
         totalXp: current.totalXp + rewards.deltaXp,
         crystals: current.crystals + rewards.matchCrystals,
         [counterField]: (current[counterField] ?? 0) + 1,
+        ...(typeof rewards.eloRating === "number" && Number.isFinite(rewards.eloRating)
+          ? { eloRating: Math.max(0, Math.round(rewards.eloRating)) }
+          : {}),
       };
       profiles[index] = afterIncrement;
 

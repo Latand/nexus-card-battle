@@ -323,6 +323,111 @@ describe("player match-finished API (PvE)", () => {
     expect(persisted?.wins).toBe(2);
   });
 
+  test("applyAndSummarizeMatchRewards persists matched ELO deltas for both PvP sides against the correct opponent rating", async () => {
+    const winnerIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-pvp-elo-winner" };
+    const loserIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-pvp-elo-loser" };
+    const store = new MemoryPlayerProfileStore([
+      { ...createNewStoredPlayerProfile("player-elo-winner", winnerIdentity), eloRating: 1000 },
+      { ...createNewStoredPlayerProfile("player-elo-loser", loserIdentity), eloRating: 1000 },
+    ]);
+
+    const winnerOpponentElo = store.snapshot(loserIdentity)?.eloRating ?? 1000;
+    const loserOpponentElo = store.snapshot(winnerIdentity)?.eloRating ?? 1000;
+
+    const winner = await applyAndSummarizeMatchRewards(store, winnerIdentity, {
+      mode: "pvp",
+      result: "win",
+      opponentEloBefore: winnerOpponentElo,
+    });
+    const loser = await applyAndSummarizeMatchRewards(store, loserIdentity, {
+      mode: "pvp",
+      result: "loss",
+      opponentEloBefore: loserOpponentElo,
+    });
+
+    expect(winner.summary.deltaElo).toBe(16);
+    expect(winner.summary.newTotals.eloRating).toBe(1016);
+    expect(winner.persisted.eloRating).toBe(1016);
+
+    expect(loser.summary.deltaElo).toBe(-16);
+    expect(loser.summary.newTotals.eloRating).toBe(984);
+    expect(loser.persisted.eloRating).toBe(984);
+
+    expect(store.snapshot(winnerIdentity)?.eloRating).toBe(1016);
+    expect(store.snapshot(loserIdentity)?.eloRating).toBe(984);
+  });
+
+  test("each side's PvP ELO delta uses the opponent's PRE-match rating, not a post-update one", async () => {
+    // Asymmetric starting ratings so a wrong "use opponent's post-update ELO"
+    // bug would visibly diverge from the +/- expected formula values.
+    const stronger: PlayerIdentity = { mode: "guest", guestId: "guest-elo-asym-strong" };
+    const weaker: PlayerIdentity = { mode: "guest", guestId: "guest-elo-asym-weak" };
+    const store = new MemoryPlayerProfileStore([
+      { ...createNewStoredPlayerProfile("player-strong", stronger), eloRating: 1400 },
+      { ...createNewStoredPlayerProfile("player-weak", weaker), eloRating: 1000 },
+    ]);
+
+    // Snapshot both ELOs first so the second apply does not see the first apply's update.
+    const strongerStartElo = store.snapshot(stronger)?.eloRating ?? 1000;
+    const weakerStartElo = store.snapshot(weaker)?.eloRating ?? 1000;
+    expect(strongerStartElo).toBe(1400);
+    expect(weakerStartElo).toBe(1000);
+
+    const upset = await applyAndSummarizeMatchRewards(store, weaker, {
+      mode: "pvp",
+      result: "win",
+      opponentEloBefore: strongerStartElo,
+    });
+    const upsetVictim = await applyAndSummarizeMatchRewards(store, stronger, {
+      mode: "pvp",
+      result: "loss",
+      opponentEloBefore: weakerStartElo,
+    });
+
+    // Symmetry: the underdog's win delta + the favourite's loss delta = 0.
+    expect((upset.summary.deltaElo ?? 0) + (upsetVictim.summary.deltaElo ?? 0)).toBe(0);
+
+    // Underdog gains substantially more than the equal-rating +16 baseline.
+    expect(upset.summary.deltaElo).toBeGreaterThan(16);
+    expect(upset.persisted.eloRating).toBe(1000 + (upset.summary.deltaElo ?? 0));
+
+    // Favourite drops by the same magnitude.
+    expect(upsetVictim.summary.deltaElo).toBeLessThan(-16);
+    expect(upsetVictim.persisted.eloRating).toBe(1400 + (upsetVictim.summary.deltaElo ?? 0));
+  });
+
+  test("PvP ELO never drops below 100 even after a loss to a much stronger opponent", async () => {
+    const flooredIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-elo-floor" };
+    const store = new MemoryPlayerProfileStore([
+      { ...createNewStoredPlayerProfile("player-floor", flooredIdentity), eloRating: 100 },
+    ]);
+
+    const result = await applyAndSummarizeMatchRewards(store, flooredIdentity, {
+      mode: "pvp",
+      result: "loss",
+      opponentEloBefore: 2000,
+    });
+
+    expect(result.summary.newTotals.eloRating).toBe(100);
+    expect(result.summary.deltaElo).toBe(0);
+    expect(result.persisted.eloRating).toBe(100);
+  });
+
+  test("PvE applyAndSummarize does not surface deltaElo or newTotals.eloRating", async () => {
+    const identityPve: PlayerIdentity = { mode: "guest", guestId: "guest-pve-no-elo" };
+    const store = new MemoryPlayerProfileStore();
+
+    const result = await applyAndSummarizeMatchRewards(store, identityPve, {
+      mode: "pve",
+      result: "win",
+    });
+
+    expect(result.summary.deltaElo).toBeUndefined();
+    expect(result.summary.newTotals.eloRating).toBeUndefined();
+    // The persisted profile still carries the default 1000 ELO; PvE just doesn't broadcast it.
+    expect(result.persisted.eloRating).toBe(1000);
+  });
+
   test("two concurrent PvE wins racing across a level threshold add 2x deltaXp and pay the bonus exactly once", async () => {
     // Both callers' pre-call view says "I crossed level 2"; the persistence
     // layer must still pay the bonus only once.
@@ -388,6 +493,9 @@ class MemoryPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewardsSto
       totalXp: current.totalXp + rewards.deltaXp,
       crystals: current.crystals + rewards.matchCrystals,
       [counterField]: (current[counterField] ?? 0) + 1,
+      ...(typeof rewards.eloRating === "number" && Number.isFinite(rewards.eloRating)
+        ? { eloRating: Math.max(0, Math.round(rewards.eloRating)) }
+        : {}),
     };
     this.profiles[index] = afterIncrement;
 

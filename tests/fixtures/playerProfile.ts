@@ -29,6 +29,7 @@ export type TestPlayerProfileInput = {
   wins?: number;
   losses?: number;
   draws?: number;
+  eloRating?: number;
 };
 
 type MockDeckReadyProfileOptions = Partial<TestPlayerProfileInput> & {
@@ -123,6 +124,7 @@ function createPlayerProfileBody(profile: TestPlayerProfileInput) {
     wins: profile.wins ?? 0,
     losses: profile.losses ?? 0,
     draws: profile.draws ?? 0,
+    eloRating: profile.eloRating ?? 1000,
     onboarding: {
       starterBoostersAvailable: profile.starterFreeBoostersRemaining > 0,
       collectionReady,

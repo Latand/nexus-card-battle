@@ -65,6 +65,21 @@ test("PvP reward overlay renders the crystal tile after a server-pushed forfeit 
     await expect(crystalsTile).toHaveAttribute("data-new-crystals", "50");
     await expect(winningPage.getByTestId("reward-crystals-line")).toContainText("+50 💎");
 
+    // Both PvP sides see the ELO tile with matching equal-and-opposite deltas
+    // (default 1000 vs 1000 → winner +16 → 1016, loser -16 → 984).
+    const winnerEloTile = winningPage.getByTestId("reward-elo-tile");
+    const loserEloTile = losingPage.getByTestId("reward-elo-tile");
+    await expect(winnerEloTile).toBeVisible();
+    await expect(loserEloTile).toBeVisible();
+    await expect(winnerEloTile).toHaveAttribute("data-delta-elo", "16");
+    await expect(winnerEloTile).toHaveAttribute("data-new-elo", "1016");
+    await expect(loserEloTile).toHaveAttribute("data-delta-elo", "-16");
+    await expect(loserEloTile).toHaveAttribute("data-new-elo", "984");
+    await expect(winningPage.getByTestId("reward-elo-line")).toContainText("+16 ELO");
+    await expect(winningPage.getByTestId("reward-elo-line")).toContainText("1000 → 1016");
+    await expect(losingPage.getByTestId("reward-elo-line")).toContainText("-16 ELO");
+    await expect(losingPage.getByTestId("reward-elo-line")).toContainText("1000 → 984");
+
     // Loser still sees the persisted XP tile (PvP loss = +10 XP).
     await expect(losingPage.getByTestId("reward-user-xp-tile")).toBeVisible();
     await expect(losingPage.getByTestId("reward-user-xp-tile")).toHaveAttribute("data-delta-xp", "10");
