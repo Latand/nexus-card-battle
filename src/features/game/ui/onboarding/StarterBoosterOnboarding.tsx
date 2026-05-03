@@ -10,6 +10,7 @@ import { STARTER_BOOSTER_CARD_COUNT, type BoosterCatalogItem, type BoosterRespon
 import type { Card, Rarity } from "@/features/battle/model/types";
 import { BattleCard } from "@/features/battle/ui/components/BattleCard";
 import { ClanGlyph, getClanColor } from "@/features/battle/ui/components/ClanGlyph";
+import { getOwnedCardIds } from "@/features/inventory/inventoryOps";
 import { STARTER_FREE_BOOSTERS, type PlayerIdentity, type PlayerProfile } from "@/features/player/profile/types";
 import { cn } from "@/shared/lib/cn";
 
@@ -165,7 +166,7 @@ export function StarterBoosterOnboarding({
       data-testid="player-profile-shell"
       data-profile-status={profileStatus}
       data-profile-identity-mode={profileIdentityMode ?? "unknown"}
-      data-profile-owned-card-count={profileForDisplay.ownedCardIds.length}
+      data-profile-owned-card-count={getOwnedCardIds(profileForDisplay.ownedCards).length}
       data-profile-deck-count={profileForDisplay.deckIds.length}
       data-deck-source={deckSource}
       data-starter-free-boosters-remaining={profileForDisplay.starterFreeBoostersRemaining}
@@ -193,7 +194,7 @@ export function StarterBoosterOnboarding({
 
             <div className="grid min-w-[240px] grid-cols-3 gap-2 max-[980px]:hidden">
               <Metric label="Бустерів" value={`${progressCount}/${STARTER_FREE_BOOSTERS}`} />
-              <Metric label="Карт" value={profileForDisplay.ownedCardIds.length} testId="starter-owned-count" />
+              <Metric label="Карт" value={getOwnedCardIds(profileForDisplay.ownedCards).length} testId="starter-owned-count" />
               <Metric label="Ще" value={profileForDisplay.starterFreeBoostersRemaining} />
             </div>
           </header>
@@ -758,7 +759,7 @@ function isStarterKitReady(profile: PlayerProfile) {
 
 function getSavedOwnedDeckIds(profile: PlayerProfile) {
   const knownCardIds = new Set(cardCatalog.map((card) => card.id));
-  const ownedCardIds = new Set(profile.ownedCardIds);
+  const ownedCardIds = new Set(getOwnedCardIds(profile.ownedCards));
 
   return unique(profile.deckIds).filter((cardId) => knownCardIds.has(cardId) && ownedCardIds.has(cardId));
 }

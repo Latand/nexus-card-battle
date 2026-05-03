@@ -5,6 +5,7 @@ import { cards } from "@/features/battle/model/cards";
 import { BattleGame } from "@/features/battle/ui/BattleGame";
 import { RealtimeBattleGame } from "@/features/battle/ui/RealtimeBattleGame";
 import { STARTER_BOOSTER_CARD_COUNT } from "@/features/boosters/types";
+import { getOwnedCardIds } from "@/features/inventory/inventoryOps";
 import { readTelegramPhotoUrl, useTelegramAvatar } from "@/features/player/profile/avatar";
 import { fetchPlayerProfile, resolveClientPlayerIdentity, savePlayerAvatar, savePlayerDeck } from "@/features/player/profile/client";
 import { STARTER_FREE_BOOSTERS, type PlayerIdentity, type PlayerProfile } from "@/features/player/profile/types";
@@ -357,10 +358,11 @@ export function GameRoot() {
     >
       <CollectionDeckScreen
         collectionIds={ownedCardIds}
+        ownedCards={playerProfile?.ownedCards ?? []}
         deckIds={deckIds}
         profileStatus={profileStatus}
         profileIdentityMode={playerIdentity?.mode}
-        profileOwnedCardCount={playerProfile?.ownedCardIds.length ?? 0}
+        profileOwnedCardCount={ownedCardIds.length}
         profileDeckCount={playerProfile?.deckIds.length ?? 0}
         deckSource={deckSource}
         deckSaveStatus={deckSaveStatus}
@@ -563,12 +565,12 @@ function TelegramLandscapeOverlay({ active }: { active: boolean }) {
 }
 
 function getOwnedCardIdsForProfile(profile: PlayerProfile | null, allCardIds: string[]) {
-  if (!profile || profile.ownedCardIds.length === 0) return [];
+  if (!profile) return [];
+  const profileOwnedCardIds = getOwnedCardIds(profile.ownedCards);
+  if (profileOwnedCardIds.length === 0) return [];
 
   const knownCards = new Set(allCardIds);
-  const ownedCardIds = unique(profile.ownedCardIds).filter((cardId) => knownCards.has(cardId));
-
-  return ownedCardIds;
+  return unique(profileOwnedCardIds).filter((cardId) => knownCards.has(cardId));
 }
 
 function getDeckIdsForProfile(profile: PlayerProfile | null, collectionIds: string[]) {

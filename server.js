@@ -12,6 +12,7 @@ const {
   parsePlayerIdentity,
   toPlayerProfile,
 } = require("./src/features/player/profile/types.ts");
+const { getOwnedCardIds, addToInventory } = require("./src/features/inventory/inventoryOps.ts");
 const { computeLevelUpBonusForRange } = require("./src/features/player/profile/progression.ts");
 const { applyAndSummarizeMatchRewards, applyPvpMatchRewardsForBothSides } = require("./src/features/player/profile/api.ts");
 const { makeFighter } = require("./src/features/battle/model/domain/fighters.ts");
@@ -790,7 +791,7 @@ function parseSocketPlayerIdentity(value) {
 
 function validateProfileBattleLoadout(profile) {
   const deckIds = getProfileCardIds(profile.deckIds);
-  const rawOwnedCardIds = getProfileCardIds(profile.ownedCardIds);
+  const rawOwnedCardIds = getOwnedCardIdsFromProfile(profile);
   const collectionIds = unique(rawOwnedCardIds.filter((cardId) => activeCardIds.has(cardId)));
   const duplicateDeckIds = duplicateValues(deckIds);
 
@@ -822,6 +823,27 @@ function isOpen(ws) {
 function getProfileCardIds(value) {
   if (!Array.isArray(value)) return [];
   return value.filter((item) => typeof item === "string" && item.length > 0);
+}
+
+function getOwnedCardIdsFromProfile(profile) {
+  if (Array.isArray(profile?.ownedCards) && profile.ownedCards.length > 0) {
+    return getOwnedCardIds(profile.ownedCards);
+  }
+  return getProfileCardIds(profile?.ownedCardIds);
+}
+
+function parseOwnedCardsInput(ownedCards, legacyOwnedCardIds) {
+  if (Array.isArray(ownedCards)) {
+    let result = [];
+    for (const entry of ownedCards) {
+      if (!entry || typeof entry.cardId !== "string" || !entry.cardId) continue;
+      if (!Number.isInteger(entry.count) || entry.count <= 0) continue;
+      result = addToInventory(result, entry.cardId, entry.count);
+    }
+    return result;
+  }
+
+  return getProfileCardIds(legacyOwnedCardIds).map((cardId) => ({ cardId, count: 1 }));
 }
 
 function sanitizeStringArray(value) {
@@ -987,7 +1009,7 @@ function handleTestProfileRequest(request, response) {
       const seededProfile = testPlayerProfileStore.seedProfile({
         id: sanitizeShortString(body.id, 128) || createId("test_player"),
         identity,
-        ownedCardIds: getProfileCardIds(body.ownedCardIds),
+        ownedCards: parseOwnedCardsInput(body.ownedCards, body.ownedCardIds),
         deckIds: getProfileCardIds(body.deckIds),
         starterFreeBoostersRemaining: Number.isInteger(body.starterFreeBoostersRemaining)
           ? Math.max(0, body.starterFreeBoostersRemaining)
