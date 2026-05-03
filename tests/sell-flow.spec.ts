@@ -21,6 +21,9 @@ test("Collection card detail sells a duplicate Common, decrements badge, and cre
   }
 
   const sellIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-sell-flow-e2e" };
+  const startingCrystals = 0;
+  let currentCrystals = startingCrystals;
+  let currentExtraCount = 2;
 
   await mockDeckReadyProfile(page, {
     identity: sellIdentity,
@@ -31,17 +34,21 @@ test("Collection card detail sells a duplicate Common, decrements badge, and cre
       cardId,
       count: cardId === sellableExtraCardId ? 2 : 1,
     })),
-    crystals: 0,
+    crystals: startingCrystals,
   });
 
   // Mock POST /api/player/sell so the spec runs offline-friendly: returns the
-  // expected post-sell profile without depending on the Mongo store.
+  // expected post-sell profile without depending on the Mongo store. Reads
+  // currentCrystals from test scope so future seed edits do not silently
+  // make the assertion fire on a "happens to be zero" baseline.
   await page.route("**/api/player/sell", async (route) => {
     const body = route.request().postDataJSON() as { identity: PlayerIdentity; cardId: string; count: number };
     const sellPrice = SELL_PRICES_BY_RARITY[sellableCard.rarity];
+    currentCrystals += body.count * sellPrice;
+    currentExtraCount = Math.max(0, currentExtraCount - body.count);
     const ownedCards = PROFILE_OWNED_CARD_IDS.map((cardId) => ({
       cardId,
-      count: cardId === sellableExtraCardId ? 2 - body.count : 1,
+      count: cardId === sellableExtraCardId ? currentExtraCount : 1,
     })).filter((entry) => entry.count > 0);
     const totalXp = 0;
 
@@ -57,7 +64,7 @@ test("Collection card detail sells a duplicate Common, decrements badge, and cre
           deckIds: PROFILE_DECK_IDS,
           starterFreeBoostersRemaining: 0,
           openedBoosterIds: ["neon-breach", "factory-shift"],
-          crystals: body.count * sellPrice,
+          crystals: currentCrystals,
           totalXp,
           level: computeLevelFromXp(totalXp).level,
           wins: 0,
@@ -91,8 +98,13 @@ test("Collection card detail sells a duplicate Common, decrements badge, and cre
   // Owned-count badge decrements from 2 to 1.
   await expect(page.getByTestId(`collection-owned-count-${sellableCard.id}`)).toHaveText("Ви маєте: 1");
 
-  // HUD crystals incremented by Common sell price (5).
-  await expect(page.getByTestId("player-profile-shell")).toHaveAttribute("data-profile-crystals", "5");
+  // HUD crystals incremented by Common sell price (5). data-profile-crystals
+  // is emitted by player-hud-sidebar (visible on the desktop chromium project)
+  // and player-hud-mobile, NOT by player-profile-shell.
+  await expect(page.getByTestId("player-hud-sidebar")).toHaveAttribute(
+    "data-profile-crystals",
+    String(startingCrystals + SELL_PRICES_BY_RARITY[sellableCard.rarity]),
+  );
 });
 
 test("Collection card detail disables sell when the card is in any saved deck", async ({ page }) => {
