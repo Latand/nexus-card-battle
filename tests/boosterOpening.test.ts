@@ -200,6 +200,29 @@ describe("starter booster opening", () => {
     expect(store.openings).toHaveLength(0);
   });
 
+  test("two concurrent opens for different boosters retain every drawn card and zero-out the starter counter", async () => {
+    const store = new MemoryBoosterOpeningStore();
+    await store.findOrCreateByIdentity(guestIdentity);
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      openBooster(store, "neon-breach"),
+      openBooster(store, "factory-shift"),
+    ]);
+    const firstBody = (await firstResponse.json()) as OpenBoosterResponse;
+    const secondBody = (await secondResponse.json()) as OpenBoosterResponse;
+    const firstCardIds = firstBody.cards.map((card) => card.id);
+    const secondCardIds = secondBody.cards.map((card) => card.id);
+    const finalProfile = await store.findOrCreateByIdentity(guestIdentity);
+
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    expect(finalProfile.ownedCards).toHaveLength(10);
+    expect(finalProfile.ownedCards.reduce((sum, entry) => sum + entry.count, 0)).toBe(10);
+    expect(finalProfile.deckIds).toEqual([...firstCardIds, ...secondCardIds]);
+    expect(finalProfile.starterFreeBoostersRemaining).toBe(0);
+    expect(finalProfile.openedBoosterIds).toEqual(["neon-breach", "factory-shift"]);
+  });
+
   test("opens a booster even when the player already owns every clan card and increments the count for the affected entries", async () => {
     const booster = getBoosterById("neon-breach");
     if (!booster) throw new Error("Expected neon-breach booster.");
