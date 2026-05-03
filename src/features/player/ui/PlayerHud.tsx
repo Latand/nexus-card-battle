@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useOnlineCount } from "@/features/presence/client";
 import { DEFAULT_PLAYER_AVATAR_URL, resolveAvatarUrl, useTelegramAvatar } from "@/features/player/profile/avatar";
 import type { PlayerProfile } from "@/features/player/profile/types";
 import { cn } from "@/shared/lib/cn";
@@ -20,6 +21,7 @@ export function PlayerHud({ profile, playerName, liveAvatarUrl, canPlay, onPlay 
   const liveAvatar = liveAvatarUrl ?? liveTelegramPhoto;
   const avatarUrl = resolveAvatarUrl({ storedAvatarUrl: profile.avatarUrl, liveAvatarUrl: liveAvatar });
   const displayName = (playerName?.trim() || NAME_FALLBACK).slice(0, 32);
+  const onlineCount = useOnlineCount();
 
   return (
     <>
@@ -29,8 +31,14 @@ export function PlayerHud({ profile, playerName, liveAvatarUrl, canPlay, onPlay 
         avatarUrl={avatarUrl}
         canPlay={canPlay}
         onPlay={onPlay}
+        onlineCount={onlineCount}
       />
-      <MobileHud profile={profile} playerName={displayName} avatarUrl={avatarUrl} />
+      <MobileHud
+        profile={profile}
+        playerName={displayName}
+        avatarUrl={avatarUrl}
+        onlineCount={onlineCount}
+      />
     </>
   );
 }
@@ -41,12 +49,14 @@ function SidebarHud({
   avatarUrl,
   canPlay,
   onPlay,
+  onlineCount,
 }: {
   profile: PlayerProfile;
   playerName: string;
   avatarUrl: string;
   canPlay: boolean;
   onPlay: () => void;
+  onlineCount: number | null;
 }) {
   return (
     <aside
@@ -114,10 +124,26 @@ function SidebarHud({
       <div className="mt-auto" />
 
       <div
-        className="grid min-h-[44px] place-items-center rounded-md border border-dashed border-white/10 bg-black/20 px-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#5d5443]"
+        className={cn(
+          "grid min-h-[44px] place-items-center rounded-md border px-2 text-[11px] font-black uppercase tracking-[0.12em]",
+          onlineCount === null
+            ? "border-dashed border-white/10 bg-black/20 text-[#5d5443]"
+            : "border-[#3da06a]/40 bg-[#0d2017] text-[#bff0c4]",
+        )}
         data-testid="player-hud-online-slot"
+        data-online-count={onlineCount === null ? "" : String(onlineCount)}
       >
-        Онлайн
+        {onlineCount === null ? (
+          "Онлайн"
+        ) : (
+          <span className="flex items-center gap-1.5">
+            <span aria-hidden="true">🟢</span>
+            <b className="text-[#dff7d8]" data-testid="player-hud-online-count">
+              {onlineCount}
+            </b>
+            <span className="tracking-[0.14em] text-[#9bd3a4]">онлайн</span>
+          </span>
+        )}
       </div>
     </aside>
   );
@@ -127,10 +153,12 @@ function MobileHud({
   profile,
   playerName,
   avatarUrl,
+  onlineCount,
 }: {
   profile: PlayerProfile;
   playerName: string;
   avatarUrl: string;
+  onlineCount: number | null;
 }) {
   return (
     <header
@@ -168,10 +196,25 @@ function MobileHud({
       </div>
 
       <span
-        className="grid h-3 w-3 place-items-center rounded-full border border-white/15 bg-black/45"
+        className={cn(
+          "inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none tracking-[0.04em]",
+          onlineCount === null
+            ? "border border-white/15 bg-black/45 text-transparent"
+            : "border border-[#3da06a]/40 bg-[#0d2017] text-[#dff7d8]",
+        )}
         data-testid="player-hud-online-slot-mobile"
-        aria-hidden="true"
-      />
+        data-online-count={onlineCount === null ? "" : String(onlineCount)}
+        aria-hidden={onlineCount === null ? "true" : undefined}
+      >
+        {onlineCount === null ? (
+          <span className="block h-2 w-2 rounded-full bg-white/15" />
+        ) : (
+          <>
+            <span aria-hidden="true">🟢</span>
+            <b data-testid="player-hud-online-count-mobile">{onlineCount}</b>
+          </>
+        )}
+      </span>
     </header>
   );
 }
