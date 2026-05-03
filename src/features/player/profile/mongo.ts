@@ -1,6 +1,7 @@
 import { MongoClient, MongoServerError, ObjectId, type Collection, type Filter, type WithId } from "mongodb";
 import { BoosterOpeningError } from "@/features/boosters/opening";
 import type { BoosterOpeningSource, PersistStarterBoosterOpeningInput, PersistedStarterBoosterOpening, StoredBoosterOpeningRecord } from "@/features/boosters/types";
+import { addToInventory, getOwnedCount, type OwnedCardEntry } from "@/features/inventory/inventoryOps";
 import {
   DEFAULT_PLAYER_CRYSTALS,
   DEFAULT_PLAYER_DRAWS,
@@ -26,9 +27,14 @@ const BOOSTER_OPENINGS_COLLECTION = "boosterOpenings";
 // Progression fields are optional so pre-existing documents read cleanly.
 // `level` is intentionally absent — it is derived from totalXp on read,
 // because storing an absolute level would race against $inc(totalXp).
-type MongoPlayerDocument = Omit<StoredPlayerProfile, "id" | "crystals" | "totalXp" | "wins" | "losses" | "draws" | "eloRating" | "avatarUrl"> & {
+// `ownedCardIds` is the legacy on-disk field; `ownedCards` is the multiset.
+// Documents written before slice 1 have only `ownedCardIds`; new writes use
+// `ownedCards` while leaving the legacy field untouched (lazy migration).
+type MongoPlayerDocument = Omit<StoredPlayerProfile, "id" | "ownedCards" | "crystals" | "totalXp" | "wins" | "losses" | "draws" | "eloRating" | "avatarUrl"> & {
   createdAt: Date;
   updatedAt: Date;
+  ownedCards?: OwnedCardEntry[];
+  ownedCardIds?: string[];
   crystals?: number;
   totalXp?: number;
   wins?: number;
@@ -82,7 +88,7 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
       {
         $setOnInsert: {
           identity: insertedProfile.identity,
-          ownedCardIds: insertedProfile.ownedCardIds,
+          ownedCards: insertedProfile.ownedCards,
           deckIds: insertedProfile.deckIds,
           starterFreeBoostersRemaining: insertedProfile.starterFreeBoostersRemaining,
           openedBoosterIds: insertedProfile.openedBoosterIds,
@@ -217,11 +223,19 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
 
   async saveDeck(identity: PlayerIdentity, deckIds: string[]): Promise<StoredPlayerProfile> {
     const players = await this.getPlayersCollection();
+    const currentPlayer = await players.findOne(identityFilter(identity));
+    if (!currentPlayer) {
+      throw new Error("Player profile did not exist for deck save.");
+    }
+
+    const ownedCards = readOwnedCards(currentPlayer);
+    const missingOwnedIds = deckIds.filter((cardId) => getOwnedCount(ownedCards, cardId) < 1);
+    if (missingOwnedIds.length > 0) {
+      throw new Error(`Deck contains non-owned card ids: ${missingOwnedIds.join(", ")}`);
+    }
+
     const updatedPlayer = await players.findOneAndUpdate(
-      {
-        ...identityFilter(identity),
-        ownedCardIds: { $all: deckIds },
-      },
+      identityFilter(identity),
       {
         $set: {
           deckIds,
@@ -235,17 +249,6 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
 
     if (updatedPlayer) {
       return fromMongoDocument(updatedPlayer);
-    }
-
-    const currentPlayer = await players.findOne(identityFilter(identity));
-    if (!currentPlayer) {
-      throw new Error("Player profile did not exist for deck save.");
-    }
-
-    const ownedCardIds = new Set(currentPlayer.ownedCardIds);
-    const missingOwnedIds = deckIds.filter((cardId) => !ownedCardIds.has(cardId));
-    if (missingOwnedIds.length > 0) {
-      throw new Error(`Deck contains non-owned card ids: ${missingOwnedIds.join(", ")}`);
     }
 
     throw new Error("Player deck could not be saved.");
@@ -312,24 +315,31 @@ async function applyStarterOpeningToPlayer(
   cardIds: string[],
   now: Date,
 ) {
+  const existingPlayer = await players.findOne(identityFilter(identity));
+  if (existingPlayer && hasAppliedStarterOpening(existingPlayer, boosterId, cardIds)) {
+    return existingPlayer;
+  }
+
+  const baseOwnedCards = existingPlayer ? readOwnedCards(existingPlayer) : [];
+  const nextOwnedCards = cardIds.reduce((acc, cardId) => addToInventory(acc, cardId, 1), baseOwnedCards);
+
   const updatedPlayer = await players.findOneAndUpdate(
     {
       ...identityFilter(identity),
       starterFreeBoostersRemaining: { $gt: 0 },
       openedBoosterIds: { $ne: boosterId },
-      ownedCardIds: { $nin: cardIds },
     },
     {
+      $set: {
+        ownedCards: nextOwnedCards,
+        updatedAt: now,
+      },
       $addToSet: {
-        ownedCardIds: { $each: cardIds },
         deckIds: { $each: cardIds },
         openedBoosterIds: boosterId,
       },
       $inc: {
         starterFreeBoostersRemaining: -1,
-      },
-      $set: {
-        updatedAt: now,
       },
     },
     {
@@ -390,9 +400,25 @@ async function createOrLoadStarterOpening(
 }
 
 function hasAppliedStarterOpening(player: MongoPlayerDocument, boosterId: string, cardIds: string[]) {
-  const ownedCardIds = new Set(player.ownedCardIds);
+  const ownedCards = readOwnedCards(player);
   const deckIds = new Set(player.deckIds);
-  return player.openedBoosterIds.includes(boosterId) && cardIds.every((cardId) => ownedCardIds.has(cardId) && deckIds.has(cardId));
+  return player.openedBoosterIds.includes(boosterId) && cardIds.every((cardId) => getOwnedCount(ownedCards, cardId) >= 1 && deckIds.has(cardId));
+}
+
+function readOwnedCards(player: MongoPlayerDocument): OwnedCardEntry[] {
+  if (Array.isArray(player.ownedCards) && player.ownedCards.length > 0) {
+    return player.ownedCards
+      .filter((entry) => entry && typeof entry.cardId === "string" && Number.isInteger(entry.count) && entry.count > 0)
+      .map((entry) => ({ cardId: entry.cardId, count: entry.count }));
+  }
+
+  if (Array.isArray(player.ownedCardIds)) {
+    return player.ownedCardIds
+      .filter((cardId): cardId is string => typeof cardId === "string" && cardId.length > 0)
+      .map((cardId) => ({ cardId, count: 1 }));
+  }
+
+  return [];
 }
 
 function starterOpeningFilter(playerId: string, boosterId: string): Filter<MongoBoosterOpeningDocument> {
@@ -470,7 +496,7 @@ function fromMongoDocument(document: WithId<MongoPlayerDocument>): StoredPlayerP
   return {
     id: document._id.toHexString(),
     identity: document.identity,
-    ownedCardIds: document.ownedCardIds,
+    ownedCards: readOwnedCards(document),
     deckIds: document.deckIds,
     starterFreeBoostersRemaining: document.starterFreeBoostersRemaining,
     openedBoosterIds: document.openedBoosterIds,
