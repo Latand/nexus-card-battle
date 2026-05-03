@@ -1333,9 +1333,12 @@ function RewardOverlay({
           ) : null}
 
           {visibleTiles.showMilestone
-            ? rewards?.milestoneCardRewards.map((milestone) => (
+            ? rewards?.milestoneCardRewards.map((milestone, index) => (
+                // Order is deterministic from milestone-table sort; cardId can
+                // repeat in one match when a small rarity bucket gets picked
+                // twice, so the index disambiguates the React key.
                 <RewardStatTile
-                  key={milestone.cardId}
+                  key={`${index}-${milestone.cardId}`}
                   testId="reward-milestone-tile"
                   icon="🃏"
                   label="Карта-бонус"
