@@ -950,6 +950,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
         <PhaseOverlay
           game={game}
           verdict={verdict}
+          mode={mode}
           onReset={reset}
           persistedRewards={persistedRewards}
           persistedRewardsError={persistedRewardsError}
@@ -1150,12 +1151,14 @@ function getHumanOverlaySubtitle(status: HumanMatchStatus) {
 function PhaseOverlay({
   game,
   verdict,
+  mode,
   onReset,
   persistedRewards,
   persistedRewardsError,
 }: {
   game: GameState;
   verdict: string;
+  mode: "ai" | "human";
   onReset: () => void;
   persistedRewards: RewardSummary | null;
   persistedRewardsError: string | null;
@@ -1169,6 +1172,7 @@ function PhaseOverlay({
       <RewardOverlay
         result={game.matchResult}
         rewards={overlayRewards}
+        mode={mode}
         onReset={onReset}
         persistedRewardsError={persistedRewardsError}
         showPersistedDetails={showPersistedDetails}
@@ -1206,16 +1210,19 @@ function PhaseOverlay({
 function RewardOverlay({
   result,
   rewards,
+  mode,
   onReset,
   persistedRewardsError,
   showPersistedDetails,
 }: {
   result?: MatchResult;
   rewards?: RewardSummary;
+  mode: "ai" | "human";
   onReset: () => void;
   persistedRewardsError: string | null;
   showPersistedDetails: boolean;
 }) {
+  const replayLabel = mode === "human" ? "Новий бій · PvP" : "Новий бій · AI";
   const title = result === "player" ? "Винагороди за перемогу" : result === "draw" ? "Винагороди за нічию" : "Винагороди за бій";
   const userXpDelta = rewards?.deltaXp ?? 0;
   const showUserXpTile = showPersistedDetails && userXpDelta > 0;
@@ -1244,8 +1251,10 @@ function RewardOverlay({
             className="min-h-[44px] rounded-md border-2 border-black/60 bg-[linear-gradient(180deg,#fff26d,#e3b51e_54%,#a66d12)] px-3 text-sm font-black uppercase text-[#1a1408] max-[620px]:col-span-full"
             type="button"
             onClick={onReset}
+            data-testid="reward-replay"
+            data-mode={mode}
           >
-            Новий бій
+            {replayLabel}
           </button>
         </div>
 

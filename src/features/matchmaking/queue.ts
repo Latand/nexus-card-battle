@@ -113,6 +113,11 @@ function isMutuallyAcceptable<TPayload>(
   right: QueuedEntry<TPayload>,
   now: number,
 ): boolean {
+  // The "find anyone" guarantee is one-sided: if EITHER side has waited
+  // ≥ 60s, drop the symmetric window check entirely so the long-waiting
+  // side is never starved by a fresh, narrow-window newcomer.
+  if (secondsWaited(left, now) >= ELO_WINDOW_DROP_AFTER_SECONDS) return true;
+  if (secondsWaited(right, now) >= ELO_WINDOW_DROP_AFTER_SECONDS) return true;
   return acceptsCandidate(left, right, now) && acceptsCandidate(right, left, now);
 }
 
@@ -121,8 +126,12 @@ function acceptsCandidate<TPayload>(
   candidate: QueuedEntry<TPayload>,
   now: number,
 ): boolean {
-  const secondsWaited = Math.max(0, (now - asker.queuedAt) / 1000);
-  if (secondsWaited >= ELO_WINDOW_DROP_AFTER_SECONDS) return true;
-  const window = ELO_WINDOW_BASE + (secondsWaited / ELO_WINDOW_STEP_SECONDS) * ELO_WINDOW_BASE;
+  const waited = secondsWaited(asker, now);
+  if (waited >= ELO_WINDOW_DROP_AFTER_SECONDS) return true;
+  const window = ELO_WINDOW_BASE + (waited / ELO_WINDOW_STEP_SECONDS) * ELO_WINDOW_BASE;
   return Math.abs(asker.eloRating - candidate.eloRating) <= window;
+}
+
+function secondsWaited<TPayload>(entry: QueuedEntry<TPayload>, now: number): number {
+  return Math.max(0, (now - entry.queuedAt) / 1000);
 }

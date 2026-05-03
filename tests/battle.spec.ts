@@ -136,7 +136,11 @@ test("plays a complete state-machine battle", async ({ page }) => {
 
   await expect(page.getByTestId("reward-summary")).toBeVisible({ timeout: 60_000 });
 
-  await page.getByTestId("reward-summary").getByRole("button").click();
+  const replayButton = page.getByTestId("reward-replay");
+  await expect(replayButton).toHaveAttribute("data-mode", "ai");
+  await expect(replayButton).toContainText("AI");
+  await expect(replayButton).not.toContainText("PvP");
+  await replayButton.click();
   await expect(page.getByTestId("phase-overlay")).toHaveAttribute("data-phase", "match_intro");
   await expect(page.getByTestId("round-status")).toBeVisible({ timeout: 5_000 });
   await expect(page.locator('[data-testid^="player-card-"]')).toHaveCount(4);

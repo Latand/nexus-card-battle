@@ -61,46 +61,50 @@ describe("MatchmakingQueue", () => {
     expect(queue.size()).toBe(0);
   });
 
-  test("after 60s queued any candidate pairs (find-anyone fallback)", () => {
+  test("symmetric find-anyone: both sides past 60s pair regardless of ELO gap", () => {
     const clock = fakeClock();
     const queue = new MatchmakingQueue({ clock: clock.now });
 
-    queue.enqueue({ sessionId: "veteran", eloRating: 1000, payload: null });
+    queue.enqueue({ sessionId: "veteran-low", eloRating: 1000, payload: null });
+    queue.enqueue({ sessionId: "veteran-high", eloRating: 2500, payload: null });
     clock.advance(60_000);
 
-    // The newcomer is hundreds of ELO apart and just joined, but the veteran's
-    // window has dropped — so the veteran accepts. The newcomer must also
-    // accept the veteran for the match to fire; it does because the veteran
-    // is within ±100 of newcomer's window? No, newcomer just joined so window
-    // is ±100. So this pair would NOT fire if the newcomer is far away.
-    queue.enqueue({ sessionId: "newcomer-near", eloRating: 1080, payload: null });
     expect(queue.tryPair()).toHaveLength(1);
-
-    // Now prove the find-anyone behavior with both sides past 60s.
-    queue.enqueue({ sessionId: "veteran-2", eloRating: 1000, payload: null });
-    queue.enqueue({ sessionId: "newcomer-far", eloRating: 2500, payload: null });
-    clock.advance(60_000);
-    expect(queue.tryPair()).toHaveLength(1);
+    expect(queue.size()).toBe(0);
   });
 
-  test("both-sides-must-accept invariant: a 1s-wait session at ELO 1000 will not pair with a 60s-wait session at ELO 2000", () => {
+  test("asymmetric find-anyone: a >60s waiter pairs with a fresh wildly-mismatched newcomer (one-sided 60s drop is sufficient)", () => {
     const clock = fakeClock();
     const queue = new MatchmakingQueue({ clock: clock.now });
 
-    queue.enqueue({ sessionId: "veteran-2000", eloRating: 2000, payload: null });
-    clock.advance(60_000);
-    // Veteran is now in find-anyone mode (window dropped).
+    queue.enqueue({ sessionId: "A", eloRating: 1000, payload: null });
+    clock.advance(65_000);
+    queue.enqueue({ sessionId: "B", eloRating: 2000, payload: null });
+
+    const pairs = queue.tryPair();
+
+    expect(pairs).toHaveLength(1);
+    const ids = [pairs[0].left.sessionId, pairs[0].right.sessionId].sort();
+    expect(ids).toEqual(["A", "B"]);
+    expect(queue.size()).toBe(0);
+  });
+
+  test("early-window both-sides-must-accept: under 60s on both sides, a narrow-window newcomer will NOT pair with a wider-window waiter", () => {
+    const clock = fakeClock();
+    const queue = new MatchmakingQueue({ clock: clock.now });
+
+    queue.enqueue({ sessionId: "wider-2000", eloRating: 2000, payload: null });
+    clock.advance(45_000);
+    // Wider side's window after 45s = 100 + (45/5)*100 = 1000 — accepts ELO 1000.
 
     queue.enqueue({ sessionId: "fresh-1000", eloRating: 1000, payload: null });
     clock.advance(1_000);
-    // Fresh session has waited 1s → window = 100 + (1/5)*100 = 120.
-    // Diff is 1000, not within 120, so no pair even though veteran accepts.
+    // Fresh side's window = 100 + (1/5)*100 = 120 — does NOT accept ELO 2000.
+    // Both sides are still under 60s, so the symmetric rule applies.
     expect(queue.tryPair()).toEqual([]);
 
-    // Bump fresh side until ITS window also accepts. Need window >= 1000:
-    // 100 + (s/5)*100 >= 1000 → s >= 45. From its own queuedAt (60_000ms),
-    // it waited 1s already; advance 44 more.
-    clock.advance(44_000);
+    // Once the wider side crosses 60s, the asymmetric rule kicks in and they pair.
+    clock.advance(15_000);
     expect(queue.tryPair()).toHaveLength(1);
   });
 
