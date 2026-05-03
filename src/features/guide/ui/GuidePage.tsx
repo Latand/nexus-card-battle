@@ -87,7 +87,7 @@ function GuideAnchorNav() {
         className="md:hidden rounded-md border border-[#d4b06a]/25 bg-[linear-gradient(180deg,rgba(20,25,28,0.96),rgba(8,10,13,0.98))] p-3 shadow-[0_10px_28px_rgba(0,0,0,0.42)] [&[open]>summary>span]:rotate-90"
         data-testid="guide-nav-mobile"
       >
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-[#d4b06a]">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-[#d4b06a] [&::-webkit-details-marker]:hidden">
           Розділи
           <span aria-hidden="true" className="inline-block transition-transform">
             ›
