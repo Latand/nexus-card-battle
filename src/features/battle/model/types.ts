@@ -173,10 +173,25 @@ export type CardReward = {
   levelProgress: number;
 };
 
+export type RewardSummaryTotals = {
+  crystals: number;
+  totalXp: number;
+  level: number;
+};
+
 export type RewardSummary = {
   matchXp: number;
   levelProgress: number;
   cardRewards: CardReward[];
+  // Slice 1 progression fields. Populated by the PvE match-finished endpoint
+  // and (in slice 2) by the server-authoritative PvP path. Local PvE/PvP
+  // games that still call buildRewards default these to zero/false so the
+  // overlay can render safely while progression isn't wired through.
+  deltaXp: number;
+  deltaCrystals: number;
+  leveledUp: boolean;
+  levelUpBonusCrystals: number;
+  newTotals: RewardSummaryTotals;
 };
 
 export type GameState = {

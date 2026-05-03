@@ -8,6 +8,13 @@ import {
 } from "./types";
 import { cards } from "@/features/battle/model/cards";
 import { MIN_DECK_SIZE } from "@/features/battle/model/constants";
+import {
+  LEVEL_XP_BASE,
+  computeMatchRewards,
+  type ComputedMatchRewardTotals,
+  type MatchResultBucket,
+} from "./progression";
+import type { RewardSummary } from "@/features/battle/model/types";
 
 export type PlayerProfileStore = {
   findOrCreateByIdentity(identity: PlayerIdentity): Promise<StoredPlayerProfile>;
@@ -15,6 +22,15 @@ export type PlayerProfileStore = {
 
 export type PlayerDeckStore = PlayerProfileStore & {
   saveDeck(identity: PlayerIdentity, deckIds: string[]): Promise<StoredPlayerProfile>;
+};
+
+export type ApplyMatchRewardsInput = {
+  result: MatchResultBucket;
+  newTotals: ComputedMatchRewardTotals;
+};
+
+export type PlayerMatchRewardsStore = PlayerProfileStore & {
+  applyMatchRewards(identity: PlayerIdentity, rewards: ApplyMatchRewardsInput): Promise<StoredPlayerProfile>;
 };
 
 export async function handlePlayerProfilePost(request: Request, store: PlayerProfileStore) {
@@ -42,6 +58,88 @@ export async function handlePlayerProfileGet(request: Request, store: PlayerProf
     return playerProfileResponse(toPlayerProfile(profile));
   } catch (error) {
     return playerProfileErrorResponse(error);
+  }
+}
+
+export async function handlePlayerMatchFinishedPost(request: Request, store: PlayerMatchRewardsStore) {
+  try {
+    const body = await readJsonObject(request);
+    const identity = parsePlayerIdentity(body.identity);
+    const mode = parseMatchMode(body.mode);
+    const result = parseMatchResult(body.result);
+
+    const profile = toPlayerProfile(await store.findOrCreateByIdentity(identity));
+    const rewards = computeMatchRewards(
+      { crystals: profile.crystals, totalXp: profile.totalXp, level: profile.level },
+      { mode, result },
+    );
+
+    const persisted = toPlayerProfile(
+      await store.applyMatchRewards(identity, { result, newTotals: rewards.newTotals }),
+    );
+
+    const summary: RewardSummary = {
+      // Slice 1: PvE only awards user XP. The legacy card/match-XP fields are
+      // kept on the type for the existing overlay; we mirror the user XP
+      // delta into matchXp so the existing progress bar still renders sane.
+      matchXp: rewards.deltaXp,
+      levelProgress: levelProgressPercent(persisted.totalXp, persisted.level),
+      cardRewards: [],
+      deltaXp: rewards.deltaXp,
+      deltaCrystals: rewards.deltaCrystals,
+      leveledUp: rewards.leveledUp,
+      levelUpBonusCrystals: rewards.levelUpBonusCrystals,
+      newTotals: {
+        crystals: persisted.crystals,
+        totalXp: persisted.totalXp,
+        level: persisted.level,
+      },
+    };
+
+    return Response.json(
+      { rewards: summary, player: persisted },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    return playerProfileErrorResponse(error);
+  }
+}
+
+function levelProgressPercent(totalXp: number, level: number) {
+  // Mirrors computeLevelFromXp for the bar fill. We re-derive from totals so
+  // the bar shows the player's standing right now (post-match), independent
+  // of the exact match-info inputs.
+  const xpToReachThisLevel = sumXpToReachLevel(level);
+  const xpForNextLevel = LEVEL_XP_BASE * (level + 1) * (level + 1);
+  const into = Math.max(0, totalXp - xpToReachThisLevel);
+  if (xpForNextLevel <= 0) return 100;
+  return Math.max(0, Math.min(100, Math.round((into / xpForNextLevel) * 100)));
+}
+
+function sumXpToReachLevel(level: number) {
+  let sum = 0;
+  for (let n = 2; n <= level; n += 1) {
+    sum += LEVEL_XP_BASE * n * n;
+  }
+  return sum;
+}
+
+function parseMatchMode(value: unknown): "pve" {
+  // Slice 1 only persists PvE matches. PvP is server-authoritative and
+  // lands in slice 2.
+  if (value === "pve") return "pve";
+  throw new MatchFinishedValidationError("mode must be \"pve\" in slice 1.");
+}
+
+function parseMatchResult(value: unknown): MatchResultBucket {
+  if (value === "win" || value === "draw" || value === "loss") return value;
+  throw new MatchFinishedValidationError("result must be one of \"win\", \"draw\", \"loss\".");
+}
+
+class MatchFinishedValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MatchFinishedValidationError";
   }
 }
 
@@ -77,6 +175,16 @@ function playerProfileErrorResponse(error: unknown) {
     return Response.json(
       {
         error: "invalid_deck",
+        message: error.message,
+      },
+      { status: 400 },
+    );
+  }
+
+  if (error instanceof MatchFinishedValidationError) {
+    return Response.json(
+      {
+        error: "invalid_match",
         message: error.message,
       },
       { status: 400 },

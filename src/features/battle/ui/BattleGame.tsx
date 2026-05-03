@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { postMatchFinished } from "@/features/player/profile/client";
 import type { PlayerIdentity } from "@/features/player/profile/types";
 import { cn } from "@/shared/lib/cn";
 import type { TelegramPlayer } from "@/shared/lib/telegram";
@@ -124,6 +125,9 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const [humanStatus, setHumanStatus] = useState<HumanMatchStatus>(isHumanMatch ? "connecting" : "idle");
   const [humanMessage, setHumanMessage] = useState("");
   const [matchInfo, setMatchInfo] = useState<HumanMatchInfo | null>(null);
+  const [persistedRewards, setPersistedRewards] = useState<RewardSummary | null>(null);
+  const [persistedRewardsError, setPersistedRewardsError] = useState<string | null>(null);
+  const persistedMatchSignatureRef = useRef<string | null>(null);
   const autoSubmitRef = useRef(() => {});
   const socketRef = useRef<WebSocket | null>(null);
   const gameRef = useRef(game);
@@ -335,6 +339,41 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       return schedule(() => setGame((value) => ({ ...value, phase: "reward_summary" })), PHASE_TIMING_MS.match_result);
     }
   }, [game, humanStatus, isHumanMatch, pending]);
+
+  // Slice 1: persist PvE match XP/level via the new endpoint as soon as the
+  // match resolves. PvP intentionally still uses the legacy local rewards;
+  // the server-authoritative PvP path lands in slice #2.
+  useEffect(() => {
+    if (isHumanMatch) return;
+    if (game.phase !== "match_result" && game.phase !== "reward_summary") return;
+    if (!game.matchResult) return;
+    if (!playerIdentity) return;
+
+    const result = matchResultToBucket(game.matchResult);
+    // De-dupe across the match_result -> reward_summary transition so we only
+    // POST once per match. The signature also resets on next match because
+    // `reset()` clears persistedRewards / persistedRewardsError below.
+    const signature = `${game.matchResult}:${result}`;
+    if (persistedMatchSignatureRef.current === signature) return;
+    persistedMatchSignatureRef.current = signature;
+
+    let cancelled = false;
+    postMatchFinished({ identity: playerIdentity, mode: "pve", result })
+      .then((response) => {
+        if (cancelled) return;
+        setPersistedRewards(response.rewards);
+        setPersistedRewardsError(null);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : "Помилка обчислення нагороди.";
+        setPersistedRewardsError(message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [game.matchResult, game.phase, isHumanMatch, playerIdentity]);
 
   useEffect(() => {
     let startedAt = 0;
@@ -718,6 +757,9 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setEnemyLockedMove(null);
     setSelectionOpen(false);
     setTurnSeconds(TURN_SECONDS);
+    setPersistedRewards(null);
+    setPersistedRewardsError(null);
+    persistedMatchSignatureRef.current = null;
   }
 
   function toggleBoost() {
@@ -884,7 +926,16 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
         />
       ) : null}
 
-      {!humanBlockingOverlay ? <PhaseOverlay game={game} verdict={verdict} onReset={reset} /> : null}
+      {!humanBlockingOverlay ? (
+        <PhaseOverlay
+          game={game}
+          verdict={verdict}
+          onReset={reset}
+          persistedRewards={persistedRewards}
+          persistedRewardsError={persistedRewardsError}
+          isHumanMatch={isHumanMatch}
+        />
+      ) : null}
       {!humanBlockingOverlay && showBattle && pending ? <BattleOverlay outcome={pending} player={game.player} enemy={game.enemy} phase={game.phase} /> : null}
     </main>
   );
@@ -1081,15 +1132,33 @@ function PhaseOverlay({
   game,
   verdict,
   onReset,
+  persistedRewards,
+  persistedRewardsError,
+  isHumanMatch,
 }: {
   game: GameState;
   verdict: string;
   onReset: () => void;
+  persistedRewards: RewardSummary | null;
+  persistedRewardsError: string | null;
+  isHumanMatch: boolean;
 }) {
   if (["player_turn", "card_preview", "opponent_turn", "battle_intro", "damage_apply"].includes(game.phase)) return null;
 
   if (game.phase === "reward_summary") {
-    return <RewardOverlay result={game.matchResult} rewards={game.rewards} onReset={onReset} />;
+    // Slice 1: PvE reads the persisted rewards from /api/player/match-finished
+    // and falls back to local rewards if the request is in flight or failed.
+    // PvP keeps using the legacy local rewards until slice #2 lands.
+    const overlayRewards = !isHumanMatch && persistedRewards ? persistedRewards : game.rewards;
+    return (
+      <RewardOverlay
+        result={game.matchResult}
+        rewards={overlayRewards}
+        onReset={onReset}
+        persistedRewardsError={!isHumanMatch ? persistedRewardsError : null}
+        showPersistedDetails={!isHumanMatch}
+      />
+    );
   }
 
   const title = getOverlayTitle(game.phase, game.round.round, verdict, game.lastClash?.winner);
@@ -1123,12 +1192,23 @@ function RewardOverlay({
   result,
   rewards,
   onReset,
+  persistedRewardsError,
+  showPersistedDetails,
 }: {
   result?: MatchResult;
   rewards?: RewardSummary;
   onReset: () => void;
+  persistedRewardsError: string | null;
+  showPersistedDetails: boolean;
 }) {
   const title = result === "player" ? "Винагороди за перемогу" : result === "draw" ? "Винагороди за нічию" : "Винагороди за бій";
+  // The persisted PvE rewards populate deltaXp; legacy/local rewards (from
+  // buildRewards) leave it at zero. Use that as the signal that we're
+  // looking at persisted rewards worth surfacing.
+  const userXpDelta = rewards?.deltaXp ?? 0;
+  const showUserXpTile = showPersistedDetails && userXpDelta > 0;
+  const showLevelUpTile = showPersistedDetails && Boolean(rewards?.leveledUp);
+  const newLevel = rewards?.newTotals?.level;
 
   return (
     <section className="fixed inset-0 z-50 grid place-items-center bg-[#05080b] p-3 backdrop-blur-[4px]" data-testid="reward-summary">
@@ -1147,6 +1227,48 @@ function RewardOverlay({
             Новий бій
           </button>
         </div>
+
+        {showUserXpTile ? (
+          <div
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded border border-[#49d2e7]/35 bg-[linear-gradient(180deg,rgba(8,28,40,0.86),rgba(4,12,18,0.86))] px-3 py-2"
+            data-testid="reward-user-xp-tile"
+            data-delta-xp={userXpDelta}
+          >
+            <div className="grid gap-1">
+              <span className="text-xs font-black uppercase tracking-[0.08em] text-[#9bd3df]">XP гравця</span>
+              <span className="text-base font-black text-[#fff8df]" data-testid="reward-user-xp-line">
+                +{userXpDelta} XP · рівень {newLevel ?? "?"}
+              </span>
+            </div>
+            <span className="text-2xl font-black text-[#49d2e7]">+{userXpDelta}</span>
+          </div>
+        ) : null}
+
+        {showLevelUpTile ? (
+          <div
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded border-2 border-[#ffe08a]/70 bg-[linear-gradient(180deg,rgba(60,38,8,0.92),rgba(20,12,2,0.92))] px-3 py-3 shadow-[0_0_18px_rgba(255,224,138,0.28)]"
+            data-testid="reward-level-up-tile"
+            data-new-level={newLevel ?? ""}
+            data-level-up-bonus={rewards?.levelUpBonusCrystals ?? 0}
+          >
+            <div className="grid gap-1">
+              <span className="text-xs font-black uppercase tracking-[0.1em] text-[#ffe08a]">Новий рівень</span>
+              <strong className="text-xl font-black uppercase text-[#fff8df]" data-testid="reward-level-up-headline">
+                Рівень {newLevel} · +{rewards?.levelUpBonusCrystals ?? 0} 💎
+              </strong>
+            </div>
+            <span className="text-3xl font-black text-[#ffe08a]">💎</span>
+          </div>
+        ) : null}
+
+        {persistedRewardsError ? (
+          <div
+            className="rounded border border-[#ff6e6e]/50 bg-black/55 px-3 py-2 text-xs font-black uppercase text-[#ffd1d1]"
+            data-testid="reward-persisted-error"
+          >
+            {persistedRewardsError}
+          </div>
+        ) : null}
 
         <div className="grid gap-2">
           {(rewards?.cardRewards ?? []).map((reward) => (
@@ -1265,6 +1387,12 @@ function getVerdict(result?: MatchResult) {
   if (!result) return "";
   if (result === "draw") return "Нічия";
   return result === "player" ? "Перемога" : "Програш";
+}
+
+function matchResultToBucket(result: MatchResult): "win" | "draw" | "loss" {
+  if (result === "player") return "win";
+  if (result === "draw") return "draw";
+  return "loss";
 }
 
 function topBarClass() {

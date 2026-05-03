@@ -1,4 +1,10 @@
 export const STARTER_FREE_BOOSTERS = 2;
+export const DEFAULT_PLAYER_CRYSTALS = 0;
+export const DEFAULT_PLAYER_TOTAL_XP = 0;
+export const DEFAULT_PLAYER_LEVEL = 1;
+export const DEFAULT_PLAYER_WINS = 0;
+export const DEFAULT_PLAYER_LOSSES = 0;
+export const DEFAULT_PLAYER_DRAWS = 0;
 
 export type PlayerIdentity = TelegramPlayerIdentity | GuestPlayerIdentity;
 
@@ -19,6 +25,15 @@ export type PlayerOnboardingState = {
   completed: boolean;
 };
 
+export type PlayerProgressionTotals = {
+  crystals: number;
+  totalXp: number;
+  level: number;
+  wins: number;
+  losses: number;
+  draws: number;
+};
+
 export type PlayerProfile = {
   id: string;
   identity: PlayerIdentity;
@@ -26,6 +41,12 @@ export type PlayerProfile = {
   deckIds: string[];
   starterFreeBoostersRemaining: number;
   openedBoosterIds: string[];
+  crystals: number;
+  totalXp: number;
+  level: number;
+  wins: number;
+  losses: number;
+  draws: number;
   onboarding: PlayerOnboardingState;
 };
 
@@ -39,6 +60,12 @@ export function createNewStoredPlayerProfile(id: string, identity: PlayerIdentit
     deckIds: [],
     starterFreeBoostersRemaining: STARTER_FREE_BOOSTERS,
     openedBoosterIds: [],
+    crystals: DEFAULT_PLAYER_CRYSTALS,
+    totalXp: DEFAULT_PLAYER_TOTAL_XP,
+    level: DEFAULT_PLAYER_LEVEL,
+    wins: DEFAULT_PLAYER_WINS,
+    losses: DEFAULT_PLAYER_LOSSES,
+    draws: DEFAULT_PLAYER_DRAWS,
   };
 }
 
@@ -47,6 +74,12 @@ export function toPlayerProfile(profile: StoredPlayerProfile): PlayerProfile {
   const deckIds = normalizeStringArray(profile.deckIds);
   const openedBoosterIds = normalizeStringArray(profile.openedBoosterIds);
   const starterFreeBoostersRemaining = normalizeNonNegativeInteger(profile.starterFreeBoostersRemaining, STARTER_FREE_BOOSTERS);
+  const crystals = normalizeNonNegativeInteger(profile.crystals, DEFAULT_PLAYER_CRYSTALS);
+  const totalXp = normalizeNonNegativeInteger(profile.totalXp, DEFAULT_PLAYER_TOTAL_XP);
+  const level = normalizePositiveInteger(profile.level, DEFAULT_PLAYER_LEVEL);
+  const wins = normalizeNonNegativeInteger(profile.wins, DEFAULT_PLAYER_WINS);
+  const losses = normalizeNonNegativeInteger(profile.losses, DEFAULT_PLAYER_LOSSES);
+  const draws = normalizeNonNegativeInteger(profile.draws, DEFAULT_PLAYER_DRAWS);
 
   return {
     id: profile.id,
@@ -55,6 +88,12 @@ export function toPlayerProfile(profile: StoredPlayerProfile): PlayerProfile {
     deckIds,
     starterFreeBoostersRemaining,
     openedBoosterIds,
+    crystals,
+    totalXp,
+    level,
+    wins,
+    losses,
+    draws,
     onboarding: createOnboardingState({
       ownedCardIds,
       deckIds,
@@ -147,6 +186,11 @@ function normalizeStringArray(value: unknown) {
 
 function normalizeNonNegativeInteger(value: unknown, fallback: number) {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) return fallback;
+  return value;
+}
+
+function normalizePositiveInteger(value: unknown, fallback: number) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) return fallback;
   return value;
 }
 

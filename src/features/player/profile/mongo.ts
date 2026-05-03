@@ -1,8 +1,18 @@
 import { MongoClient, MongoServerError, ObjectId, type Collection, type Filter, type WithId } from "mongodb";
 import { BoosterOpeningError } from "@/features/boosters/opening";
 import type { BoosterOpeningSource, PersistStarterBoosterOpeningInput, PersistedStarterBoosterOpening, StoredBoosterOpeningRecord } from "@/features/boosters/types";
-import { createNewStoredPlayerProfile, type PlayerIdentity, type StoredPlayerProfile } from "./types";
-import type { PlayerDeckStore } from "./api";
+import {
+  DEFAULT_PLAYER_CRYSTALS,
+  DEFAULT_PLAYER_DRAWS,
+  DEFAULT_PLAYER_LEVEL,
+  DEFAULT_PLAYER_LOSSES,
+  DEFAULT_PLAYER_TOTAL_XP,
+  DEFAULT_PLAYER_WINS,
+  createNewStoredPlayerProfile,
+  type PlayerIdentity,
+  type StoredPlayerProfile,
+} from "./types";
+import type { ApplyMatchRewardsInput, PlayerDeckStore, PlayerMatchRewardsStore } from "./api";
 
 const DEFAULT_MONGODB_URI = "mongodb://127.0.0.1:27017/nexus-card-battle";
 const DEFAULT_MONGODB_DB = "nexus-card-battle";
@@ -10,9 +20,18 @@ const DEFAULT_MONGODB_SERVER_SELECTION_TIMEOUT_MS = 1_500;
 const PLAYERS_COLLECTION = "players";
 const BOOSTER_OPENINGS_COLLECTION = "boosterOpenings";
 
-type MongoPlayerDocument = Omit<StoredPlayerProfile, "id"> & {
+// Progression fields are optional on the document type so legacy profiles
+// (written before slice 1) read cleanly. Defaults are applied in
+// fromMongoDocument().
+type MongoPlayerDocument = Omit<StoredPlayerProfile, "id" | "crystals" | "totalXp" | "level" | "wins" | "losses" | "draws"> & {
   createdAt: Date;
   updatedAt: Date;
+  crystals?: number;
+  totalXp?: number;
+  level?: number;
+  wins?: number;
+  losses?: number;
+  draws?: number;
 };
 
 type MongoBoosterOpeningDocument = {
@@ -40,7 +59,7 @@ export function getMongoPlayerProfileStore() {
   return new MongoPlayerProfileStore(clientPromise, dbName);
 }
 
-export class MongoPlayerProfileStore implements PlayerDeckStore {
+export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewardsStore {
   private indexesReady?: Promise<void>;
   private boosterOpeningIndexesReady?: Promise<void>;
 
@@ -63,6 +82,12 @@ export class MongoPlayerProfileStore implements PlayerDeckStore {
           deckIds: insertedProfile.deckIds,
           starterFreeBoostersRemaining: insertedProfile.starterFreeBoostersRemaining,
           openedBoosterIds: insertedProfile.openedBoosterIds,
+          crystals: insertedProfile.crystals,
+          totalXp: insertedProfile.totalXp,
+          level: insertedProfile.level,
+          wins: insertedProfile.wins,
+          losses: insertedProfile.losses,
+          draws: insertedProfile.draws,
           createdAt: now,
           updatedAt: now,
         },
@@ -78,6 +103,38 @@ export class MongoPlayerProfileStore implements PlayerDeckStore {
     }
 
     return fromMongoDocument(document);
+  }
+
+  async applyMatchRewards(identity: PlayerIdentity, rewards: ApplyMatchRewardsInput): Promise<StoredPlayerProfile> {
+    const players = await this.getPlayersCollection();
+    const now = new Date();
+    // Counter increment for the per-result wins/losses/draws bucket.
+    const resultCounterField =
+      rewards.result === "win" ? "wins" : rewards.result === "loss" ? "losses" : "draws";
+
+    const updatedPlayer = await players.findOneAndUpdate(
+      identityFilter(identity),
+      {
+        $set: {
+          crystals: rewards.newTotals.crystals,
+          totalXp: rewards.newTotals.totalXp,
+          level: rewards.newTotals.level,
+          updatedAt: now,
+        },
+        $inc: {
+          [resultCounterField]: 1,
+        },
+      },
+      {
+        returnDocument: "after",
+      },
+    );
+
+    if (!updatedPlayer) {
+      throw new Error("Player profile did not exist for match rewards apply.");
+    }
+
+    return fromMongoDocument(updatedPlayer);
   }
 
   async saveStarterBoosterOpening(input: PersistStarterBoosterOpeningInput): Promise<PersistedStarterBoosterOpening> {
@@ -358,7 +415,25 @@ function fromMongoDocument(document: WithId<MongoPlayerDocument>): StoredPlayerP
     deckIds: document.deckIds,
     starterFreeBoostersRemaining: document.starterFreeBoostersRemaining,
     openedBoosterIds: document.openedBoosterIds,
+    // Pre-progression Mongo documents may not include these fields. Default
+    // them so toPlayerProfile downstream produces a complete profile.
+    crystals: nonNegativeIntegerOrDefault(document.crystals, DEFAULT_PLAYER_CRYSTALS),
+    totalXp: nonNegativeIntegerOrDefault(document.totalXp, DEFAULT_PLAYER_TOTAL_XP),
+    level: positiveIntegerOrDefault(document.level, DEFAULT_PLAYER_LEVEL),
+    wins: nonNegativeIntegerOrDefault(document.wins, DEFAULT_PLAYER_WINS),
+    losses: nonNegativeIntegerOrDefault(document.losses, DEFAULT_PLAYER_LOSSES),
+    draws: nonNegativeIntegerOrDefault(document.draws, DEFAULT_PLAYER_DRAWS),
   };
+}
+
+function nonNegativeIntegerOrDefault(value: unknown, fallback: number) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) return fallback;
+  return value;
+}
+
+function positiveIntegerOrDefault(value: unknown, fallback: number) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) return fallback;
+  return value;
 }
 
 function fromMongoOpeningDocument(document: WithId<MongoBoosterOpeningDocument>): StoredBoosterOpeningRecord {

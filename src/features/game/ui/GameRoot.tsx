@@ -253,6 +253,7 @@ export function GameRoot() {
           <BattleGame
             playerCollectionIds={ownedCardIds}
             playerDeckIds={deckIds}
+            playerIdentity={playerIdentity ?? undefined}
             playerName={playerName}
             onOpenCollection={() => setScreen("collection")}
             onSwitchMode={(nextMode) => setBattleMode(nextMode)}

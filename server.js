@@ -719,6 +719,12 @@ function handleTestProfileRequest(request, response) {
           ? Math.max(0, body.starterFreeBoostersRemaining)
           : 0,
         openedBoosterIds: getProfileCardIds(body.openedBoosterIds),
+        crystals: nonNegativeIntegerOrUndefined(body.crystals),
+        totalXp: nonNegativeIntegerOrUndefined(body.totalXp),
+        level: positiveIntegerOrUndefined(body.level),
+        wins: nonNegativeIntegerOrUndefined(body.wins),
+        losses: nonNegativeIntegerOrUndefined(body.losses),
+        draws: nonNegativeIntegerOrUndefined(body.draws),
       });
 
       response.statusCode = 200;
@@ -771,9 +777,13 @@ function createMemoryPlayerProfileStore() {
       return profile;
     },
     seedProfile(profile) {
+      const definedFields = {};
+      for (const [key, value] of Object.entries(profile)) {
+        if (value !== undefined) definedFields[key] = value;
+      }
       const nextProfile = {
         ...createNewStoredPlayerProfile(profile.id, profile.identity),
-        ...profile,
+        ...definedFields,
       };
       const existingIndex = profiles.findIndex((item) => isSamePlayerIdentity(item.identity, nextProfile.identity));
 
@@ -782,7 +792,35 @@ function createMemoryPlayerProfileStore() {
 
       return nextProfile;
     },
+    async applyMatchRewards(identity, rewards) {
+      const index = profiles.findIndex((profile) => isSamePlayerIdentity(profile.identity, identity));
+      if (index < 0) {
+        throw new Error("Player profile did not exist for match rewards apply.");
+      }
+
+      const current = profiles[index];
+      const counterField = rewards.result === "win" ? "wins" : rewards.result === "loss" ? "losses" : "draws";
+      const updated = {
+        ...current,
+        crystals: rewards.newTotals.crystals,
+        totalXp: rewards.newTotals.totalXp,
+        level: rewards.newTotals.level,
+        [counterField]: (current[counterField] ?? 0) + 1,
+      };
+      profiles[index] = updated;
+      return updated;
+    },
   };
+}
+
+function nonNegativeIntegerOrUndefined(value) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) return undefined;
+  return value;
+}
+
+function positiveIntegerOrUndefined(value) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) return undefined;
+  return value;
 }
 
 function getCliValue(name) {

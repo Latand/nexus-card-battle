@@ -23,6 +23,12 @@ export type TestPlayerProfileInput = {
   deckIds: string[];
   starterFreeBoostersRemaining: number;
   openedBoosterIds?: string[];
+  crystals?: number;
+  totalXp?: number;
+  level?: number;
+  wins?: number;
+  losses?: number;
+  draws?: number;
 };
 
 type MockDeckReadyProfileOptions = Partial<TestPlayerProfileInput> & {
@@ -110,6 +116,12 @@ function createPlayerProfileBody(profile: TestPlayerProfileInput) {
   return {
     ...profile,
     openedBoosterIds: profile.openedBoosterIds ?? [],
+    crystals: profile.crystals ?? 0,
+    totalXp: profile.totalXp ?? 0,
+    level: profile.level ?? 1,
+    wins: profile.wins ?? 0,
+    losses: profile.losses ?? 0,
+    draws: profile.draws ?? 0,
     onboarding: {
       starterBoostersAvailable: profile.starterFreeBoostersRemaining > 0,
       collectionReady,
