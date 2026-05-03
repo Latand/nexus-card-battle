@@ -403,8 +403,8 @@ function CollectionCardTile({
   return (
     <article
       className={cn(
-        "collection-card-tile group relative grid min-h-[208px] place-items-center rounded-md p-1.5 transition max-[420px]:min-h-[162px] max-[420px]:p-1 max-[340px]:min-h-[188px]",
-        selected ? "bg-[#ffe08a]/10 ring-2 ring-[#ffe08a]/65" : "bg-black/24",
+        "collection-card-tile group relative grid min-h-[214px] place-items-center rounded-md border border-transparent bg-transparent p-1.5 transition max-[420px]:min-h-[166px] max-[420px]:p-0.5 max-[340px]:min-h-[194px]",
+        selected ? "border-[#ffe08a] bg-black/16 ring-2 ring-[#ffe08a]/35" : "hover:border-[color-mix(in_srgb,var(--accent),#000_28%)]",
         "hover:-translate-y-0.5 hover:brightness-110",
       )}
       style={style}
@@ -412,12 +412,6 @@ function CollectionCardTile({
     >
       <button className="absolute inset-0 z-[1] rounded-md" type="button" onClick={onSelect} aria-label={`Обрати ${card.name}`} />
       <MiniBattleCard card={card} size="collection" />
-
-      {inDeck ? (
-        <b className="pointer-events-none absolute right-2 top-2 z-[3] grid aspect-square w-7 place-items-center rounded-full bg-[#ffe08a] text-xs font-black text-[#17100a] shadow-[0_4px_12px_rgba(0,0,0,0.42)]">
-          {inDeckIndex + 1}
-        </b>
-      ) : null}
 
       {!owned ? (
         <b
@@ -431,8 +425,13 @@ function CollectionCardTile({
       {editable ? (
         <button
           className={cn(
-            "absolute inset-0 z-[4] grid place-items-center rounded-md bg-black/54 opacity-0 backdrop-blur-[1px] transition group-hover:opacity-100 focus:opacity-100",
+            "absolute right-1 top-1 z-[4] grid aspect-square w-9 place-items-center rounded-full border text-2xl font-black leading-none opacity-0 shadow-[0_8px_18px_rgba(0,0,0,0.48)] transition group-hover:opacity-100 focus:opacity-100 max-[420px]:w-8 max-[420px]:text-xl",
             inDeck && !canRemove ? "cursor-not-allowed" : "cursor-pointer",
+            inDeck && !canRemove
+              ? "border-white/20 bg-[#3b3434] text-white/55"
+              : inDeck
+                ? "border-[#ffb39d]/75 bg-[#df3f36] text-white"
+                : "border-[#fff0ad] bg-[#ffe05f] text-[#17100a]",
           )}
           type="button"
           disabled={inDeck && !canRemove}
@@ -440,18 +439,7 @@ function CollectionCardTile({
           aria-label={inDeck ? `Прибрати ${card.name} з колоди` : `Додати ${card.name} до колоди`}
           data-testid={`collection-toggle-${card.id}`}
         >
-          <span
-            className={cn(
-              "grid aspect-square w-14 place-items-center rounded-full border-2 text-4xl font-black leading-none shadow-[0_12px_24px_rgba(0,0,0,0.45)]",
-              inDeck && !canRemove
-                ? "border-white/20 bg-[#3b3434] text-white/55"
-                : inDeck
-                  ? "border-[#ffb39d] bg-[#df3f36] text-white"
-                  : "border-[#fff0ad] bg-[#ffe05f] text-[#17100a]",
-            )}
-          >
-            {inDeck ? "−" : "+"}
-          </span>
+          {inDeck ? "−" : "+"}
         </button>
       ) : (
         <div
@@ -644,7 +632,7 @@ function MiniBattleCard({ card, size }: { card: Card; size: "collection" | "deck
       className={cn(
         "relative overflow-hidden",
         size === "collection"
-          ? "h-[188px] w-[136px] max-[420px]:h-[150px] max-[420px]:w-[108px] max-[340px]:h-[176px] max-[340px]:w-[128px]"
+          ? "h-[192px] w-[136px] max-[420px]:h-[154px] max-[420px]:w-[108px] max-[340px]:h-[180px] max-[340px]:w-[128px]"
           : size === "dock"
             ? "h-[102px] w-[74px] max-[420px]:h-[90px] max-[420px]:w-[64px]"
             : "h-[160px] w-[116px]",
