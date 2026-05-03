@@ -18,7 +18,9 @@ import {
   type StoredPlayerProfile,
 } from "./types";
 import { computeLevelUpBonusForRange } from "./progression";
-import { SellError, type ApplyMatchRewardsInput, type PlayerAvatarStore, type PlayerDeckStore, type PlayerMatchRewardsStore, type PlayerSellStore } from "./api";
+import { SellError, type ApplyMatchRewardsInput, type ApplyMatchRewardsOutput, type PlayerAvatarStore, type PlayerDeckStore, type PlayerMatchRewardsStore, type PlayerSellStore } from "./api";
+import { getMilestonesCrossed, pickMilestoneRewards, type MilestoneCardReward } from "@/features/economy/milestones";
+import { cards as activeCards } from "@/features/battle/model/cards";
 
 const DEFAULT_MONGODB_URI = "mongodb://127.0.0.1:27017/nexus-card-battle";
 const DEFAULT_MONGODB_DB = "nexus-card-battle";
@@ -117,7 +119,7 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
     return fromMongoDocument(document);
   }
 
-  async applyMatchRewards(identity: PlayerIdentity, rewards: ApplyMatchRewardsInput): Promise<StoredPlayerProfile> {
+  async applyMatchRewards(identity: PlayerIdentity, rewards: ApplyMatchRewardsInput): Promise<ApplyMatchRewardsOutput> {
     const players = await this.getPlayersCollection();
     const now = new Date();
     const resultCounterField =
@@ -158,24 +160,66 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
     const newLevel = computeLevelFromXp(authoritativeTotalXp).level;
 
     if (newLevel <= oldLevel) {
-      return fromMongoDocument(afterIncrement);
+      return { profile: fromMongoDocument(afterIncrement), milestoneCardRewards: [] };
     }
 
+    let latest: WithId<MongoPlayerDocument> = afterIncrement;
     const bonus = computeLevelUpBonusForRange(oldLevel, newLevel);
-    if (bonus <= 0) {
-      return fromMongoDocument(afterIncrement);
+    if (bonus > 0) {
+      const afterBonus = await players.findOneAndUpdate(
+        identityFilter(identity),
+        {
+          $inc: { crystals: bonus },
+          $set: { updatedAt: new Date() },
+        },
+        { returnDocument: "after" },
+      );
+      if (afterBonus) latest = afterBonus;
     }
 
-    const afterBonus = await players.findOneAndUpdate(
-      identityFilter(identity),
-      {
-        $inc: { crystals: bonus },
-        $set: { updatedAt: new Date() },
-      },
-      { returnDocument: "after" },
-    );
+    // Op C — milestone-card grant. The same oldLevel/newLevel computed above
+    // drives this so concurrent matches that racy-cross a milestone level
+    // each pick up exactly the milestones THEY crossed (Op-A's authoritative
+    // $inc fans out the totalXp deterministically per call).
+    const milestonesCrossed = getMilestonesCrossed(oldLevel, newLevel);
+    if (milestonesCrossed.length === 0) {
+      return { profile: fromMongoDocument(latest), milestoneCardRewards: [] };
+    }
 
-    return fromMongoDocument(afterBonus ?? afterIncrement);
+    const rng = rewards.rng ?? Math.random;
+    let granted: MilestoneCardReward[];
+    try {
+      granted = pickMilestoneRewards(milestonesCrossed, activeCards, rng);
+    } catch (error) {
+      // Card-pool / rarity configuration bug — log and skip Op-C without
+      // rolling back the level-up bonus the player already earned.
+      console.error("Milestone card pick failed; skipping milestone grant.", { error, oldLevel, newLevel });
+      return { profile: fromMongoDocument(latest), milestoneCardRewards: [] };
+    }
+
+    try {
+      const grantedIds = granted.map((entry) => entry.cardId);
+      const afterMilestones = await players.findOneAndUpdate(
+        identityFilter(identity),
+        [
+          {
+            $set: {
+              ownedCards: buildOwnedCardsIncrementPipeline(grantedIds),
+              updatedAt: new Date(),
+            },
+          },
+        ],
+        { returnDocument: "after" },
+      );
+      if (afterMilestones) latest = afterMilestones;
+    } catch (error) {
+      // If Op-C fails after Op-A and Op-B succeeded, do NOT roll back; the
+      // player keeps the XP/crystals/level-up bonus they earned.
+      console.error("Milestone card grant write failed; profile retains Op-A/Op-B but no cards.", { error });
+      return { profile: fromMongoDocument(latest), milestoneCardRewards: [] };
+    }
+
+    return { profile: fromMongoDocument(latest), milestoneCardRewards: granted };
   }
 
   async saveStarterBoosterOpening(input: PersistStarterBoosterOpeningInput): Promise<PersistedStarterBoosterOpening> {

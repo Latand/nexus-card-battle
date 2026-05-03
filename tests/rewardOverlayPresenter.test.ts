@@ -12,6 +12,7 @@ const baseRewards: RewardSummary = {
   matchXp: 0,
   levelProgress: 0,
   cardRewards: [],
+  milestoneCardRewards: [],
   deltaXp: 30,
   deltaCrystals: 0,
   leveledUp: false,
@@ -21,8 +22,8 @@ const baseRewards: RewardSummary = {
 
 describe("selectVisibleTiles", () => {
   it("hides every tile when no rewards have been persisted", () => {
-    expect(selectVisibleTiles(undefined)).toEqual({ showCrystals: false, showElo: false, showLevelUp: false });
-    expect(selectVisibleTiles(null)).toEqual({ showCrystals: false, showElo: false, showLevelUp: false });
+    expect(selectVisibleTiles(undefined)).toEqual({ showCrystals: false, showElo: false, showLevelUp: false, showMilestone: false });
+    expect(selectVisibleTiles(null)).toEqual({ showCrystals: false, showElo: false, showLevelUp: false, showMilestone: false });
   });
 
   it("hides 💎 when deltaCrystals is zero (PvE without level-up)", () => {
@@ -51,8 +52,17 @@ describe("selectVisibleTiles", () => {
     expect(selectVisibleTiles(leveled).showLevelUp).toBe(true);
   });
 
+  it("shows the milestone tile only when at least one milestone card was granted", () => {
+    expect(selectVisibleTiles(baseRewards).showMilestone).toBe(false);
+    const granted: RewardSummary = {
+      ...baseRewards,
+      milestoneCardRewards: [{ cardId: "rare-1", cardName: "Rare 1", rarity: "Rare" }],
+    };
+    expect(selectVisibleTiles(granted).showMilestone).toBe(true);
+  });
+
   it("PvE win without level-up hides all three tiles", () => {
-    expect(selectVisibleTiles(baseRewards)).toEqual({ showCrystals: false, showElo: false, showLevelUp: false });
+    expect(selectVisibleTiles(baseRewards)).toEqual({ showCrystals: false, showElo: false, showLevelUp: false, showMilestone: false });
   });
 
   it("PvP win with level-up shows all three tiles", () => {
@@ -65,7 +75,7 @@ describe("selectVisibleTiles", () => {
       levelUpBonusCrystals: 50,
       newTotals: { crystals: 100, totalXp: 250, level: 2, eloRating: 1016 },
     };
-    expect(selectVisibleTiles(pvpWinLevelUp)).toEqual({ showCrystals: true, showElo: true, showLevelUp: true });
+    expect(selectVisibleTiles(pvpWinLevelUp)).toEqual({ showCrystals: true, showElo: true, showLevelUp: true, showMilestone: false });
   });
 
   it("PvP loss shows only the ELO tile", () => {
@@ -76,7 +86,7 @@ describe("selectVisibleTiles", () => {
       deltaElo: -16,
       newTotals: { crystals: 0, totalXp: 10, level: 1, eloRating: 984 },
     };
-    expect(selectVisibleTiles(pvpLoss)).toEqual({ showCrystals: false, showElo: true, showLevelUp: false });
+    expect(selectVisibleTiles(pvpLoss)).toEqual({ showCrystals: false, showElo: true, showLevelUp: false, showMilestone: false });
   });
 });
 

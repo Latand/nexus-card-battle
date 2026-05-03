@@ -10,6 +10,7 @@ import {
   handlePlayerProfilePost,
   handlePlayerSellPost,
   type ApplyMatchRewardsInput,
+  type ApplyMatchRewardsOutput,
   type PlayerDeckStore,
   type PlayerMatchRewardsStore,
   type PlayerProfileStore,
@@ -19,7 +20,9 @@ import { computeSellRevenue } from "../src/features/economy/sellPricing";
 import { addToInventory, getOwnedCount, getSellableCount, removeFromInventory } from "../src/features/inventory/inventoryOps";
 import { computeLevelFromXp, createNewStoredPlayerProfile, isSamePlayerIdentity, type PlayerIdentity, type PlayerProfile, type StoredPlayerProfile } from "../src/features/player/profile/types";
 import { computeLevelUpBonusForRange } from "../src/features/player/profile/progression";
-import type { RewardSummary } from "../src/features/battle/model/types";
+import { getMilestonesCrossed, pickMilestoneRewards } from "../src/features/economy/milestones";
+import { addToInventory } from "../src/features/inventory/inventoryOps";
+import type { Card, RewardSummary, Rarity } from "../src/features/battle/model/types";
 
 const ownedDeckIdentity: PlayerIdentity = {
   mode: "guest",
@@ -747,10 +750,173 @@ describe("player sell API", () => {
   });
 });
 
+describe("player match rewards — milestone card grants (Op-C)", () => {
+  // 50 * (level+1)^2 quadratic curve from `computeLevelFromXp`:
+  // Level 4 reaches at 50*(2^2 + 3^2 + 4^2) = 50 * (4 + 9 + 16) = 1450 XP.
+  // Level 5 reaches at 1450 + 50 * 25 = 1450 + 1250 = 2700 XP.
+  const LEVEL_4_XP = 1450;
+
+  const milestoneCard = (id: string, name: string, rarity: Rarity): Card => ({
+    id,
+    name,
+    clan: "Bangers",
+    level: 1,
+    power: 1,
+    damage: 1,
+    ability: { id: "a", name: "A", description: "", effects: [] },
+    bonus: { id: "b", name: "B", description: "", effects: [] },
+    artUrl: "",
+    frameUrl: "",
+    used: false,
+    rarity,
+    portrait: "",
+    accent: "",
+    source: { sourceId: 0, sourceUrl: "", collectible: true, abilityText: "", abilityDescription: "", bonusText: "", bonusDescription: "" },
+  });
+
+  function fixedRng(): () => number {
+    return () => 0;
+  }
+
+  test("crossing the Level-5 milestone via PvP win grants exactly one Unique card and the +125 level-up bonus", async () => {
+    const identity: PlayerIdentity = { mode: "guest", guestId: "guest-milestone-l5" };
+    const store = new MemoryPlayerProfileStore([
+      { ...createNewStoredPlayerProfile("player-l5", identity), totalXp: LEVEL_4_XP + 1199 },
+    ]);
+    store.milestoneCardPool = [
+      milestoneCard("rare-1", "Rare 1", "Rare"),
+      milestoneCard("unique-1", "Unique 1", "Unique"),
+      milestoneCard("legend-1", "Legend 1", "Legend"),
+    ];
+
+    const before = store.snapshot(identity);
+    expect(computeLevelFromXp(before!.totalXp).level).toBe(4);
+
+    const { summary, persisted } = await applyAndSummarizeMatchRewards(
+      store,
+      identity,
+      { mode: "pvp", result: "win" },
+    );
+
+    // Confirms +125 = computeLevelUpBonusForRange(4, 5) = 5 * 25.
+    expect(computeLevelUpBonusForRange(4, 5)).toBe(125);
+    expect(persisted.level).toBe(5);
+    // PvP win after slice-2 rebalance: PVP_CRYSTAL_REWARDS.win = 10.
+    expect(summary.deltaCrystals).toBe(10 + 125);
+    expect(summary.levelUpBonusCrystals).toBe(125);
+    expect(summary.milestoneCardRewards).toEqual([
+      { cardId: "unique-1", cardName: "Unique 1", rarity: "Unique" },
+    ]);
+    expect(persisted.ownedCards).toEqual([{ cardId: "unique-1", count: 1 }]);
+  });
+
+  test("crossing two milestones in one match grants both cards (Level 5 Unique + Level 10 Unique)", async () => {
+    const identity: PlayerIdentity = { mode: "guest", guestId: "guest-milestone-double" };
+    // L11 reach = 50 * sum(k^2, k=2..11) = 50 * 505 = 25250. Seed at L4 (1450 XP)
+    // and grant 23800 XP → 25250 → exactly L11. Crosses L5 and L10 milestones,
+    // not L15. Pool deliberately omits Legend so a stray L15 cross would throw.
+    const store = new MemoryPlayerProfileStore([
+      { ...createNewStoredPlayerProfile("player-double", identity), totalXp: LEVEL_4_XP },
+    ]);
+    store.milestoneCardPool = [
+      milestoneCard("unique-1", "Unique 1", "Unique"),
+      milestoneCard("unique-2", "Unique 2", "Unique"),
+      milestoneCard("rare-1", "Rare 1", "Rare"),
+    ];
+
+    const { profile: latest, milestoneCardRewards } = await store.applyMatchRewards(identity, {
+      result: "win",
+      deltaXp: 25_250 - LEVEL_4_XP,
+      matchCrystals: 50,
+      rng: fixedRng(),
+    });
+
+    expect(computeLevelFromXp(latest.totalXp).level).toBe(11);
+    // Crossed milestones: L5 (Unique), L10 (Unique). L15+ NOT crossed.
+    expect(milestoneCardRewards.map((r) => r.rarity)).toEqual(["Unique", "Unique"]);
+  });
+
+  test("when the pool yields the same cardId twice, ownedCards entry has count=2 (multiset increment, not separate entries)", async () => {
+    const identity: PlayerIdentity = { mode: "guest", guestId: "guest-milestone-duplicate" };
+    const store = new MemoryPlayerProfileStore([
+      { ...createNewStoredPlayerProfile("player-duplicate", identity), totalXp: LEVEL_4_XP },
+    ]);
+    // Single Unique card → both L5 and L10 picks collide on the same id.
+    store.milestoneCardPool = [milestoneCard("unique-only", "Unique Only", "Unique")];
+
+    const { profile: latest, milestoneCardRewards } = await store.applyMatchRewards(identity, {
+      result: "win",
+      deltaXp: 25_250 - LEVEL_4_XP,
+      matchCrystals: 50,
+      rng: fixedRng(),
+    });
+
+    expect(milestoneCardRewards).toEqual([
+      { cardId: "unique-only", cardName: "Unique Only", rarity: "Unique" },
+      { cardId: "unique-only", cardName: "Unique Only", rarity: "Unique" },
+    ]);
+    expect(latest.ownedCards).toEqual([{ cardId: "unique-only", count: 2 }]);
+  });
+
+  test("milestone where the rarity is missing from the configured pool → Op-C is skipped, level-up bonus still persists", async () => {
+    const identity: PlayerIdentity = { mode: "guest", guestId: "guest-milestone-missing-rarity" };
+    // Level 14 → cross to >=15 to trigger the Legend milestone, but pool has no Legend.
+    // Level 14 reach: cumulative sum 50*sum(k^2, 2..14) = 50 * 1014 = 50700.
+    // We seed at 50700 - 1 to be just below L15? Actually 50700 is exactly the start of L14.
+    // We will seed XP that reaches L14 with about 1XP under L15 boundary.
+    // To avoid arithmetic mistakes, just pump synthetic XP that crosses 14->15.
+    const initialTotalXp = 0;
+    const initialWins = 0;
+    const xpGrantedByMatch = 200_000;
+    const store = new MemoryPlayerProfileStore([
+      { ...createNewStoredPlayerProfile("player-missing", identity), totalXp: initialTotalXp },
+    ]);
+    store.milestoneCardPool = [
+      milestoneCard("rare-1", "Rare 1", "Rare"),
+      milestoneCard("unique-1", "Unique 1", "Unique"),
+      // No Legend in the pool — cross from level 0/1 all the way past 15 should skip the Legend pick.
+    ];
+
+    // XP delta sized to land somewhere between L14 and L20 — pump a huge XP delta.
+    const originalConsoleError = console.error;
+    console.error = () => {};
+    let result;
+    try {
+      result = await store.applyMatchRewards(identity, {
+        result: "win",
+        deltaXp: xpGrantedByMatch,
+        matchCrystals: 0,
+        rng: fixedRng(),
+      });
+    } finally {
+      console.error = originalConsoleError;
+    }
+    const { profile: latest, milestoneCardRewards } = result;
+
+    const newLevel = computeLevelFromXp(latest.totalXp).level;
+    expect(newLevel).toBeGreaterThanOrEqual(15);
+    // Op-C threw on the Legend milestone → entire grant is skipped (no
+    // partial). XP and level-up crystals still applied.
+    expect(milestoneCardRewards).toEqual([]);
+    expect(latest.ownedCards).toEqual([]);
+    // Op-A invariants: XP $inc and the win counter $inc must persist even
+    // when Op-C throws, otherwise a future regression silently zeroing XP
+    // would only fail elsewhere.
+    expect(latest.totalXp).toBe(initialTotalXp + xpGrantedByMatch);
+    expect(latest.wins).toBe(initialWins + 1);
+    // Op-B invariant: level-up bonus crystals were paid (the "still
+    // persists" half of the test name).
+    expect(latest.crystals).toBeGreaterThan(0);
+  });
+});
+
 class MemoryPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewardsStore, PlayerSellStore {
   private readonly profiles: StoredPlayerProfile[];
   private nextId: number;
   createdCount = 0;
+  // Test-mode milestone card pool override. Set per-test to force
+  // deterministic milestone picks regardless of the active card pool.
+  milestoneCardPool: readonly Card[] | null = null;
 
   constructor(profiles: StoredPlayerProfile[] = []) {
     this.profiles = profiles;
@@ -776,7 +942,7 @@ class MemoryPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewardsSto
     return profile;
   }
 
-  async applyMatchRewards(identity: PlayerIdentity, rewards: ApplyMatchRewardsInput): Promise<StoredPlayerProfile> {
+  async applyMatchRewards(identity: PlayerIdentity, rewards: ApplyMatchRewardsInput): Promise<ApplyMatchRewardsOutput> {
     const index = this.profiles.findIndex((profile) => isSamePlayerIdentity(profile.identity, identity));
     if (index < 0) throw new Error("Profile does not exist.");
 
@@ -802,15 +968,38 @@ class MemoryPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewardsSto
     const xpBeforeThisMatch = Math.max(0, afterIncrement.totalXp - rewards.deltaXp);
     const oldLevel = computeLevelFromXp(xpBeforeThisMatch).level;
     const newLevel = computeLevelFromXp(afterIncrement.totalXp).level;
-    if (newLevel <= oldLevel) return this.profiles[index];
+    if (newLevel <= oldLevel) return { profile: this.profiles[index], milestoneCardRewards: [] };
 
     const bonus = computeLevelUpBonusForRange(oldLevel, newLevel);
-    if (bonus <= 0) return this.profiles[index];
+    let latest = this.profiles[index];
+    if (bonus > 0) {
+      latest = { ...latest, crystals: latest.crystals + bonus };
+      this.profiles[index] = latest;
+    }
 
-    const latest = this.profiles[index];
-    const afterBonus: StoredPlayerProfile = { ...latest, crystals: latest.crystals + bonus };
-    this.profiles[index] = afterBonus;
-    return afterBonus;
+    // Op-C — milestone-card grant. Mirrors the Mongo path so the in-memory
+    // store can drive integration tests for the milestone grant.
+    const milestonesCrossed = getMilestonesCrossed(oldLevel, newLevel);
+    if (milestonesCrossed.length === 0) return { profile: latest, milestoneCardRewards: [] };
+
+    const pool = this.milestoneCardPool ?? cards;
+    const rng = rewards.rng ?? Math.random;
+    let granted;
+    try {
+      granted = pickMilestoneRewards(milestonesCrossed, pool, rng);
+    } catch (error) {
+      console.error("Milestone card pick failed (test memory store).", { error });
+      return { profile: latest, milestoneCardRewards: [] };
+    }
+
+    let nextOwned = latest.ownedCards;
+    for (const card of granted) {
+      nextOwned = addToInventory(nextOwned, card.cardId, 1);
+    }
+
+    const afterMilestones: StoredPlayerProfile = { ...latest, ownedCards: nextOwned };
+    this.profiles[index] = afterMilestones;
+    return { profile: afterMilestones, milestoneCardRewards: granted };
   }
 
   async applySellCards(identity: PlayerIdentity, cardId: string, count: number): Promise<StoredPlayerProfile> {

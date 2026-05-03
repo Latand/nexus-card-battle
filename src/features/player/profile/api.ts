@@ -12,7 +12,8 @@ import { MIN_DECK_SIZE } from "@/features/battle/model/constants";
 import { getOwnedCardIds } from "@/features/inventory/inventoryOps";
 import { computeMatchRewards, type MatchResultBucket } from "./progression";
 import { computeLevelFromXp } from "./types";
-import type { RewardSummary } from "@/features/battle/model/types";
+import type { MilestoneCardReward, RewardSummary } from "@/features/battle/model/types";
+import type { RandomSource } from "@/features/economy/milestones";
 
 export type SellErrorCode = "invalid_card_id" | "invalid_sell_count" | "insufficient_stock" | "card_in_deck";
 
@@ -40,10 +41,21 @@ export type ApplyMatchRewardsInput = {
   // Absolute post-match ELO. PvE callers omit this; PvP callers pass the
   // value computed against an authoritative pre-match opponent snapshot.
   eloRating?: number;
+  // Test-mode hook: deterministic RNG for the milestone card pick. Production
+  // omits it and the store falls back to Math.random.
+  rng?: RandomSource;
+};
+
+export type ApplyMatchRewardsOutput = {
+  profile: StoredPlayerProfile;
+  // Cards granted by Op-C (milestone-card grants). Empty when no milestone
+  // crossed or when Op-C failed/skipped — Op-A and Op-B still succeed in
+  // either case.
+  milestoneCardRewards: MilestoneCardReward[];
 };
 
 export type PlayerMatchRewardsStore = PlayerProfileStore & {
-  applyMatchRewards(identity: PlayerIdentity, rewards: ApplyMatchRewardsInput): Promise<StoredPlayerProfile>;
+  applyMatchRewards(identity: PlayerIdentity, rewards: ApplyMatchRewardsInput): Promise<ApplyMatchRewardsOutput>;
 };
 
 export type PlayerAvatarStore = PlayerProfileStore & {
@@ -186,14 +198,13 @@ export async function applyAndSummarizeMatchRewards(
     matchInfo,
   );
 
-  const persisted = toPlayerProfile(
-    await store.applyMatchRewards(identity, {
-      result: matchInfo.result,
-      deltaXp: rewards.deltaXp,
-      matchCrystals: rewards.matchCrystals,
-      ...(rewards.newTotals.eloRating !== undefined ? { eloRating: rewards.newTotals.eloRating } : {}),
-    }),
-  );
+  const applyOutput = await store.applyMatchRewards(identity, {
+    result: matchInfo.result,
+    deltaXp: rewards.deltaXp,
+    matchCrystals: rewards.matchCrystals,
+    ...(rewards.newTotals.eloRating !== undefined ? { eloRating: rewards.newTotals.eloRating } : {}),
+  });
+  const persisted = toPlayerProfile(applyOutput.profile);
 
   const persistedLevelInfo = computeLevelFromXp(persisted.totalXp);
 
@@ -201,6 +212,7 @@ export async function applyAndSummarizeMatchRewards(
     matchXp: rewards.deltaXp,
     levelProgress: levelProgressPercent(persistedLevelInfo),
     cardRewards: [],
+    milestoneCardRewards: applyOutput.milestoneCardRewards,
     deltaXp: rewards.deltaXp,
     deltaCrystals: rewards.deltaCrystals,
     ...(rewards.deltaElo !== undefined ? { deltaElo: rewards.deltaElo } : {}),

@@ -12,6 +12,7 @@ const PVE_NO_LEVEL_REWARDS = {
   cardRewards: [
     { cardId: "ignored-card", cardName: "Ігнорована картка", xp: 1, levelProgress: 1 },
   ],
+  milestoneCardRewards: [],
   deltaXp: 30,
   deltaCrystals: 0,
   leveledUp: false,
