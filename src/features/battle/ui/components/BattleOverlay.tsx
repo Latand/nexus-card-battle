@@ -82,8 +82,10 @@ export function BattleOverlay({
         </div>
 
         {phase === "battle_intro" ? (
-          <div className="absolute left-1/2 top-[42%] z-[4] w-[min(260px,52vw)] -translate-x-1/2 -translate-y-1/2">
-            <Image src="/nexus-assets/banners/battle.png" alt="Бой" width={240} height={104} className="h-auto w-full drop-shadow-[0_10px_24px_rgba(0,0,0,0.7)]" priority />
+          <div className="absolute left-1/2 top-[42%] z-[4] -translate-x-1/2 -translate-y-1/2">
+            <strong className="text-[clamp(48px,8vw,104px)] font-black uppercase leading-none text-[#ffe08a] [font-family:Impact,Arial_Narrow,sans-serif] [text-shadow:0_0_22px_rgba(255,62,180,0.7),0_5px_0_rgba(0,0,0,0.78)]">
+              БІЙ
+            </strong>
           </div>
         ) : null}
 

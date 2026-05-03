@@ -3,12 +3,13 @@ import type { CSSProperties } from "react";
 import { cn } from "@/shared/lib/cn";
 import type { Card, Rarity } from "../../model/types";
 import { CardTooltip } from "./CardTooltip";
+import { ClanGlyph, getClanColor } from "./ClanGlyph";
 
 const rarityLabels: Record<Rarity, string> = {
-  Common: "Звичайна",
-  Rare: "Рідкісна",
-  Unique: "Унікальна",
-  Legend: "Легендарна",
+  Common: "COMMON",
+  Rare: "RARE",
+  Unique: "UNIQ",
+  Legend: "LEGEND",
 };
 const FRAME_URL = "/nexus-assets/cards/nexus-card-frame-generated.png";
 
@@ -56,12 +57,24 @@ export function BattleCard({
       )}
       style={style}
     >
-      <div className="battle-card-meta absolute left-[14.7%] top-[5.05%] z-[3] grid h-[4.4%] w-[70.6%] grid-cols-[minmax(0,1fr)_minmax(0,42%)] items-center gap-[4%] px-[3%]">
-        <span className="min-w-0 truncate text-[clamp(4px,3.85cqw,10px)] font-black uppercase tracking-[0.08em] text-[#dec48c]">
+      <div className="battle-card-meta absolute left-[14.7%] top-[4.4%] z-[3] grid h-[5.6%] w-[70.6%] items-center px-[3%]">
+        <span className="min-w-0 truncate text-[clamp(4px,3.85cqw,10px)] font-black uppercase tracking-[0.1em] text-[#f0d68f]">
           {rarityLabels[card.rarity]}
         </span>
-        <b className="min-w-0 truncate text-right text-[clamp(4px,3.75cqw,10px)] font-black leading-none text-[#fff2c1]">{card.clan}</b>
       </div>
+
+      <span
+        className="battle-card-glyph absolute right-[4%] top-[4%] z-[4] grid aspect-square w-[20%] place-items-center overflow-hidden rounded-[3px]"
+        style={{
+          color: `color-mix(in srgb, ${getClanColor(card.clan)} 78%, #f4ebd0 22%)`,
+          backgroundColor: `color-mix(in srgb, ${getClanColor(card.clan)} 14%, #0c0e10 86%)`,
+          boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${getClanColor(card.clan)} 40%, #000 60%), 0 2px 6px rgba(0,0,0,0.5)`,
+        }}
+        aria-label={card.clan}
+        title={card.clan}
+      >
+        <ClanGlyph clan={card.clan} className="h-full w-full" strokeBoost />
+      </span>
 
       <div
         className="battle-card-art absolute left-[11%] top-[11.1%] z-[1] h-[39.5%] w-[78%] overflow-hidden rounded-[6px]"
@@ -74,7 +87,6 @@ export function BattleCard({
           sizes="220px"
           className="object-cover object-top opacity-82 mix-blend-screen"
         />
-        <i className="absolute inset-[16%_8%_auto_auto] h-[56%] w-[22%] rotate-[18deg] border-[3px] border-[rgba(255,255,255,0.34)]" />
       </div>
 
       <div className="battle-card-name absolute left-[8.5%] top-[54.6%] z-[3] grid h-[6.4%] w-[83%] place-items-center overflow-hidden px-[4%] text-[clamp(5px,5.2cqw,16px)] font-black leading-none text-[#fff6d0] [text-shadow:0_2px_0_rgba(0,0,0,0.95),0_0_8px_rgba(0,0,0,0.72)]">

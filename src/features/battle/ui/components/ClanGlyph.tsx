@@ -37,14 +37,15 @@ type ClanGlyphProps = {
   clan: string;
   className?: string;
   size?: number;
+  strokeBoost?: boolean;
 };
 
-export function ClanGlyph({ clan, className, size }: ClanGlyphProps) {
+export function ClanGlyph({ clan, className, size, strokeBoost }: ClanGlyphProps) {
   const style: CSSProperties | undefined = size ? { width: size, height: size } : undefined;
 
   return (
     <svg
-      viewBox="0 0 96 96"
+      viewBox={strokeBoost ? "8 8 80 80" : "0 0 96 96"}
       className={className}
       style={style}
       aria-hidden="true"
@@ -52,7 +53,7 @@ export function ClanGlyph({ clan, className, size }: ClanGlyphProps) {
     >
       <g
         stroke="currentColor"
-        strokeWidth={3}
+        strokeWidth={strokeBoost ? 6 : 3}
         strokeLinecap="round"
         strokeLinejoin="round"
         fill="none"

@@ -247,6 +247,7 @@ export function GameRoot() {
             playerName={playerName}
             telegramPlayer={telegramPlayer}
             onOpenCollection={() => setScreen("collection")}
+            onSwitchMode={(nextMode) => setBattleMode(nextMode)}
           />
         ) : (
           <BattleGame
@@ -254,6 +255,7 @@ export function GameRoot() {
             playerDeckIds={deckIds}
             playerName={playerName}
             onOpenCollection={() => setScreen("collection")}
+            onSwitchMode={(nextMode) => setBattleMode(nextMode)}
           />
         )}
         <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />

@@ -11,6 +11,7 @@ type RealtimeBattleGameProps = {
   playerName?: string;
   telegramPlayer?: TelegramPlayer;
   onOpenCollection: () => void;
+  onSwitchMode?: (mode: "ai" | "human") => void;
 };
 
 export function RealtimeBattleGame({
@@ -20,6 +21,7 @@ export function RealtimeBattleGame({
   playerName,
   telegramPlayer,
   onOpenCollection,
+  onSwitchMode,
 }: RealtimeBattleGameProps) {
   return (
     <BattleGame
@@ -30,6 +32,7 @@ export function RealtimeBattleGame({
       telegramPlayer={telegramPlayer}
       mode="human"
       onOpenCollection={onOpenCollection}
+      onSwitchMode={onSwitchMode}
     />
   );
 }

@@ -36,10 +36,10 @@ type RevealState = {
 
 const STARTER_KIT_CARD_COUNT = STARTER_FREE_BOOSTERS * STARTER_BOOSTER_CARD_COUNT;
 const rarityLabels: Record<Rarity, string> = {
-  Common: "Звичайна",
-  Rare: "Рідкісна",
-  Unique: "Унікальна",
-  Legend: "Легендарна",
+  Common: "COMMON",
+  Rare: "RARE",
+  Unique: "UNIQ",
+  Legend: "LEGEND",
 };
 const boosterStories: Record<string, string> = {
   "neon-breach": "Зламники проти прибульців: вимикай уміння, ламай бонуси і забирай темп ще до першого удару.",

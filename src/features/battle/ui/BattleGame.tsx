@@ -34,6 +34,7 @@ type BattleGameProps = {
   telegramPlayer?: TelegramPlayer;
   mode?: "ai" | "human";
   onOpenCollection?: () => void;
+  onSwitchMode?: (mode: "ai" | "human") => void;
 };
 
 type HumanMatchStatus = "idle" | "connecting" | "queued" | "matched" | "opponent_left" | "forfeit" | "error" | "closed";
@@ -105,7 +106,7 @@ type HumanForfeitMessage = HumanSocketMessage & {
   reason?: string;
 };
 
-export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity, playerName, telegramPlayer, mode = "ai", onOpenCollection }: BattleGameProps = {}) {
+export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity, playerName, telegramPlayer, mode = "ai", onOpenCollection, onSwitchMode }: BattleGameProps = {}) {
   const isHumanMatch = mode === "human";
   const initialGame = useMemo(
     () => createInitialGame({ playerCollectionIds, playerDeckIds, playerName }),
@@ -789,7 +790,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
           "max-[760px]:mt-3 max-[760px]:grid-cols-1",
         )}
       >
-        <div className="battle-arena-strip relative grid min-h-[132px] place-items-center gap-3 overflow-hidden border-y-2 border-[#c98b27]/55 bg-[linear-gradient(90deg,transparent,rgba(0,0,0,0.68)_12%_88%,transparent),radial-gradient(circle_at_center,rgba(255,214,73,0.16),transparent_44%)] shadow-[0_0_26px_rgba(0,0,0,0.58),inset_0_0_0_1px_rgba(255,231,151,0.12)] max-[760px]:order-2">
+        <div className="battle-arena-strip relative grid min-h-[120px] place-items-center gap-3 overflow-hidden bg-[linear-gradient(90deg,transparent,rgba(0,0,0,0.55)_12%_88%,transparent),radial-gradient(circle_at_center,rgba(255,214,73,0.14),transparent_44%)] max-[760px]:order-2 max-[760px]:min-h-[100px]">
           <strong className="relative z-[1] min-w-[210px] px-[18px] text-center text-[clamp(30px,4.1vw,56px)] font-black uppercase leading-none text-[#ffd742] [font-family:Impact,Arial_Narrow,sans-serif] [text-shadow:0_0_16px_rgba(255,204,51,0.8),0_4px_0_rgba(0,0,0,0.75)]" data-testid="round-status">
             {getPhaseTitle(game.phase, game.first, verdict)}
           </strong>
@@ -827,9 +828,36 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
           Раунд {game.round.round}
         </div>
         <NamePlate name={game.player.name} player energy={game.player.energy} health={game.player.hp} statuses={game.player.statuses} />
-        <button className={barButtonClass("border-l border-white/10 hover:bg-[linear-gradient(180deg,#ffe08a,#c98326)] hover:text-[#15100a]")} onClick={reset} type="button">
-          Новий бій
-        </button>
+        <div className="grid grid-rows-2 gap-px overflow-hidden bg-black/40">
+          <button
+            className={cn(
+              "grid place-items-center px-2 text-center text-xs font-black uppercase tracking-[0.06em] transition max-[760px]:text-[10px] max-[420px]:text-[9px]",
+              mode === "ai"
+                ? "bg-[linear-gradient(180deg,#fff26d,#e3b51e_54%,#a66d12)] text-[#1a1408]"
+                : "bg-[#ffe08a]/12 text-[#ffe5a8] hover:bg-[#ffe08a]/24",
+            )}
+            onClick={() => (mode === "ai" ? reset() : onSwitchMode?.("ai"))}
+            type="button"
+            data-testid="reset-ai"
+            aria-label="Бій з AI"
+          >
+            БІЙ · AI
+          </button>
+          <button
+            className={cn(
+              "grid place-items-center px-2 text-center text-xs font-black uppercase tracking-[0.06em] transition max-[760px]:text-[10px] max-[420px]:text-[9px]",
+              mode === "human"
+                ? "bg-[linear-gradient(180deg,#68e5f5,#218aa3_56%,#0d4151)] text-[#061116]"
+                : "bg-[#65d7e9]/12 text-[#a8eef5] hover:bg-[#65d7e9]/24",
+            )}
+            onClick={() => (mode === "human" ? reset() : onSwitchMode?.("human"))}
+            type="button"
+            data-testid="reset-pvp"
+            aria-label="Бій з гравцем"
+          >
+            БІЙ · PvP
+          </button>
+        </div>
       </section>
       </div>
       ) : null}
@@ -1064,8 +1092,7 @@ function PhaseOverlay({
     return <RewardOverlay result={game.matchResult} rewards={game.rewards} onReset={onReset} />;
   }
 
-  const banner = getBanner(game.phase, game.round.round, game.lastClash?.winner);
-  const title = banner ? "" : getOverlayTitle(game.phase, game.round.round, verdict);
+  const title = getOverlayTitle(game.phase, game.round.round, verdict, game.lastClash?.winner);
   const subtitle = getOverlaySubtitle(game, verdict);
 
   return (
@@ -1080,7 +1107,6 @@ function PhaseOverlay({
     >
       <div className="relative grid min-h-[min(620px,94vh)] w-[min(980px,96vw)] place-items-center overflow-hidden rounded-md border-2 border-[#d6a03b]/70 bg-black/12 p-5 text-center shadow-[0_0_0_1px_rgba(0,0,0,0.82),0_28px_90px_rgba(0,0,0,0.72),inset_0_0_90px_rgba(0,0,0,0.42)]">
         <div className="grid justify-items-center gap-3">
-          {banner ? <Image src={banner.src} alt={banner.alt} width={banner.width} height={banner.height} className="h-auto w-[min(520px,86vw)] drop-shadow-[0_12px_28px_rgba(0,0,0,0.7)]" priority /> : null}
           {title ? (
             <strong className="text-[clamp(52px,8vw,112px)] font-black uppercase leading-[0.92] text-[#ffe08a] [font-family:Impact,Arial_Narrow,sans-serif] [text-shadow:0_0_20px_rgba(255,62,180,0.8),0_5px_0_rgba(0,0,0,0.78)]">
               {title}
@@ -1202,11 +1228,15 @@ function getPhaseTitle(phase: Phase, _first: Side, verdict: string) {
   return "Твій хід";
 }
 
-function getOverlayTitle(phase: Phase, round: number, verdict: string) {
-  if (phase === "match_intro") return "Матч";
+function getOverlayTitle(phase: Phase, round: number, verdict: string, winner?: Side) {
+  if (phase === "match_intro") return "БІЙ";
   if (phase === "round_intro") return `Раунд ${round}`;
   if (phase === "opponent_turn") return "Хід суперника";
-  if (phase === "round_result") return "Раунд завершено";
+  if (phase === "round_result") {
+    if (winner === "player") return "Раунд за тобою!";
+    if (winner === "enemy") return "Раунд за суперником";
+    return "Раунд завершено";
+  }
   if (phase === "match_result") return verdict;
   return "";
 }
@@ -1218,17 +1248,6 @@ function getOverlaySubtitle(game: GameState, verdict: string) {
   if (game.phase === "round_result" && game.lastClash) return `${game.lastClash.damage} урону. Наступний раунд за мить.`;
   if (game.phase === "match_result") return verdict ? "Бій завершено." : "";
   return "";
-}
-
-function getBanner(phase: Phase, round: number, winner?: Side) {
-  if (phase === "round_result" && winner) {
-    return winner === "player"
-      ? { src: "/nexus-assets/banners/round-won.png", alt: "Раунд за тобою", width: 520, height: 104 }
-      : { src: "/nexus-assets/banners/round-lost.png", alt: "Раунд за суперником", width: 520, height: 104 };
-  }
-  if (phase === "match_result" && winner === "enemy") return { src: "/nexus-assets/banners/defeat.png", alt: "Програш", width: 430, height: 108 };
-  if (phase === "round_intro" && [1, 3, 4].includes(round)) return { src: `/nexus-assets/banners/round-${round}.png`, alt: `Раунд ${round}`, width: 360, height: 104 };
-  return null;
 }
 
 function roundResultText(winner: Side) {
@@ -1259,18 +1278,18 @@ function topBarClass() {
 function bottomBarClass() {
   return cn(
     barShellClass(),
-    "mt-2 grid-cols-[104px_minmax(220px,1fr)_104px] border-[#d6a03b]/80",
+    "mt-2 grid-cols-[104px_minmax(220px,1fr)_104px]",
     "max-[960px]:grid-cols-[84px_minmax(0,1fr)_84px] max-[760px]:grid-cols-[68px_minmax(0,1fr)_68px]",
   );
 }
 
 function barShellClass() {
-  return "relative z-20 mx-auto grid min-h-[58px] w-[min(880px,100%)] items-stretch overflow-hidden rounded-[10px] border border-[#d6a03b]/72 bg-[radial-gradient(circle_at_50%_-30%,rgba(255,224,138,0.18),transparent_48%),linear-gradient(180deg,rgba(22,28,29,0.96),rgba(4,8,11,0.98)),repeating-linear-gradient(135deg,rgba(255,255,255,0.035)_0_1px,transparent_1px_10px)] shadow-[0_12px_26px_rgba(0,0,0,0.62),inset_0_0_0_1px_rgba(255,231,151,0.12),inset_0_-10px_22px_rgba(0,0,0,0.32)] before:pointer-events-none before:absolute before:inset-x-2 before:top-0 before:h-px before:bg-[#ffe08a]/50 before:content-[''] after:pointer-events-none after:absolute after:inset-x-3 after:bottom-0 after:h-px after:bg-black/70 after:content-[''] max-[760px]:min-h-[50px] max-[760px]:rounded-[7px]";
+  return "relative z-20 mx-auto grid min-h-[54px] w-[min(880px,100%)] items-stretch overflow-hidden rounded-md bg-black/55 max-[760px]:min-h-[48px]";
 }
 
 function barButtonClass(extra?: string) {
   return cn(
-    "grid min-h-[58px] place-items-center border-white/10 bg-[linear-gradient(180deg,rgba(4,9,11,0.96),rgba(0,0,0,0.72))] px-2 text-center text-xs font-black uppercase tracking-[0.03em] text-[#fff8d8] shadow-[inset_0_0_18px_rgba(0,0,0,0.45)] max-[760px]:min-h-[50px] max-[760px]:px-1 max-[760px]:text-[9px] max-[420px]:text-[8px]",
+    "grid min-h-[54px] place-items-center bg-black/30 px-2 text-center text-xs font-black uppercase tracking-[0.03em] text-[#fff8d8] max-[760px]:min-h-[48px] max-[760px]:px-1 max-[760px]:text-[9px] max-[420px]:text-[8px]",
     extra,
   );
 }

@@ -34,17 +34,16 @@ export function Hand({
       className={cn(
         "battle-hand",
         owner === "enemy" ? "battle-hand--enemy" : "battle-hand--player",
-        "relative z-[6] mx-auto grid grid-cols-4 items-start justify-center gap-2 rounded-md border-2 py-2 transition-[border-color,background-color,box-shadow,filter,transform] duration-500 max-[760px]:gap-1.5",
-        "before:pointer-events-none before:absolute before:inset-1 before:rounded before:border before:border-white/5 before:content-['']",
+        "relative z-[6] mx-auto grid grid-cols-4 items-start justify-center gap-2 rounded-md py-2 transition-[box-shadow,filter,transform] duration-500 max-[760px]:gap-1.5",
         owner === "enemy"
           ? "mt-2 w-[min(760px,92vw)] px-3 [article]:min-h-[132px] max-[960px]:w-[min(640px,94vw)] max-[760px]:w-full max-[760px]:px-1 max-[760px]:[article]:min-h-[110px]"
           : "mt-2 w-[min(790px,94vw)] px-3 [article]:min-h-[152px] max-[960px]:w-[min(700px,96vw)] max-[760px]:w-full max-[760px]:px-1 max-[760px]:[article]:min-h-[118px]",
         hasPlayedEnemyCard && "pb-8 max-[760px]:pb-6",
         active
           ? owner === "player"
-            ? "border-[#ffd84d]/90 bg-[linear-gradient(180deg,rgba(255,217,69,0.16),rgba(0,0,0,0.18))] shadow-[0_0_24px_rgba(255,211,62,0.48),inset_0_0_24px_rgba(255,211,62,0.12)]"
-            : "border-[#ff4b42]/85 bg-[linear-gradient(180deg,rgba(255,63,63,0.15),rgba(0,0,0,0.18))] shadow-[0_0_24px_rgba(255,60,55,0.42),inset_0_0_24px_rgba(255,60,55,0.12)]"
-          : "border-[#d6a03b]/24 bg-black/8 shadow-[inset_0_0_18px_rgba(0,0,0,0.28)]",
+            ? "bg-[#ffd84d]/8 shadow-[0_0_24px_rgba(255,211,62,0.34)]"
+            : "bg-[#ff4b42]/8 shadow-[0_0_24px_rgba(255,60,55,0.32)]"
+          : "bg-transparent",
       )}
       data-active={active ? "true" : "false"}
       data-owner={owner}
@@ -109,13 +108,10 @@ export function Hand({
   );
 }
 
-function RoundWinnerMedal({ owner }: { owner: Side }) {
+function RoundWinnerMedal({ owner: _owner }: { owner: Side }) {
   return (
     <span
-      className={cn(
-        "pointer-events-none absolute right-[-10px] top-[38%] z-[8] grid aspect-square w-[clamp(24px,4vw,38px)] -translate-y-1/2 place-items-center rounded-full border-2 border-[#fff1a6] bg-[radial-gradient(circle_at_36%_28%,#fff8bd_0_24%,#ffd64e_25%_58%,#9e6312_59%_100%)] text-[clamp(14px,2.2vw,22px)] font-black leading-none text-[#2a1705] shadow-[0_0_0_2px_rgba(0,0,0,0.72),0_0_18px_rgba(255,216,82,0.78),0_8px_18px_rgba(0,0,0,0.48)] [text-shadow:0_1px_0_rgba(255,255,255,0.55)]",
-        owner === "enemy" && "right-auto left-[-10px]",
-      )}
+      className="pointer-events-none absolute right-[-6px] top-[-6px] z-[8] grid aspect-square w-[clamp(20px,3.4vw,32px)] place-items-center rounded-full border-2 border-[#fff1a6] bg-[radial-gradient(circle_at_36%_28%,#fff8bd_0_24%,#ffd64e_25%_58%,#9e6312_59%_100%)] text-[clamp(11px,1.8vw,18px)] font-black leading-none text-[#2a1705] shadow-[0_0_0_2px_rgba(0,0,0,0.72),0_0_14px_rgba(255,216,82,0.7),0_4px_10px_rgba(0,0,0,0.45)] [text-shadow:0_1px_0_rgba(255,255,255,0.55)]"
       aria-label="Карта виграла раунд"
       title="Карта виграла раунд"
     >

@@ -37,10 +37,10 @@ const rarityOrder: Record<Rarity, number> = {
   Common: 1,
 };
 const rarityLabels: Record<Rarity, string> = {
-  Common: "Звичайна",
-  Rare: "Рідкісна",
-  Unique: "Унікальна",
-  Legend: "Легендарна",
+  Common: "COMMON",
+  Rare: "RARE",
+  Unique: "UNIQ",
+  Legend: "LEGEND",
 };
 const rarityFilters: { id: RarityFilter; label: string }[] = [
   { id: "all", label: "Усі" },
