@@ -576,10 +576,6 @@ function StarterReveal({
   const defaultIndex = pickDefaultRevealIndex(visibleCards);
   const [selectedIndex, setSelectedIndex] = useState(defaultIndex);
 
-  useEffect(() => {
-    setSelectedIndex(pickDefaultRevealIndex(reveal.cards.slice(0, revealedCount)));
-  }, [reveal.booster.id, revealedCount, reveal.cards]);
-
   const maxIndex = Math.max(visibleCards.length - 1, 0);
   const safeIndex = Math.min(Math.max(selectedIndex, 0), maxIndex);
   const activeCard = visibleCards[safeIndex] ?? reveal.cards[0];
