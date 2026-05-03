@@ -1,10 +1,12 @@
 import {
   DEFAULT_PLAYER_CRYSTALS,
+  DEFAULT_PLAYER_ELO_RATING,
   DEFAULT_PLAYER_LEVEL,
   DEFAULT_PLAYER_TOTAL_XP,
   computeLevelFromXp,
   type PlayerProfile,
 } from "./types";
+import { computeElo } from "./elo";
 
 export { computeLevelFromXp };
 
@@ -45,6 +47,7 @@ export type ComputedMatchRewardTotals = {
   crystals: number;
   totalXp: number;
   level: number;
+  eloRating?: number;
 };
 
 export type ComputedMatchRewards = {
@@ -52,6 +55,7 @@ export type ComputedMatchRewards = {
   deltaCrystals: number;
   // Crystals NOT attributable to a level-up (PvE = 0).
   matchCrystals: number;
+  deltaElo?: number;
   leveledUp: boolean;
   levelUpBonusCrystals: number;
   newTotals: ComputedMatchRewardTotals;
@@ -64,7 +68,7 @@ export type ComputedMatchRewards = {
  * pre-call view.
  */
 export function computeMatchRewards(
-  profileBefore: Pick<PlayerProfile, "crystals" | "totalXp" | "level">,
+  profileBefore: Pick<PlayerProfile, "crystals" | "totalXp" | "level"> & { eloRating?: number },
   matchInfo: MatchInfo,
 ): ComputedMatchRewards {
   if (matchInfo.mode !== "pve" && matchInfo.mode !== "pvp") {
@@ -85,16 +89,31 @@ export function computeMatchRewards(
   const deltaCrystals = matchCrystals + levelUpBonusCrystals;
   const newCrystals = crystalsBefore + deltaCrystals;
 
+  let deltaElo: number | undefined;
+  let eloRating: number | undefined;
+  if (matchInfo.mode === "pvp" && typeof matchInfo.opponentEloBefore === "number") {
+    const playerElo = sanitizeRating(profileBefore.eloRating, DEFAULT_PLAYER_ELO_RATING);
+    const eloOutcome = computeElo({
+      playerRating: playerElo,
+      opponentRating: matchInfo.opponentEloBefore,
+      result: matchInfo.result,
+    });
+    deltaElo = eloOutcome.delta;
+    eloRating = eloOutcome.newRating;
+  }
+
   return {
     deltaXp: xpFromMatch,
     deltaCrystals,
     matchCrystals,
+    deltaElo,
     leveledUp,
     levelUpBonusCrystals,
     newTotals: {
       crystals: newCrystals,
       totalXp: newTotalXp,
       level: newLevelInfo.level,
+      ...(eloRating !== undefined ? { eloRating } : {}),
     },
   };
 }
@@ -123,4 +142,9 @@ function nonNegativeInteger(value: unknown, fallback: number) {
 function positiveInteger(value: unknown, fallback: number) {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 1) return fallback;
   return value;
+}
+
+function sanitizeRating(value: unknown, fallback: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.round(value);
 }

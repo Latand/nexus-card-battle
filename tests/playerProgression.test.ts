@@ -201,6 +201,78 @@ describe("computeMatchRewards (PvP)", () => {
   });
 });
 
+describe("computeMatchRewards (PvP ELO)", () => {
+  test("PvP win against an equal-rated opponent moves player ELO by +16", () => {
+    const rewards = computeMatchRewards(
+      { crystals: 0, totalXp: 0, level: 1, eloRating: 1000 },
+      { mode: "pvp", result: "win", opponentEloBefore: 1000 },
+    );
+
+    expect(rewards.deltaElo).toBe(16);
+    expect(rewards.newTotals.eloRating).toBe(1016);
+  });
+
+  test("PvP loss against an equal-rated opponent moves player ELO by -16", () => {
+    const rewards = computeMatchRewards(
+      { crystals: 0, totalXp: 0, level: 1, eloRating: 1500 },
+      { mode: "pvp", result: "loss", opponentEloBefore: 1500 },
+    );
+
+    expect(rewards.deltaElo).toBe(-16);
+    expect(rewards.newTotals.eloRating).toBe(1484);
+  });
+
+  test("PvP draw against an equal-rated opponent leaves ELO unchanged", () => {
+    const rewards = computeMatchRewards(
+      { crystals: 0, totalXp: 0, level: 1, eloRating: 1200 },
+      { mode: "pvp", result: "draw", opponentEloBefore: 1200 },
+    );
+
+    expect(rewards.deltaElo).toBe(0);
+    expect(rewards.newTotals.eloRating).toBe(1200);
+  });
+
+  test("PvP loss at floor 100 against a 2000 opponent stays at 100 (no underflow)", () => {
+    const rewards = computeMatchRewards(
+      { crystals: 0, totalXp: 0, level: 1, eloRating: 100 },
+      { mode: "pvp", result: "loss", opponentEloBefore: 2000 },
+    );
+
+    expect(rewards.newTotals.eloRating).toBe(100);
+    expect(rewards.deltaElo).toBe(0);
+  });
+
+  test("PvE never produces an ELO delta or ELO total", () => {
+    const rewards = computeMatchRewards(
+      { crystals: 0, totalXp: 0, level: 1, eloRating: 1234 },
+      { mode: "pve", result: "win" },
+    );
+
+    expect(rewards.deltaElo).toBeUndefined();
+    expect(rewards.newTotals.eloRating).toBeUndefined();
+  });
+
+  test("PvP without an opponentEloBefore omits the ELO delta (defensive default for unseeded callers)", () => {
+    const rewards = computeMatchRewards(
+      { crystals: 0, totalXp: 0, level: 1, eloRating: 1000 },
+      { mode: "pvp", result: "win" },
+    );
+
+    expect(rewards.deltaElo).toBeUndefined();
+    expect(rewards.newTotals.eloRating).toBeUndefined();
+  });
+
+  test("missing eloRating on the profile defaults to 1000 before the formula", () => {
+    const rewards = computeMatchRewards(
+      { crystals: 0, totalXp: 0, level: 1 },
+      { mode: "pvp", result: "win", opponentEloBefore: 1000 },
+    );
+
+    expect(rewards.deltaElo).toBe(16);
+    expect(rewards.newTotals.eloRating).toBe(1016);
+  });
+});
+
 describe("computeLevelUpBonusForRange", () => {
   test("returns 0 when no levels were crossed", () => {
     expect(computeLevelUpBonusForRange(1, 1)).toBe(0);

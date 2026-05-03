@@ -177,6 +177,7 @@ export type RewardSummaryTotals = {
   crystals: number;
   totalXp: number;
   level: number;
+  eloRating?: number;
 };
 
 export type RewardSummary = {
@@ -185,6 +186,7 @@ export type RewardSummary = {
   cardRewards: CardReward[];
   deltaXp: number;
   deltaCrystals: number;
+  deltaElo?: number;
   leveledUp: boolean;
   levelUpBonusCrystals: number;
   newTotals: RewardSummaryTotals;

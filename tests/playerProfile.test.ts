@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { cards } from "../src/features/battle/model/cards";
 import {
   applyAndSummarizeMatchRewards,
+  applyPvpMatchRewardsForBothSides,
   handlePlayerDeckSavePost,
   handlePlayerMatchFinishedPost,
   handlePlayerProfileGet,
@@ -323,6 +324,111 @@ describe("player match-finished API (PvE)", () => {
     expect(persisted?.wins).toBe(2);
   });
 
+  test("applyAndSummarizeMatchRewards persists matched ELO deltas for both PvP sides against the correct opponent rating", async () => {
+    const winnerIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-pvp-elo-winner" };
+    const loserIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-pvp-elo-loser" };
+    const store = new MemoryPlayerProfileStore([
+      { ...createNewStoredPlayerProfile("player-elo-winner", winnerIdentity), eloRating: 1000 },
+      { ...createNewStoredPlayerProfile("player-elo-loser", loserIdentity), eloRating: 1000 },
+    ]);
+
+    const winnerOpponentElo = store.snapshot(loserIdentity)?.eloRating ?? 1000;
+    const loserOpponentElo = store.snapshot(winnerIdentity)?.eloRating ?? 1000;
+
+    const winner = await applyAndSummarizeMatchRewards(store, winnerIdentity, {
+      mode: "pvp",
+      result: "win",
+      opponentEloBefore: winnerOpponentElo,
+    });
+    const loser = await applyAndSummarizeMatchRewards(store, loserIdentity, {
+      mode: "pvp",
+      result: "loss",
+      opponentEloBefore: loserOpponentElo,
+    });
+
+    expect(winner.summary.deltaElo).toBe(16);
+    expect(winner.summary.newTotals.eloRating).toBe(1016);
+    expect(winner.persisted.eloRating).toBe(1016);
+
+    expect(loser.summary.deltaElo).toBe(-16);
+    expect(loser.summary.newTotals.eloRating).toBe(984);
+    expect(loser.persisted.eloRating).toBe(984);
+
+    expect(store.snapshot(winnerIdentity)?.eloRating).toBe(1016);
+    expect(store.snapshot(loserIdentity)?.eloRating).toBe(984);
+  });
+
+  test("each side's PvP ELO delta uses the opponent's PRE-match rating, not a post-update one", async () => {
+    // Asymmetric starting ratings so a wrong "use opponent's post-update ELO"
+    // bug would visibly diverge from the +/- expected formula values.
+    const stronger: PlayerIdentity = { mode: "guest", guestId: "guest-elo-asym-strong" };
+    const weaker: PlayerIdentity = { mode: "guest", guestId: "guest-elo-asym-weak" };
+    const store = new MemoryPlayerProfileStore([
+      { ...createNewStoredPlayerProfile("player-strong", stronger), eloRating: 1400 },
+      { ...createNewStoredPlayerProfile("player-weak", weaker), eloRating: 1000 },
+    ]);
+
+    // Snapshot both ELOs first so the second apply does not see the first apply's update.
+    const strongerStartElo = store.snapshot(stronger)?.eloRating ?? 1000;
+    const weakerStartElo = store.snapshot(weaker)?.eloRating ?? 1000;
+    expect(strongerStartElo).toBe(1400);
+    expect(weakerStartElo).toBe(1000);
+
+    const upset = await applyAndSummarizeMatchRewards(store, weaker, {
+      mode: "pvp",
+      result: "win",
+      opponentEloBefore: strongerStartElo,
+    });
+    const upsetVictim = await applyAndSummarizeMatchRewards(store, stronger, {
+      mode: "pvp",
+      result: "loss",
+      opponentEloBefore: weakerStartElo,
+    });
+
+    // Symmetry: the underdog's win delta + the favourite's loss delta = 0.
+    expect((upset.summary.deltaElo ?? 0) + (upsetVictim.summary.deltaElo ?? 0)).toBe(0);
+
+    // Underdog gains substantially more than the equal-rating +16 baseline.
+    expect(upset.summary.deltaElo).toBeGreaterThan(16);
+    expect(upset.persisted.eloRating).toBe(1000 + (upset.summary.deltaElo ?? 0));
+
+    // Favourite drops by the same magnitude.
+    expect(upsetVictim.summary.deltaElo).toBeLessThan(-16);
+    expect(upsetVictim.persisted.eloRating).toBe(1400 + (upsetVictim.summary.deltaElo ?? 0));
+  });
+
+  test("PvP ELO never drops below 100 even after a loss to a much stronger opponent", async () => {
+    const flooredIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-elo-floor" };
+    const store = new MemoryPlayerProfileStore([
+      { ...createNewStoredPlayerProfile("player-floor", flooredIdentity), eloRating: 100 },
+    ]);
+
+    const result = await applyAndSummarizeMatchRewards(store, flooredIdentity, {
+      mode: "pvp",
+      result: "loss",
+      opponentEloBefore: 2000,
+    });
+
+    expect(result.summary.newTotals.eloRating).toBe(100);
+    expect(result.summary.deltaElo).toBe(0);
+    expect(result.persisted.eloRating).toBe(100);
+  });
+
+  test("PvE applyAndSummarize does not surface deltaElo or newTotals.eloRating", async () => {
+    const identityPve: PlayerIdentity = { mode: "guest", guestId: "guest-pve-no-elo" };
+    const store = new MemoryPlayerProfileStore();
+
+    const result = await applyAndSummarizeMatchRewards(store, identityPve, {
+      mode: "pve",
+      result: "win",
+    });
+
+    expect(result.summary.deltaElo).toBeUndefined();
+    expect(result.summary.newTotals.eloRating).toBeUndefined();
+    // The persisted profile still carries the default 1000 ELO; PvE just doesn't broadcast it.
+    expect(result.persisted.eloRating).toBe(1000);
+  });
+
   test("two concurrent PvE wins racing across a level threshold add 2x deltaXp and pay the bonus exactly once", async () => {
     // Both callers' pre-call view says "I crossed level 2"; the persistence
     // layer must still pay the bonus only once.
@@ -343,6 +449,88 @@ describe("player match-finished API (PvE)", () => {
     expect(persisted?.totalXp).toBe(195 + 30 + 30);
     expect(persisted?.crystals).toBe(50);
     expect(persisted?.wins).toBe(2);
+  });
+
+  test("applyPvpMatchRewardsForBothSides skips ELO on both sides when one pre-match read throws, but still persists XP and crystals", async () => {
+    const winnerIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-elo-fail-winner" };
+    const loserIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-elo-fail-loser" };
+    const store = new ThrowingFindStore(
+      [
+        { ...createNewStoredPlayerProfile("player-fail-winner", winnerIdentity), eloRating: 1500 },
+        { ...createNewStoredPlayerProfile("player-fail-loser", loserIdentity), eloRating: 1300 },
+      ],
+      (identity) => isSamePlayerIdentity(identity, loserIdentity),
+    );
+
+    const winnerEloBefore = store.snapshot(winnerIdentity)?.eloRating;
+    const loserEloBefore = store.snapshot(loserIdentity)?.eloRating;
+    expect(winnerEloBefore).toBe(1500);
+    expect(loserEloBefore).toBe(1300);
+
+    const failures: { key: string }[] = [];
+    const outcomes = await applyPvpMatchRewardsForBothSides(
+      store,
+      [
+        { key: "winner", identity: winnerIdentity, result: "win" },
+        { key: "loser", identity: loserIdentity, result: "loss" },
+      ],
+      { onEloReadFailure: ({ key }) => failures.push({ key }) },
+    );
+
+    const winnerOutcome = outcomes.find((entry) => entry.key === "winner");
+    const loserOutcome = outcomes.find((entry) => entry.key === "loser");
+
+    expect(winnerOutcome?.summary).not.toBeNull();
+    expect(loserOutcome?.summary).not.toBeNull();
+
+    const winnerSummary = winnerOutcome!.summary as RewardSummary;
+    const loserSummary = loserOutcome!.summary as RewardSummary;
+
+    expect(winnerSummary.deltaXp).toBe(100);
+    expect(winnerSummary.deltaCrystals).toBe(50);
+    expect(loserSummary.deltaXp).toBe(10);
+    expect(loserSummary.deltaCrystals).toBe(0);
+
+    expect(winnerSummary.deltaElo).toBeUndefined();
+    expect(winnerSummary.newTotals.eloRating).toBeUndefined();
+    expect(loserSummary.deltaElo).toBeUndefined();
+    expect(loserSummary.newTotals.eloRating).toBeUndefined();
+
+    expect(store.snapshot(winnerIdentity)?.eloRating).toBe(1500);
+    expect(store.snapshot(loserIdentity)?.eloRating).toBe(1300);
+
+    expect(failures).toEqual([{ key: "loser" }]);
+  });
+
+  test("applyPvpMatchRewardsForBothSides applies ELO normally when both pre-match reads succeed", async () => {
+    const winnerIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-elo-happy-winner" };
+    const loserIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-elo-happy-loser" };
+    const store = new MemoryPlayerProfileStore([
+      { ...createNewStoredPlayerProfile("player-happy-winner", winnerIdentity), eloRating: 1000 },
+      { ...createNewStoredPlayerProfile("player-happy-loser", loserIdentity), eloRating: 1000 },
+    ]);
+
+    const failures: unknown[] = [];
+    const outcomes = await applyPvpMatchRewardsForBothSides(
+      store,
+      [
+        { key: "winner", identity: winnerIdentity, result: "win" },
+        { key: "loser", identity: loserIdentity, result: "loss" },
+      ],
+      { onEloReadFailure: (event) => failures.push(event) },
+    );
+
+    const winnerSummary = outcomes.find((entry) => entry.key === "winner")?.summary as RewardSummary;
+    const loserSummary = outcomes.find((entry) => entry.key === "loser")?.summary as RewardSummary;
+
+    expect(winnerSummary.deltaElo).toBe(16);
+    expect(winnerSummary.newTotals.eloRating).toBe(1016);
+    expect(loserSummary.deltaElo).toBe(-16);
+    expect(loserSummary.newTotals.eloRating).toBe(984);
+
+    expect(store.snapshot(winnerIdentity)?.eloRating).toBe(1016);
+    expect(store.snapshot(loserIdentity)?.eloRating).toBe(984);
+    expect(failures).toEqual([]);
   });
 });
 
@@ -388,6 +576,9 @@ class MemoryPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewardsSto
       totalXp: current.totalXp + rewards.deltaXp,
       crystals: current.crystals + rewards.matchCrystals,
       [counterField]: (current[counterField] ?? 0) + 1,
+      ...(typeof rewards.eloRating === "number" && Number.isFinite(rewards.eloRating)
+        ? { eloRating: Math.max(0, Math.round(rewards.eloRating)) }
+        : {}),
     };
     this.profiles[index] = afterIncrement;
 
@@ -412,6 +603,27 @@ class MemoryPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewardsSto
   snapshot(identity: PlayerIdentity): StoredPlayerProfile | undefined {
     return this.profiles.find((profile) => isSamePlayerIdentity(profile.identity, identity));
   }
+}
+
+class ThrowingFindStore extends MemoryPlayerProfileStore {
+  private readonly thrownFor = new Set<string>();
+
+  constructor(profiles: StoredPlayerProfile[], private readonly shouldThrowOnFirstRead: (identity: PlayerIdentity) => boolean) {
+    super(profiles);
+  }
+
+  override async findOrCreateByIdentity(identity: PlayerIdentity): Promise<StoredPlayerProfile> {
+    const key = identityKey(identity);
+    if (this.shouldThrowOnFirstRead(identity) && !this.thrownFor.has(key)) {
+      this.thrownFor.add(key);
+      throw new Error("simulated transient mongo read failure");
+    }
+    return super.findOrCreateByIdentity(identity);
+  }
+}
+
+function identityKey(identity: PlayerIdentity) {
+  return identity.mode === "telegram" ? `telegram:${identity.telegramId}` : `guest:${identity.guestId}`;
 }
 
 function postProfile(store: PlayerProfileStore, body: unknown) {

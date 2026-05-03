@@ -12,7 +12,7 @@ const {
   parsePlayerIdentity,
 } = require("./src/features/player/profile/types.ts");
 const { computeLevelUpBonusForRange } = require("./src/features/player/profile/progression.ts");
-const { applyAndSummarizeMatchRewards } = require("./src/features/player/profile/api.ts");
+const { applyAndSummarizeMatchRewards, applyPvpMatchRewardsForBothSides } = require("./src/features/player/profile/api.ts");
 const { makeFighter } = require("./src/features/battle/model/domain/fighters.ts");
 const { resolveRound } = require("./src/features/battle/model/domain/roundResolver.ts");
 const { DAMAGE_BOOST_COST } = require("./src/features/battle/model/constants.ts");
@@ -517,27 +517,37 @@ async function finalizePvpMatch(match, outcome) {
   clearTurnTimer(match);
 
   const store = getPlayerProfileStore();
-  const summaries = await Promise.all(
-    match.playerIds.map(async (playerId) => {
+  const sides = match.playerIds
+    .map((playerId) => {
       const player = match.players[playerId];
-      const result = bucketForPlayer(playerId, outcome);
-      if (!player?.identity) return { playerId, summary: null };
+      if (!player?.identity) return null;
+      return { key: playerId, identity: player.identity, result: bucketForPlayer(playerId, outcome) };
+    })
+    .filter(Boolean);
 
-      try {
-        const { summary } = await applyAndSummarizeMatchRewards(store, player.identity, {
-          mode: "pvp",
-          result,
-        });
-        return { playerId, summary };
-      } catch (error) {
-        console.error("PvP reward apply failed for player.", { playerId, error });
-        return { playerId, summary: null };
-      }
-    }),
-  );
+  let outcomes = [];
+  if (sides.length === 2) {
+    outcomes = await applyPvpMatchRewardsForBothSides(store, sides, {
+      onEloReadFailure: ({ key, error }) => {
+        console.error("PvP ELO read failed for player.", { playerId: key, error });
+      },
+    });
+  } else {
+    outcomes = await Promise.all(
+      sides.map(async (side) => {
+        try {
+          const { summary } = await applyAndSummarizeMatchRewards(store, side.identity, { mode: "pvp", result: side.result });
+          return { key: side.key, summary };
+        } catch (error) {
+          return { key: side.key, summary: null, error };
+        }
+      }),
+    );
+  }
 
-  for (const { playerId, summary } of summaries) {
-    const session = sessions.get(playerId);
+  for (const { key, summary, error } of outcomes) {
+    if (error) console.error("PvP reward apply failed for player.", { playerId: key, error });
+    const session = sessions.get(key);
     if (!session || !summary) continue;
     send(session, { type: "reward_summary", matchId: match.id, payload: summary });
   }
@@ -887,6 +897,7 @@ function handleTestProfileRequest(request, response) {
         wins: nonNegativeIntegerOrUndefined(body.wins),
         losses: nonNegativeIntegerOrUndefined(body.losses),
         draws: nonNegativeIntegerOrUndefined(body.draws),
+        eloRating: nonNegativeIntegerOrUndefined(body.eloRating),
       });
 
       response.statusCode = 200;
@@ -968,6 +979,9 @@ function createMemoryPlayerProfileStore() {
         totalXp: current.totalXp + rewards.deltaXp,
         crystals: current.crystals + rewards.matchCrystals,
         [counterField]: (current[counterField] ?? 0) + 1,
+        ...(typeof rewards.eloRating === "number" && Number.isFinite(rewards.eloRating)
+          ? { eloRating: Math.max(0, Math.round(rewards.eloRating)) }
+          : {}),
       };
       profiles[index] = afterIncrement;
 
