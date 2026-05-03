@@ -138,6 +138,9 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const socketRef = useRef<WebSocket | null>(null);
   const gameRef = useRef(game);
   const matchInfoRef = useRef(matchInfo);
+  // Outlives matchInfo so a reward_summary that arrives after forfeit/match
+  // end (when matchInfo has already been cleared) can still be matched.
+  const activeRewardMatchIdRef = useRef<string | null>(null);
   const remoteFirstMoveRef = useRef<{ round: number; move: HumanFirstMove } | null>(null);
   const pendingFirstMovesRef = useRef(new Map<number, HumanFirstMoveMessage>());
   const pendingRoundResolvedRef = useRef(new Map<number, HumanRoundResolvedMessage>());
@@ -506,6 +509,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       const firstCard = getAvailableCards(nextGame.player)[0];
 
       clearHumanMessageBuffers();
+      activeRewardMatchIdRef.current = nextMatch.matchId;
       setMatchInfo(nextMatch);
       setGame(nextGame);
       setSelectedId(firstCard?.id);
@@ -612,7 +616,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     }
 
     const first = message.firstPlayerId === currentMatch.playerId ? "player" : "enemy";
-    const enemyMove = { card: enemyCard, energy: opponentMove.energy };
+    const enemyMove = { card: enemyCard, energy: opponentMove.energy, damageBoost: Boolean(opponentMove.boosted) };
     resolvingHumanRoundRef.current = message.round;
     const outcome = resolveRound(
       currentGame.player,
@@ -649,6 +653,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
 
   function handleHumanRewardSummary(message: HumanRewardSummaryMessage) {
     if (!message.payload) return;
+    if (!message.matchId || message.matchId !== activeRewardMatchIdRef.current) return;
     setPersistedRewards(message.payload);
     setPersistedRewardsError(null);
   }
@@ -687,6 +692,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setSelectionOpen(false);
     setPersistedRewards(null);
     setPersistedRewardsError(null);
+    activeRewardMatchIdRef.current = null;
     clearHumanMessageBuffers();
 
     if (!isSocketOpen(socket)) return;

@@ -83,7 +83,14 @@ async function installSocketCapture(page: Page) {
         super(url, protocols);
         if (String(url).endsWith("/ws")) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const captured: any = { send: (message: unknown) => super.send(JSON.stringify(message)), matchId: "", round: 1 };
+          const captured: any = {
+            send: (message: unknown) => super.send(JSON.stringify(message)),
+            matchId: "",
+            round: 1,
+            inject: (message: unknown) => {
+              this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(message) }));
+            },
+          };
           this.addEventListener("message", (event) => {
             try {
               const parsed = JSON.parse(String((event as MessageEvent).data));
@@ -103,6 +110,61 @@ async function installSocketCapture(page: Page) {
     window.WebSocket = CapturedWebSocket as unknown as typeof WebSocket;
   });
 }
+
+test("ignores reward_summary payloads that arrive for a different matchId", async ({ baseURL, browser }) => {
+  const winnerContext = await browser.newContext();
+  const loserContext = await browser.newContext();
+  const winnerPage = await winnerContext.newPage();
+  const loserPage = await loserContext.newPage();
+  const winnerIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-pvp-stale-win" };
+  const loserIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-pvp-stale-loss" };
+
+  try {
+    await mockDeckReadyProfile(winnerPage, { identity: winnerIdentity });
+    await mockDeckReadyProfile(loserPage, { identity: loserIdentity });
+
+    await Promise.all([installSocketCapture(winnerPage), installSocketCapture(loserPage)]);
+
+    await winnerPage.goto(baseURL ?? "/");
+    await loserPage.goto(baseURL ?? "/");
+
+    await expect(winnerPage.getByTestId("play-human-match")).toBeEnabled({ timeout: 15_000 });
+    await expect(loserPage.getByTestId("play-human-match")).toBeEnabled({ timeout: 15_000 });
+
+    await Promise.all([
+      winnerPage.getByTestId("play-human-match").click(),
+      loserPage.getByTestId("play-human-match").click(),
+    ]);
+
+    await expect(winnerPage.getByTestId("round-status")).toBeVisible({ timeout: 20_000 });
+    await expect(loserPage.getByTestId("round-status")).toBeVisible({ timeout: 20_000 });
+
+    await winnerPage.evaluate(() => {
+      const stalePayload = {
+        matchXp: 999,
+        levelProgress: 100,
+        cardRewards: [],
+        deltaXp: 999,
+        deltaCrystals: 999,
+        leveledUp: true,
+        levelUpBonusCrystals: 999,
+        newTotals: { crystals: 9999, totalXp: 9999, level: 99 },
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const captured = (window as any).__nexusBattleSocket as { inject: (m: unknown) => void };
+      captured.inject({ type: "reward_summary", matchId: "match_stale_id_not_real", payload: stalePayload });
+    });
+
+    await winnerPage.waitForTimeout(200);
+
+    await expect(winnerPage.getByTestId("reward-summary")).toHaveCount(0);
+    await expect(winnerPage.getByTestId("reward-crystals-tile")).toHaveCount(0);
+    await expect(winnerPage.getByTestId("reward-user-xp-tile")).toHaveCount(0);
+  } finally {
+    await winnerContext.close();
+    await loserContext.close();
+  }
+});
 
 async function resolveFirstMover(first: Page, second: Page) {
   await expect

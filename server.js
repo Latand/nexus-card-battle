@@ -15,6 +15,7 @@ const { computeLevelUpBonusForRange } = require("./src/features/player/profile/p
 const { applyAndSummarizeMatchRewards } = require("./src/features/player/profile/api.ts");
 const { makeFighter } = require("./src/features/battle/model/domain/fighters.ts");
 const { resolveRound } = require("./src/features/battle/model/domain/roundResolver.ts");
+const { DAMAGE_BOOST_COST } = require("./src/features/battle/model/constants.ts");
 
 const dev = process.argv.includes("--dev") || process.env.NODE_ENV === "development";
 const hostname = getCliValue("--hostname") || process.env.HOSTNAME || "0.0.0.0";
@@ -297,6 +298,8 @@ function createMatch(left, right) {
   matches.set(match.id, match);
   startTurnTimer(match, match.firstPlayerId);
 
+  const publicPlayers = buildPublicMatchPlayers(match);
+
   for (const playerId of match.playerIds) {
     const player = sessions.get(playerId);
     const opponentId = getOpponentId(match, playerId);
@@ -307,10 +310,28 @@ function createMatch(left, right) {
       playerId,
       opponentId,
       firstPlayerId: match.firstPlayerId,
-      players: match.players,
+      players: publicPlayers,
       round: match.round,
     });
   }
+}
+
+function buildPublicMatchPlayers(match) {
+  const publicPlayers = {};
+  for (const id of match.playerIds) {
+    const internal = match.players[id];
+    if (!internal) continue;
+    publicPlayers[id] = {
+      id: internal.id,
+      name: internal.name,
+      telegramId: internal.telegramId,
+      deckIds: internal.deckIds,
+      collectionIds: internal.collectionIds,
+      handIds: internal.handIds,
+      usedCardIds: internal.usedCardIds,
+    };
+  }
+  return publicPlayers;
 }
 
 function submitMove(session, message) {
@@ -340,13 +361,9 @@ function submitMove(session, message) {
     return;
   }
 
-  if (!player.handIds.includes(move.cardId)) {
-    sendError(session, "Card is not in the battle hand.");
-    return;
-  }
-
-  if (player.usedCardIds.includes(move.cardId)) {
-    sendError(session, "Card was already used.");
+  const validationError = validateAuthoritativeMove(player, move);
+  if (validationError) {
+    sendError(session, validationError);
     return;
   }
 
@@ -446,7 +463,11 @@ function applyServerRoundOutcome(match, firstPlayerId, moves) {
     Boolean(firstMove.boosted),
     "player",
     match.round,
-    { card: secondCard, energy: Number(secondMove.energy) || 0 },
+    {
+      card: secondCard,
+      energy: Number(secondMove.energy) || 0,
+      damageBoost: Boolean(secondMove.boosted),
+    },
   );
 
   firstPlayer.fighter = outcome.nextPlayer;
@@ -465,6 +486,29 @@ function applyServerRoundOutcome(match, firstPlayerId, moves) {
 
 function findFighterHandCard(fighter, cardId) {
   return fighter.hand.find((card) => card.id === cardId && !fighter.usedCardIds.includes(cardId));
+}
+
+function validateAuthoritativeMove(player, move) {
+  if (!player?.handIds?.includes(move.cardId)) return "Card is not in the battle hand.";
+  if (player.usedCardIds.includes(move.cardId)) return "Card was already used.";
+
+  const fighter = player.fighter;
+  if (!fighter) return "Server has no fighter state for the move.";
+
+  const fighterCard = fighter.hand.find((card) => card.id === move.cardId);
+  if (!fighterCard || fighterCard.used || fighter.usedCardIds.includes(move.cardId)) {
+    return "Card is not playable on the server fighter.";
+  }
+
+  if (move.energy < 0 || move.energy > fighter.energy) {
+    return "Energy bid exceeds the fighter's available energy.";
+  }
+
+  if (move.boosted && fighter.energy < move.energy + DAMAGE_BOOST_COST) {
+    return "Damage boost requires more energy than the fighter has.";
+  }
+
+  return null;
 }
 
 async function finalizePvpMatch(match, outcome) {
