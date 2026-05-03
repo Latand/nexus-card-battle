@@ -78,18 +78,24 @@ test("PvE reward overlay renders the persisted XP tile and level-up tile from /a
   expect(matchFinishedRequests[0]?.mode).toBe("pve");
   expect(["win", "draw", "loss"]).toContain(matchFinishedRequests[0]?.result);
 
-  const xpTile = page.getByTestId("reward-user-xp-tile");
-  await expect(xpTile).toBeVisible();
-  await expect(xpTile).toHaveAttribute("data-delta-xp", "30");
-  await expect(page.getByTestId("reward-user-xp-line")).toContainText("+30 XP");
-  await expect(page.getByTestId("reward-user-xp-line")).toContainText("рівень 2");
+  await expect(page.getByTestId("reward-title")).toHaveText(/ПЕРЕМОГА|НІЧИЯ|ПОРАЗКА/);
+  await expect(page.getByTestId("reward-avatar-block")).toBeVisible();
+  await expect(page.getByTestId("reward-player-level")).toContainText("Lv 2");
+  await expect(page.getByTestId("reward-xp-label")).toContainText("+30 XP");
+  await expect(page.getByTestId("reward-xp-bar-delta")).toBeVisible();
 
   const levelUpTile = page.getByTestId("reward-level-up-tile");
   await expect(levelUpTile).toBeVisible();
   await expect(levelUpTile).toHaveAttribute("data-new-level", "2");
   await expect(levelUpTile).toHaveAttribute("data-level-up-bonus", "50");
-  await expect(page.getByTestId("reward-level-up-headline")).toContainText("Рівень 2");
   await expect(page.getByTestId("reward-level-up-headline")).toContainText("+50 💎");
+
+  // PvE win with level-up: crystals tile shows ONLY because of the level-up bonus.
+  await expect(page.getByTestId("reward-crystals-tile")).toBeVisible();
+  await expect(page.getByTestId("reward-elo-tile")).toHaveCount(0);
+
+  await expect(page.getByTestId("reward-replay-ai")).toBeVisible();
+  await expect(page.getByTestId("reward-replay-human")).toBeVisible();
 });
 
 test("PvE reward overlay hides the level-up tile when leveledUp is false", async ({ page }) => {
@@ -133,10 +139,18 @@ test("PvE reward overlay hides the level-up tile when leveledUp is false", async
   await playUntilRewardOverlay(page);
   await expect(page.getByTestId("reward-summary")).toBeVisible({ timeout: 60_000 });
 
-  const xpTile = page.getByTestId("reward-user-xp-tile");
-  await expect(xpTile).toBeVisible();
-  await expect(xpTile).toHaveAttribute("data-delta-xp", "30");
+  await expect(page.getByTestId("reward-title")).toHaveText(/ПЕРЕМОГА|НІЧИЯ|ПОРАЗКА/);
+  await expect(page.getByTestId("reward-avatar-block")).toBeVisible();
+  await expect(page.getByTestId("reward-xp-label")).toContainText("+30 XP");
+  await expect(page.getByTestId("reward-xp-bar-delta")).toBeVisible();
+
+  // PvE win without level-up: no crystals, no ELO, no level-up tile, no card section.
   await expect(page.getByTestId("reward-level-up-tile")).toHaveCount(0);
+  await expect(page.getByTestId("reward-crystals-tile")).toHaveCount(0);
+  await expect(page.getByTestId("reward-elo-tile")).toHaveCount(0);
+
+  await expect(page.getByTestId("reward-replay-ai")).toBeVisible();
+  await expect(page.getByTestId("reward-replay-human")).toBeVisible();
 });
 
 async function playUntilRewardOverlay(page: Page) {

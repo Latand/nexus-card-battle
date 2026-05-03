@@ -237,6 +237,7 @@ export function GameRoot() {
   }, []);
 
   if (screen === "battle") {
+    const persistedAvatarUrl = (playerProfile as { avatarUrl?: string } | null)?.avatarUrl;
     return (
       <>
         {battleMode === "human" ? (
@@ -246,6 +247,7 @@ export function GameRoot() {
             playerIdentity={playerIdentity ?? undefined}
             playerName={playerName}
             telegramPlayer={telegramPlayer}
+            avatarUrl={persistedAvatarUrl}
             onOpenCollection={() => setScreen("collection")}
             onSwitchMode={(nextMode) => setBattleMode(nextMode)}
           />
@@ -255,6 +257,7 @@ export function GameRoot() {
             playerDeckIds={deckIds}
             playerIdentity={playerIdentity ?? undefined}
             playerName={playerName}
+            avatarUrl={persistedAvatarUrl}
             onOpenCollection={() => setScreen("collection")}
             onSwitchMode={(nextMode) => setBattleMode(nextMode)}
           />
