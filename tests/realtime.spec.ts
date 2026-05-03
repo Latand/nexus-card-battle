@@ -230,6 +230,95 @@ test("PvP forfeit emits matched ELO deltas computed against each opponent's pre-
   second.close();
 });
 
+test("disconnect mid-match forfeits the disconnecting side and emits a win reward_summary to the opponent", async ({ baseURL, request }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const quitterIdentity = testIdentity("disconnect-quitter");
+  const survivorIdentity = testIdentity("disconnect-survivor");
+  await seedRealtimeProfile(request, quitterIdentity, { eloRating: 1100 });
+  await seedRealtimeProfile(request, survivorIdentity, { eloRating: 1100 });
+
+  const quitter = await connectRealtimeClient(wsUrl, "Quitter", PROTOCOL_OWNED_DECK_IDS, { identity: quitterIdentity });
+  const survivor = await connectRealtimeClient(wsUrl, "Survivor", PROTOCOL_OWNED_DECK_IDS, { identity: survivorIdentity });
+
+  await quitter.waitFor("match_ready");
+  const survivorReady = await survivor.waitFor("match_ready") as unknown as { playerId: string; opponentId: string; matchId: string };
+
+  // Quitter rage-quits before any move lands.
+  quitter.close();
+
+  const survivorForfeit = await survivor.waitFor("match_forfeit", { timeoutMs: 5_000 }) as unknown as { matchId: string; loserId: string; winnerId: string; reason: string };
+  expect(survivorForfeit.matchId).toBe(survivorReady.matchId);
+  expect(survivorForfeit.winnerId).toBe(survivorReady.playerId);
+  expect(survivorForfeit.loserId).toBe(survivorReady.opponentId);
+  expect(survivorForfeit.reason).toBe("disconnect");
+
+  const survivorReward = await survivor.waitFor("reward_summary", { timeoutMs: 5_000 });
+  const survivorPayload = survivorReward.payload as RewardSummary;
+
+  expect(survivorPayload.deltaXp).toBe(100);
+  expect(survivorPayload.deltaCrystals).toBe(50);
+  expect(survivorPayload.newTotals).toMatchObject({ crystals: 50, totalXp: 100, level: 1 });
+  // Equal pre-match ELOs → +16 / -16 zero-sum.
+  expect(survivorPayload.deltaElo).toBe(16);
+  expect(survivorPayload.newTotals.eloRating).toBe(1116);
+
+  survivor.close();
+});
+
+test("matchmaking pairs three asymmetric ELO sessions in the order the expanding window allows", async ({ baseURL, request }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const lowIdentity = testIdentity("expanding-1000");
+  const midIdentity = testIdentity("expanding-1300");
+  const highIdentity = testIdentity("expanding-1600");
+
+  await seedRealtimeProfile(request, lowIdentity, { eloRating: 1000 });
+  await seedRealtimeProfile(request, midIdentity, { eloRating: 1300 });
+  await seedRealtimeProfile(request, highIdentity, { eloRating: 1600 });
+
+  // All three queue effectively simultaneously. Pairwise distances are 300
+  // (low↔mid), 300 (mid↔high), 600 (low↔high). Initial windows are ±100,
+  // so none should pair on first contact — every pair is too far apart.
+  const low = await connectRealtimeClient(wsUrl, "Low", PROTOCOL_OWNED_DECK_IDS, { identity: lowIdentity });
+  const mid = await connectRealtimeClient(wsUrl, "Mid", PROTOCOL_OWNED_DECK_IDS, { identity: midIdentity });
+  const high = await connectRealtimeClient(wsUrl, "High", PROTOCOL_OWNED_DECK_IDS, { identity: highIdentity });
+
+  await low.waitFor("queued", { timeoutMs: 2_000 });
+  await mid.waitFor("queued", { timeoutMs: 2_000 });
+  await high.waitFor("queued", { timeoutMs: 2_000 });
+
+  // The closest-ELO pair is low↔mid OR mid↔high (both 300 apart). Once both
+  // sides' windows hit ±300 (~10s wait) one of those pairs fires; high↔low
+  // (600 apart) is always farther, so it never beats either neighbor pair.
+  // Wait for the first pair, then assert who got matched.
+  const sources = { low, mid, high } as const;
+  const matchedBySource: Record<string, { matchId: string }> = {};
+
+  await expect.poll(
+    () => {
+      for (const [name, client] of Object.entries(sources)) {
+        const ready = client.messages().find((message) => message.type === "match_ready");
+        if (ready) matchedBySource[name] = ready as unknown as { matchId: string };
+      }
+      return Object.keys(matchedBySource).length;
+    },
+    { timeout: 30_000 },
+  ).toBeGreaterThanOrEqual(2);
+
+  // Exactly two sockets must have paired in this first round; high (600 away
+  // from low) cannot beat the closer mid neighbor.
+  const matchedNames = Object.keys(matchedBySource).sort();
+  expect(matchedNames).toHaveLength(2);
+  expect(matchedNames.includes("mid")).toBe(true);
+
+  // Both sockets reference the same matchId (one match, two notifications).
+  const ids = Object.values(matchedBySource).map((m) => m.matchId);
+  expect(ids[0]).toBe(ids[1]);
+
+  low.close();
+  mid.close();
+  high.close();
+});
+
 test("match_ready never carries server-only identity or fighter state", async ({ baseURL, request }) => {
   const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
   const firstIdentity = testIdentity("payload-leak-a");

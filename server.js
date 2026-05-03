@@ -10,12 +10,14 @@ const {
   createNewStoredPlayerProfile,
   isSamePlayerIdentity,
   parsePlayerIdentity,
+  toPlayerProfile,
 } = require("./src/features/player/profile/types.ts");
 const { computeLevelUpBonusForRange } = require("./src/features/player/profile/progression.ts");
 const { applyAndSummarizeMatchRewards, applyPvpMatchRewardsForBothSides } = require("./src/features/player/profile/api.ts");
 const { makeFighter } = require("./src/features/battle/model/domain/fighters.ts");
 const { resolveRound } = require("./src/features/battle/model/domain/roundResolver.ts");
 const { DAMAGE_BOOST_COST } = require("./src/features/battle/model/constants.ts");
+const { MatchmakingQueue } = require("./src/features/matchmaking/queue.ts");
 
 const dev = process.argv.includes("--dev") || process.env.NODE_ENV === "development";
 const hostname = getCliValue("--hostname") || process.env.HOSTNAME || "0.0.0.0";
@@ -35,11 +37,12 @@ const handle = app.getRequestHandler();
 const sessions = new Map();
 const matches = new Map();
 const testPlayerProfileStore = process.env.NEXUS_TEST_PROFILE_STORE === "1" ? createMemoryPlayerProfileStore() : null;
-let waitingSessionId = null;
+const matchmakingQueue = new MatchmakingQueue();
 const BATTLE_HAND_SIZE = 4;
 const MIN_DECK_SIZE = 9;
 const TURN_SECONDS = Number.parseInt(process.env.PVP_TURN_SECONDS || "75", 10);
 const TURN_TIMEOUT_GRACE_SECONDS = Number.parseInt(process.env.PVP_TURN_TIMEOUT_GRACE_SECONDS || "10", 10);
+const MATCHMAKING_TICK_MS = Number.parseInt(process.env.PVP_MATCHMAKING_TICK_MS || "5000", 10);
 const activeCardIds = new Set(cards.map((card) => card.id));
 
 app.prepare().then(() => {
@@ -114,8 +117,15 @@ app.prepare().then(() => {
     }
   }, 30_000);
 
+  // Re-attempt pairing periodically so already-queued sessions whose ELO
+  // window has expanded (without any new enqueue triggering it) still match.
+  const matchmakingTick = setInterval(() => {
+    drainMatchmakingPairs();
+  }, MATCHMAKING_TICK_MS);
+
   wss.on("close", () => {
     clearInterval(heartbeat);
+    clearInterval(matchmakingTick);
   });
 
   server.listen(port, hostname, () => {
@@ -215,28 +225,40 @@ async function joinHumanQueue(session, message) {
   leaveMatch(session);
   cancelQueue(session, { silent: true });
 
+  // ELO is read fresh per enqueue. A failure here MUST surface as an error to
+  // the client — silently substituting a default would corrupt matchmaking
+  // (everyone-defaults-to-1000 collapses skill-based pairing).
+  let queueEloRating;
+  try {
+    queueEloRating = toPlayerProfile(profile).eloRating;
+  } catch (error) {
+    console.error("PvP queue ELO read failed.", error);
+    sendError(session, "Player profile is unavailable.");
+    return;
+  }
+
   session.queuedDeckIds = profileLoadout.deckIds;
   session.queuedCollectionIds = profileLoadout.collectionIds;
   session.queuedIdentity = identity;
 
-  if (waitingSessionId && waitingSessionId !== session.id) {
-    const opponent = sessions.get(waitingSessionId);
-    waitingSessionId = null;
+  matchmakingQueue.enqueue({
+    sessionId: session.id,
+    eloRating: queueEloRating,
+    payload: { identity },
+  });
 
-    if (opponent && isOpen(opponent.ws) && opponent.matchId === null) {
-      createMatch(opponent, session);
-      return;
-    }
+  drainMatchmakingPairs();
+
+  // Only ack `queued` if the drain did not immediately pair this session,
+  // matching the prior FIFO semantics (a paired session goes straight to
+  // `match_ready`).
+  if (matchmakingQueue.has(session.id)) {
+    send(session, { type: "queued" });
   }
-
-  waitingSessionId = session.id;
-  send(session, { type: "queued" });
 }
 
 function cancelQueue(session, options = {}) {
-  if (waitingSessionId === session.id) {
-    waitingSessionId = null;
-  }
+  matchmakingQueue.dequeue(session.id);
 
   session.queuedDeckIds = [];
   session.queuedCollectionIds = [];
@@ -245,6 +267,40 @@ function cancelQueue(session, options = {}) {
   if (!options.silent) {
     send(session, { type: "queue_cancelled" });
   }
+}
+
+function drainMatchmakingPairs() {
+  const pairs = matchmakingQueue.tryPair();
+  for (const pair of pairs) {
+    const left = sessions.get(pair.left.sessionId);
+    const right = sessions.get(pair.right.sessionId);
+    const leftReady = isQueueReadySession(left);
+    const rightReady = isQueueReadySession(right);
+
+    if (leftReady && rightReady) {
+      createMatch(left, right);
+      continue;
+    }
+
+    // A paired session vanished or already entered a match between the queue
+    // returning it and us materializing the match. Re-enqueue the survivor at
+    // its captured ELO so the next tick can rematch it without an ELO re-read.
+    if (leftReady) reenqueueWithCapturedElo(left, pair.left.eloRating);
+    if (rightReady) reenqueueWithCapturedElo(right, pair.right.eloRating);
+  }
+}
+
+function isQueueReadySession(session) {
+  return Boolean(session && isOpen(session.ws) && session.matchId === null && session.queuedIdentity);
+}
+
+function reenqueueWithCapturedElo(session, eloRating) {
+  if (matchmakingQueue.has(session.id)) return;
+  matchmakingQueue.enqueue({
+    sessionId: session.id,
+    eloRating,
+    payload: { identity: session.queuedIdentity },
+  });
 }
 
 function createMatch(left, right) {
@@ -647,8 +703,36 @@ function cleanupSession(session) {
   if (!sessions.has(session.id)) return;
 
   cancelQueue(session, { silent: true });
-  leaveMatch(session);
+
+  const activeMatch = getSessionMatch(session);
+  if (activeMatch && !activeMatch.rewardsApplied) {
+    forfeitMatchByDisconnect(activeMatch, session.id);
+  } else {
+    leaveMatch(session);
+  }
+
   sessions.delete(session.id);
+}
+
+function forfeitMatchByDisconnect(match, loserId) {
+  const winnerId = getOpponentId(match, loserId);
+  clearTurnTimer(match);
+
+  const winnerSession = sessions.get(winnerId);
+  if (winnerSession) {
+    send(winnerSession, {
+      type: "match_forfeit",
+      matchId: match.id,
+      round: match.round,
+      loserId,
+      winnerId,
+      reason: "disconnect",
+    });
+  }
+
+  finalizePvpMatch(match, { matchResult: "player", winnerSessionId: winnerId }).catch((error) => {
+    console.error("PvP disconnect reward finalization failed.", error);
+  });
 }
 
 function getSessionMatch(session) {

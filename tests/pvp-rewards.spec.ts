@@ -84,6 +84,26 @@ test("PvP reward overlay renders the crystal tile after a server-pushed forfeit 
     await expect(losingPage.getByTestId("reward-user-xp-tile")).toBeVisible();
     await expect(losingPage.getByTestId("reward-user-xp-tile")).toHaveAttribute("data-delta-xp", "10");
     await expect(losingPage.getByTestId("reward-crystals-tile")).toHaveCount(0);
+
+    // The "Новий бій" button on a PvP reward overlay is mode-tagged for PvP
+    // and re-enters the PvP queue (NOT a PvE/AI restart) when clicked.
+    const winnerReplay = winningPage.getByTestId("reward-replay");
+    await expect(winnerReplay).toHaveAttribute("data-mode", "human");
+    await expect(winnerReplay).toContainText("PvP");
+    await expect(winnerReplay).not.toContainText("AI");
+    await winnerReplay.click();
+    await expect(winningPage.getByTestId("reward-summary")).toBeHidden({ timeout: 5_000 });
+    const humanOverlay = winningPage.getByTestId("human-match-overlay");
+    await expect(humanOverlay).toBeVisible({ timeout: 5_000 });
+    await expect(humanOverlay).toContainText(/Пошук суперника|Підключення/);
+
+    // Drain the queue before the test exits so the next spec's matchmaking
+    // assertions don't see a leftover session from this PvP re-entry.
+    await winningPage.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const captured = (window as any).__nexusBattleSocket as { send: (m: unknown) => void } | undefined;
+      captured?.send({ type: "cancel_queue" });
+    });
   } finally {
     await winnerContext.close();
     await loserContext.close();
