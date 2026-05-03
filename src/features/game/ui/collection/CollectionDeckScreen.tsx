@@ -801,11 +801,20 @@ function CardDetails({
               </span>
             </div>
 
+            {/*
+              When the card is in any saved deck the server rejects every sell
+              with `card_in_deck` regardless of count, so quoting "запасних"
+              would mislead the player about what's actually sellable. Drop the
+              spares segment in that branch — the helper text below explains
+              why no spares are sellable.
+            */}
             <p
               className="text-[11px] font-bold leading-snug text-[#efe3c5]"
               data-testid="collection-sell-summary"
             >
-              Ви маєте: {ownedCount} ({inDeckCount} у колоді, {reserveCount} запасних)
+              {cardInDeck
+                ? `Ви маєте: ${ownedCount} (${inDeckCount} у колоді)`
+                : `Ви маєте: ${ownedCount} (${inDeckCount} у колоді, ${reserveCount} запасних)`}
             </p>
 
             {cardInDeck ? (
