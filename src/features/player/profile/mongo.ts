@@ -549,8 +549,12 @@ async function createOrLoadStarterOpening(
   };
 }
 
-// TODO(slice-2): once cards become removable via /sell, deck-membership is no
-// longer a reliable proxy for "this booster was applied"; revisit.
+// Verified safe in slice 2: openedBoosterIds.includes(boosterId) is the
+// short-circuit left-hand of the AND, so recovery only consults deck/owned
+// state when the booster was already recorded as opened. Subsequent /sell
+// calls cannot strip openedBoosterIds, and applyStarterOpeningToPlayer's
+// duplicate-call branch returns the prior write directly rather than
+// re-running this predicate, so post-open sells do not break recovery.
 function hasAppliedStarterOpening(player: MongoPlayerDocument, boosterId: string, cardIds: string[]) {
   const ownedCards = readOwnedCards(player);
   const deckIds = new Set(player.deckIds);
