@@ -1,3 +1,9 @@
+// MERGE-ORDER: this content describes post-PRD-A behavior. Slices 1, 2, 3
+// must merge first — multiset collection / "Ви маєте: N", sell-to-city
+// prices, the post-rebalance PvP crystal table (10/3/0), milestone level
+// rewards, and booster duplicates incrementing copy counts all assume the
+// shipped state of those slices.
+
 import type { ReactNode } from "react";
 
 export type Locale = "uk";
@@ -37,8 +43,9 @@ const sections: GuideSection[] = [
         </p>
         <p>
           Якщо атаки рівні — раунд бере той, хто витратив менше енергії. Якщо й енергії порівну —
-          це нічия в раунді: жоден із гравців не втрачає HP. При перемозі захисник втрачає життя,
-          що дорівнюють параметру <b>damage</b> атакувальної карти.
+          раунд забирає гравець з ініціативою (той, хто ходить першим у цьому раунді). При
+          перемозі захисник втрачає життя, що дорівнюють параметру <b>damage</b> атакувальної
+          карти.
         </p>
       </>
     ),
@@ -70,11 +77,11 @@ const sections: GuideSection[] = [
         </p>
         <ul className="grid gap-1.5 pl-4 [list-style:disc]">
           <li>
-            <b>Отрута (poison)</b> — у кінці кожного раунду зменшує HP опонента, поки ефект
-            активний.
+            <b>Отрута (poison)</b> — у кінці кожного раунду зменшує HP носія статусу до заданого
+            мінімуму (нижче порога не падає), поки ефект активний.
           </li>
           <li>
-            <b>Благословення (blessing)</b> — у кінці кожного раунду відновлює твоє HP.
+            <b>Благословення (blessing)</b> — у кінці кожного раунду відновлює HP носія статусу.
           </li>
         </ul>
         <p>
