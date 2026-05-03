@@ -22,7 +22,7 @@ type Props = {
   profileIdentityMode?: "telegram" | "guest";
   deckSource: "profile" | "starter-fallback";
   onProfileChange: (profile: PlayerProfile) => void;
-  onPlayDeck: (deckIds: string[]) => void;
+  onPlayDeck: (deckIds: string[], mode: "ai" | "human") => void;
   onEditDeck: (deckIds: string[]) => void;
 };
 
@@ -296,7 +296,7 @@ function StarterDeckReady({
   onEditDeck,
 }: {
   profile: PlayerProfile;
-  onPlayDeck: (deckIds: string[]) => void;
+  onPlayDeck: (deckIds: string[], mode: "ai" | "human") => void;
   onEditDeck: (deckIds: string[]) => void;
 }) {
   const savedOwnedDeckIds = getSavedOwnedDeckIds(profile);
@@ -323,7 +323,7 @@ function StarterDeckReady({
             Колода готова
           </h2>
           <p className="mt-2 max-w-[760px] text-sm font-bold leading-snug text-[#cbbd99] max-[520px]:text-xs">
-            Два різні бустери вже записали карти в профіль. Можна одразу зіграти AI-бій або підкрутити склад.
+            Два різні бустери вже записали карти в профіль. Можна одразу зіграти бій з AI, PvP або підкрутити склад.
           </p>
         </div>
 
@@ -359,10 +359,25 @@ function StarterDeckReady({
             )}
             type="button"
             disabled={!deckReady}
-            onClick={() => onPlayDeck(savedOwnedDeckIds)}
+            onClick={() => onPlayDeck(savedOwnedDeckIds, "ai")}
             data-testid="starter-deck-ready-play"
           >
             Грати
+          </button>
+
+          <button
+            className={cn(
+              "min-h-[48px] rounded-md border-2 px-5 text-sm font-black uppercase transition",
+              deckReady
+                ? "border-[#65d7e9]/60 bg-[linear-gradient(180deg,#68e5f5,#218aa3_56%,#0d4151)] text-[#061116] hover:brightness-110"
+                : "cursor-not-allowed border-white/10 bg-white/5 text-[#7e7668]",
+            )}
+            type="button"
+            disabled={!deckReady}
+            onClick={() => onPlayDeck(savedOwnedDeckIds, "human")}
+            data-testid="starter-deck-ready-play-human"
+          >
+            PvP
           </button>
 
           <button
