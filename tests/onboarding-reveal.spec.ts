@@ -15,6 +15,12 @@ const secondBoosterId = "factory-shift";
 const firstOpenedCards = getCardsForClans(["[Da:Hack]", "Aliens"]);
 const secondOpenedCards = getCardsForClans(["Workers", "Micron"]);
 const fullStarterDeckIds = [...firstOpenedCards, ...secondOpenedCards].map((card) => card.id);
+const revealRarityPriority: Record<Card["rarity"], number> = {
+  Legend: 0,
+  Unique: 1,
+  Rare: 2,
+  Common: 3,
+};
 
 type RevealProfileState = Pick<
   TestPlayerProfileInput,
@@ -236,7 +242,14 @@ async function openBoosterAndReveal(
   await expect(profileShell).toHaveAttribute("data-profile-deck-count", String(nextProfile.deckIds.length));
   await expect(profileShell).toHaveAttribute("data-starter-free-boosters-remaining", String(nextProfile.starterFreeBoostersRemaining));
   await expect(page.locator('[data-testid^="starter-reveal-card-"]')).toHaveCount(5, { timeout: 6_000 });
-  await expect(page.getByTestId("starter-reveal-active-card")).toHaveAttribute("data-card-id", openingCards[4].id);
+  const defaultRevealCard = pickDefaultRevealCard(openingCards);
+  await expect(page.getByTestId("starter-reveal-active-card")).toHaveAttribute("data-card-id", defaultRevealCard.id);
+  await expect(page.getByTestId(`starter-reveal-card-${openingCards.indexOf(defaultRevealCard) + 1}`)).toHaveAttribute("data-active", "true");
+
+  const switchTargetIndex = openingCards.findIndex((card) => card.id !== defaultRevealCard.id);
+  expect(switchTargetIndex).toBeGreaterThanOrEqual(0);
+  await page.getByTestId(`starter-reveal-card-${switchTargetIndex + 1}`).click();
+  await expect(page.getByTestId("starter-reveal-active-card")).toHaveAttribute("data-card-id", openingCards[switchTargetIndex].id);
   await expect(page.getByTestId("starter-reveal-continue")).toBeVisible();
 }
 
@@ -305,6 +318,12 @@ async function fulfillOpenBooster(route: Route, boosterId: string, openingCards:
 function getCardsForClans(clans: string[]) {
   const clanSet = new Set(clans);
   return cards.filter((card) => clanSet.has(card.clan)).slice(0, 5);
+}
+
+function pickDefaultRevealCard(openingCards: Card[]) {
+  return openingCards.reduce((bestCard, card) => {
+    return revealRarityPriority[card.rarity] < revealRarityPriority[bestCard.rarity] ? card : bestCard;
+  });
 }
 
 async function expectPlayerHandToUseDeck(page: Page, deckIds: string[]) {

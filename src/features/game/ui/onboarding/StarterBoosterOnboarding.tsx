@@ -572,9 +572,13 @@ function StarterReveal({
   revealedCount: number;
   onDone: () => void;
 }) {
-  const safeCount = Math.min(Math.max(revealedCount, 1), reveal.cards.length);
-  const activeCard = reveal.cards[safeCount - 1];
   const visibleCards = reveal.cards.slice(0, revealedCount);
+  const defaultIndex = pickDefaultRevealIndex(visibleCards);
+  const [selectedIndex, setSelectedIndex] = useState(defaultIndex);
+
+  const maxIndex = Math.max(visibleCards.length - 1, 0);
+  const safeIndex = Math.min(Math.max(selectedIndex, 0), maxIndex);
+  const activeCard = visibleCards[safeIndex] ?? reveal.cards[0];
   const complete = revealedCount >= reveal.cards.length;
   const deckReadyAfterReveal = isStarterKitReady(reveal.player);
 
@@ -629,19 +633,31 @@ function StarterReveal({
 
       <div className="grid gap-3">
         <div className="grid grid-cols-5 gap-2 max-[760px]:grid-cols-[repeat(5,minmax(112px,1fr))] max-[760px]:overflow-x-auto max-[620px]:gap-1.5" data-testid="starter-reveal-list">
-          {visibleCards.map((card, index) => (
-            <article
-              key={card.id}
-              className="starter-reveal-chip min-w-0 rounded border border-white/10 bg-black/34 p-1.5"
-              style={{ "--reveal-index": index } as CSSProperties}
-              data-testid={`starter-reveal-card-${index + 1}`}
-              data-card-id={card.id}
-            >
-              <MiniRevealBattleCard card={card} />
-              <b className="mt-1 block truncate text-[11px] font-black uppercase text-[#fff0ad] max-[430px]:text-[10px]">{card.name}</b>
-              <span className="block truncate text-[9px] font-black uppercase text-[#9ed6e4]">{rarityLabels[card.rarity]}</span>
-            </article>
-          ))}
+          {visibleCards.map((card, index) => {
+            const isActive = index === safeIndex;
+            return (
+              <button
+                key={card.id}
+                type="button"
+                onClick={() => setSelectedIndex(index)}
+                className={cn(
+                  "starter-reveal-chip min-w-0 rounded border bg-black/34 p-1.5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ffe08a]/70",
+                  isActive
+                    ? "border-[#ffe08a]/80 bg-[#ffe08a]/[0.08] shadow-[0_0_0_1px_rgba(255,224,138,0.45),0_8px_22px_rgba(0,0,0,0.42)]"
+                    : "border-white/10 hover:border-[#fff0ad]/55 hover:bg-black/45",
+                )}
+                style={{ "--reveal-index": index } as CSSProperties}
+                data-testid={`starter-reveal-card-${index + 1}`}
+                data-card-id={card.id}
+                data-active={isActive}
+                aria-pressed={isActive}
+              >
+                <MiniRevealBattleCard card={card} />
+                <b className="mt-1 block truncate text-[11px] font-black uppercase text-[#fff0ad] max-[430px]:text-[10px]">{card.name}</b>
+                <span className="block truncate text-[9px] font-black uppercase text-[#9ed6e4]">{rarityLabels[card.rarity]}</span>
+              </button>
+            );
+          })}
         </div>
 
         {complete ? (
@@ -686,6 +702,27 @@ function Metric({ label, value, testId }: { label: string; value: number | strin
       <span className="mt-1 block text-[10px] font-black uppercase tracking-[0.1em] text-[#a99d85]">{label}</span>
     </div>
   );
+}
+
+const revealRarityPriority: Record<Rarity, number> = {
+  Legend: 0,
+  Unique: 1,
+  Rare: 2,
+  Common: 3,
+};
+
+function pickDefaultRevealIndex(cards: Card[]) {
+  if (cards.length === 0) return 0;
+  let bestIndex = 0;
+  let bestRank = revealRarityPriority[cards[0].rarity];
+  for (let index = 1; index < cards.length; index += 1) {
+    const rank = revealRarityPriority[cards[index].rarity];
+    if (rank < bestRank) {
+      bestRank = rank;
+      bestIndex = index;
+    }
+  }
+  return bestIndex;
 }
 
 function isStarterKitReady(profile: PlayerProfile) {
