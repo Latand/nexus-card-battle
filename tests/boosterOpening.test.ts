@@ -5,6 +5,7 @@ import { handleBoosterCatalogGet, handleBoosterCatalogPost, handleStarterBooster
 import { getBoosterById } from "../src/features/boosters/catalog";
 import { BoosterOpeningError, chooseStarterWeightedRarity, prepareStarterBoosterOpening, type RandomSource } from "../src/features/boosters/opening";
 import type { BoosterCatalogItem, BoosterOpeningRecord, BoosterOpeningStore, StoredBoosterOpeningRecord } from "../src/features/boosters/types";
+import { addToInventory, getOwnedCount } from "../src/features/inventory/inventoryOps";
 import { createNewStoredPlayerProfile, isSamePlayerIdentity, type PlayerIdentity, type PlayerProfile, type StoredPlayerProfile } from "../src/features/player/profile/types";
 
 const guestIdentity: PlayerIdentity = {
@@ -79,7 +80,8 @@ describe("starter booster opening", () => {
     expect(new Set(cardIds).size).toBe(5);
     expect(body.cards.every((card) => body.booster.clans.includes(card.clan))).toBe(true);
     expect(body.cards.some((card) => card.clan === "C.O.R.R." || card.id.startsWith("corr-"))).toBe(false);
-    expect(body.player.ownedCardIds).toEqual(cardIds);
+    expect(body.player.ownedCards.map((entry) => entry.cardId)).toEqual(cardIds);
+    expect(body.player.ownedCards.every((entry) => entry.count === 1)).toBe(true);
     expect(body.player.deckIds).toEqual(cardIds);
     expect(body.player.openedBoosterIds).toEqual(["neon-breach"]);
     expect(body.player.starterFreeBoostersRemaining).toBe(1);
@@ -104,16 +106,18 @@ describe("starter booster opening", () => {
     expect(chooseStarterWeightedRarity(() => 0.99)).toBe("Legend");
   });
 
-  test("falls back when a weighted rarity bucket is unavailable without duplicating cards or owned cards", () => {
+  test("opens five within-pull-unique cards from the booster clans regardless of cross-pull ownership", () => {
     const booster = getBoosterById("neon-breach");
     if (!booster) throw new Error("Expected neon-breach booster.");
 
+    // Owning every booster-clan card must NOT block opening — the multiset
+    // simply increments counts. Within-pull uniqueness is still preserved.
     const boosterClans: readonly string[] = booster.clans;
-    const ownedRareIds = cards.filter((card) => boosterClans.includes(card.clan) && card.rarity === "Rare").map((card) => card.id);
+    const allClanCardIds = cards.filter((card) => boosterClans.includes(card.clan)).map((card) => card.id);
     const opening = prepareStarterBoosterOpening({
       boosterId: booster.id,
       player: {
-        ownedCardIds: ownedRareIds,
+        ownedCards: allClanCardIds.map((cardId) => ({ cardId, count: 1 })),
         openedBoosterIds: [],
         starterFreeBoostersRemaining: 2,
       },
@@ -124,9 +128,8 @@ describe("starter booster opening", () => {
     expect(opening.cards).toHaveLength(5);
     expect(opening.cards.map((card) => card.rarity)).toContain("Legend");
     expect(opening.cards.map((card) => card.rarity)).toContain("Unique");
-    expect(opening.cards.some((card) => card.rarity === "Rare")).toBe(false);
-    expect(cardIds.some((cardId) => ownedRareIds.includes(cardId))).toBe(false);
     expect(new Set(cardIds).size).toBe(5);
+    expect(cardIds.every((cardId) => allClanCardIds.includes(cardId))).toBe(true);
   });
 
   test("rejects unknown boosters and unavailable starter openings", async () => {
@@ -169,7 +172,8 @@ describe("starter booster opening", () => {
 
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
-    expect(secondBody.player.ownedCardIds).toEqual([...firstCardIds, ...secondCardIds]);
+    expect(secondBody.player.ownedCards.map((entry) => entry.cardId)).toEqual([...firstCardIds, ...secondCardIds]);
+    expect(secondBody.player.ownedCards.every((entry) => entry.count === 1)).toBe(true);
     expect(secondBody.player.deckIds).toEqual([...firstCardIds, ...secondCardIds]);
     expect(secondBody.player.deckIds).toHaveLength(10);
     expect(new Set(secondBody.player.deckIds).size).toBe(10);
@@ -189,11 +193,63 @@ describe("starter booster opening", () => {
 
     expect(response.status).toBe(500);
     expect(body.error).toBe("booster_unavailable");
-    expect(profile.ownedCardIds).toEqual([]);
+    expect(profile.ownedCards).toEqual([]);
     expect(profile.deckIds).toEqual([]);
     expect(profile.openedBoosterIds).toEqual([]);
     expect(profile.starterFreeBoostersRemaining).toBe(2);
     expect(store.openings).toHaveLength(0);
+  });
+
+  test("two concurrent opens for different boosters retain every drawn card and zero-out the starter counter", async () => {
+    const store = new MemoryBoosterOpeningStore();
+    await store.findOrCreateByIdentity(guestIdentity);
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      openBooster(store, "neon-breach"),
+      openBooster(store, "factory-shift"),
+    ]);
+    const firstBody = (await firstResponse.json()) as OpenBoosterResponse;
+    const secondBody = (await secondResponse.json()) as OpenBoosterResponse;
+    const firstCardIds = firstBody.cards.map((card) => card.id);
+    const secondCardIds = secondBody.cards.map((card) => card.id);
+    const finalProfile = await store.findOrCreateByIdentity(guestIdentity);
+
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    expect(finalProfile.ownedCards).toHaveLength(10);
+    expect(finalProfile.ownedCards.reduce((sum, entry) => sum + entry.count, 0)).toBe(10);
+    expect(finalProfile.deckIds).toEqual([...firstCardIds, ...secondCardIds]);
+    expect(finalProfile.starterFreeBoostersRemaining).toBe(0);
+    expect(finalProfile.openedBoosterIds).toEqual(["neon-breach", "factory-shift"]);
+  });
+
+  test("opens a booster even when the player already owns every clan card and increments the count for the affected entries", async () => {
+    const booster = getBoosterById("neon-breach");
+    if (!booster) throw new Error("Expected neon-breach booster.");
+
+    const boosterClans: readonly string[] = booster.clans;
+    const allClanCardIds = cards.filter((card) => boosterClans.includes(card.clan)).map((card) => card.id);
+    const store = new MemoryBoosterOpeningStore();
+    store.seedProfile(guestIdentity, {
+      ownedCards: allClanCardIds.map((cardId) => ({ cardId, count: 1 })),
+    });
+
+    const response = await openBooster(store, "neon-breach");
+    const body = (await response.json()) as OpenBoosterResponse;
+    const drawnIds = body.cards.map((card) => card.id);
+
+    expect(response.status).toBe(200);
+    expect(drawnIds).toHaveLength(5);
+    expect(new Set(drawnIds).size).toBe(5);
+    for (const cardId of drawnIds) {
+      const entry = body.player.ownedCards.find((item) => item.cardId === cardId);
+      expect(entry?.count).toBe(2);
+    }
+    const untouchedIds = allClanCardIds.filter((cardId) => !drawnIds.includes(cardId));
+    for (const cardId of untouchedIds) {
+      const entry = body.player.ownedCards.find((item) => item.cardId === cardId);
+      expect(entry?.count).toBe(1);
+    }
   });
 
   test("recovers a prewritten opening history record before advancing player state", async () => {
@@ -202,7 +258,7 @@ describe("starter booster opening", () => {
     const pendingOpening = prepareStarterBoosterOpening({
       boosterId: "neon-breach",
       player: {
-        ownedCardIds: [],
+        ownedCards: [],
         openedBoosterIds: [],
         starterFreeBoostersRemaining: 2,
       },
@@ -226,7 +282,7 @@ describe("starter booster opening", () => {
       openedAt: "2026-05-02T11:59:00.000Z",
     });
     expect(body.cards.map((card) => card.id)).toEqual(pendingOpening.cardIds);
-    expect(body.player.ownedCardIds).toEqual(pendingOpening.cardIds);
+    expect(body.player.ownedCards.map((entry) => entry.cardId)).toEqual(pendingOpening.cardIds);
     expect(body.player.deckIds).toEqual(pendingOpening.cardIds);
     expect(body.player.openedBoosterIds).toEqual(["neon-breach"]);
     expect(body.player.starterFreeBoostersRemaining).toBe(1);
@@ -293,16 +349,17 @@ class MemoryBoosterOpeningStore implements BoosterOpeningStore {
       };
     }
 
-    if (profile.starterFreeBoostersRemaining <= 0 || profile.openedBoosterIds.includes(input.boosterId) || opening.cardIds.some((cardId) => profile.ownedCardIds.includes(cardId))) {
+    if (profile.starterFreeBoostersRemaining <= 0 || profile.openedBoosterIds.includes(input.boosterId)) {
       if (createdOpening) {
         this.removeOpening(opening.id);
       }
       throw new BoosterOpeningError("starter_booster_unavailable", "Starter booster opening could not be saved for the current player state.", 409);
     }
 
+    const nextOwnedCards = opening.cardIds.reduce((acc, cardId) => addToInventory(acc, cardId, 1), profile.ownedCards);
     const updatedProfile: StoredPlayerProfile = {
       ...profile,
-      ownedCardIds: unique([...profile.ownedCardIds, ...opening.cardIds]),
+      ownedCards: nextOwnedCards,
       deckIds: unique([...profile.deckIds, ...opening.cardIds]),
       starterFreeBoostersRemaining: profile.starterFreeBoostersRemaining - 1,
       openedBoosterIds: [...profile.openedBoosterIds, input.boosterId],
@@ -392,9 +449,8 @@ function unique(values: string[]) {
 }
 
 function hasAppliedOpening(profile: StoredPlayerProfile, boosterId: string, cardIds: string[]) {
-  const ownedCardIds = new Set(profile.ownedCardIds);
   const deckIds = new Set(profile.deckIds);
-  return profile.openedBoosterIds.includes(boosterId) && cardIds.every((cardId) => ownedCardIds.has(cardId) && deckIds.has(cardId));
+  return profile.openedBoosterIds.includes(boosterId) && cardIds.every((cardId) => getOwnedCount(profile.ownedCards, cardId) >= 1 && deckIds.has(cardId));
 }
 
 async function withSuppressedConsoleError<T>(callback: () => Promise<T>) {

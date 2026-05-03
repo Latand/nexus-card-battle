@@ -75,7 +75,7 @@ describe("toPlayerProfile avatar default", () => {
     const profile = toPlayerProfile({
       id: "player-1",
       identity: { mode: "guest", guestId: "guest-1" },
-      ownedCardIds: [],
+      ownedCards: [],
       deckIds: [],
       starterFreeBoostersRemaining: 0,
       openedBoosterIds: [],
@@ -94,7 +94,7 @@ describe("toPlayerProfile avatar default", () => {
     const profile = toPlayerProfile({
       id: "player-2",
       identity: { mode: "telegram", telegramId: "9000" },
-      ownedCardIds: [],
+      ownedCards: [],
       deckIds: [],
       starterFreeBoostersRemaining: 0,
       openedBoosterIds: [],
@@ -114,7 +114,7 @@ describe("toPlayerProfile avatar default", () => {
     const profile = toPlayerProfile({
       id: "player-3",
       identity: { mode: "telegram", telegramId: "9001" },
-      ownedCardIds: [],
+      ownedCards: [],
       deckIds: [],
       starterFreeBoostersRemaining: 0,
       openedBoosterIds: [],

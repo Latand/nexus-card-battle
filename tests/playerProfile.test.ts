@@ -42,7 +42,7 @@ describe("player profile API", () => {
         mode: "guest",
         guestId: "guest-alpha",
       },
-      ownedCardIds: [],
+      ownedCards: [],
       deckIds: [],
       starterFreeBoostersRemaining: 2,
       openedBoosterIds: [],
@@ -100,7 +100,7 @@ describe("player profile API", () => {
     const body = await readPlayerResponse(response);
 
     expect(response.status).toBe(200);
-    expect(body.player.ownedCardIds).toEqual([]);
+    expect(body.player.ownedCards).toEqual([]);
     expect(body.player.deckIds).toEqual([]);
     expect(body.player.openedBoosterIds).toEqual([]);
     expect(body.player.starterFreeBoostersRemaining).toBe(2);
@@ -131,7 +131,7 @@ describe("player profile API", () => {
 
     expect(response.status).toBe(200);
     expect(body.player.deckIds).toEqual(nextDeckIds);
-    expect(body.player.ownedCardIds).toEqual(ownedDeckCardIds);
+    expect(body.player.ownedCards.map((entry) => entry.cardId)).toEqual(ownedDeckCardIds);
   });
 
   test("rejects deck saves below nine cards", async () => {
@@ -144,6 +144,27 @@ describe("player profile API", () => {
     expect(response.status).toBe(400);
     expect(body.error).toBe("invalid_deck");
     expect(body.message).toBe("Deck must contain at least 9 cards.");
+  });
+
+  test("lazy-migrates legacy ownedCardIds documents into the ownedCards multiset", async () => {
+    const legacyIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-legacy-multiset" };
+    const legacyProfile = {
+      ...createNewStoredPlayerProfile("player-legacy", legacyIdentity),
+    } as StoredPlayerProfile;
+    // Simulate a pre-slice-1 document that only carries ownedCardIds.
+    delete (legacyProfile as { ownedCards?: unknown }).ownedCards;
+    (legacyProfile as { ownedCardIds?: string[] }).ownedCardIds = ["a", "b"];
+
+    const store = new MemoryPlayerProfileStore([legacyProfile]);
+    const response = await postProfile(store, { identity: legacyIdentity });
+    const body = await readPlayerResponse(response);
+
+    expect(response.status).toBe(200);
+    expect(body.player.ownedCards).toEqual([
+      { cardId: "a", count: 1 },
+      { cardId: "b", count: 1 },
+    ]);
+    expect(body.player.onboarding.collectionReady).toBe(true);
   });
 
   test("rejects duplicate, unknown, and non-owned deck cards", async () => {
@@ -668,7 +689,7 @@ function postDeck(store: PlayerDeckStore, body: unknown) {
 function createOwnedDeckProfile() {
   return {
     ...createNewStoredPlayerProfile("player-owned-deck", ownedDeckIdentity),
-    ownedCardIds: [...ownedDeckCardIds],
+    ownedCards: ownedDeckCardIds.map((cardId) => ({ cardId, count: 1 })),
     deckIds: [...savedDeckCardIds],
     starterFreeBoostersRemaining: 0,
     openedBoosterIds: ["neon-breach", "factory-shift"],

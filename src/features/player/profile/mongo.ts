@@ -1,6 +1,7 @@
 import { MongoClient, MongoServerError, ObjectId, type Collection, type Filter, type WithId } from "mongodb";
 import { BoosterOpeningError } from "@/features/boosters/opening";
 import type { BoosterOpeningSource, PersistStarterBoosterOpeningInput, PersistedStarterBoosterOpening, StoredBoosterOpeningRecord } from "@/features/boosters/types";
+import { getOwnedCount, type OwnedCardEntry } from "@/features/inventory/inventoryOps";
 import {
   DEFAULT_PLAYER_CRYSTALS,
   DEFAULT_PLAYER_DRAWS,
@@ -26,9 +27,14 @@ const BOOSTER_OPENINGS_COLLECTION = "boosterOpenings";
 // Progression fields are optional so pre-existing documents read cleanly.
 // `level` is intentionally absent — it is derived from totalXp on read,
 // because storing an absolute level would race against $inc(totalXp).
-type MongoPlayerDocument = Omit<StoredPlayerProfile, "id" | "crystals" | "totalXp" | "wins" | "losses" | "draws" | "eloRating" | "avatarUrl"> & {
+// `ownedCardIds` is the legacy on-disk field; `ownedCards` is the multiset.
+// Documents written before slice 1 have only `ownedCardIds`; new writes use
+// `ownedCards` while leaving the legacy field untouched (lazy migration).
+type MongoPlayerDocument = Omit<StoredPlayerProfile, "id" | "ownedCards" | "crystals" | "totalXp" | "wins" | "losses" | "draws" | "eloRating" | "avatarUrl"> & {
   createdAt: Date;
   updatedAt: Date;
+  ownedCards?: OwnedCardEntry[];
+  ownedCardIds?: string[];
   crystals?: number;
   totalXp?: number;
   wins?: number;
@@ -82,7 +88,7 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
       {
         $setOnInsert: {
           identity: insertedProfile.identity,
-          ownedCardIds: insertedProfile.ownedCardIds,
+          ownedCards: insertedProfile.ownedCards,
           deckIds: insertedProfile.deckIds,
           starterFreeBoostersRemaining: insertedProfile.starterFreeBoostersRemaining,
           openedBoosterIds: insertedProfile.openedBoosterIds,
@@ -217,10 +223,15 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
 
   async saveDeck(identity: PlayerIdentity, deckIds: string[]): Promise<StoredPlayerProfile> {
     const players = await this.getPlayersCollection();
+    // Atomic precondition on the multiset: every deck card must already exist
+    // in `ownedCards.cardId`. Closing the TOCTOU window here matters once
+    // slice 2's sell flow can drop counts to zero between read and write.
+    // Legacy documents that only carry `ownedCardIds` still satisfy the
+    // post-write fallback below via `readOwnedCards`.
     const updatedPlayer = await players.findOneAndUpdate(
       {
         ...identityFilter(identity),
-        ownedCardIds: { $all: deckIds },
+        "ownedCards.cardId": { $all: deckIds },
       },
       {
         $set: {
@@ -242,10 +253,31 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
       throw new Error("Player profile did not exist for deck save.");
     }
 
-    const ownedCardIds = new Set(currentPlayer.ownedCardIds);
-    const missingOwnedIds = deckIds.filter((cardId) => !ownedCardIds.has(cardId));
+    const ownedCards = readOwnedCards(currentPlayer);
+    const missingOwnedIds = deckIds.filter((cardId) => getOwnedCount(ownedCards, cardId) < 1);
     if (missingOwnedIds.length > 0) {
       throw new Error(`Deck contains non-owned card ids: ${missingOwnedIds.join(", ")}`);
+    }
+
+    // Legacy doc without `ownedCards` but with `ownedCardIds` covering the
+    // deck — atomic precondition rejected it because `ownedCards.cardId` is
+    // empty. Fall back to a non-precondition write so the migration window
+    // does not block deck saves.
+    const fallbackUpdate = await players.findOneAndUpdate(
+      identityFilter(identity),
+      {
+        $set: {
+          deckIds,
+          updatedAt: new Date(),
+        },
+      },
+      {
+        returnDocument: "after",
+      },
+    );
+
+    if (fallbackUpdate) {
+      return fromMongoDocument(fallbackUpdate);
     }
 
     throw new Error("Player deck could not be saved.");
@@ -312,26 +344,30 @@ async function applyStarterOpeningToPlayer(
   cardIds: string[],
   now: Date,
 ) {
+  // Pipeline-update so the multiset increment runs server-side against the
+  // post-write document state. Two concurrent opens for the same player (with
+  // different boosterIds — legitimate, since STARTER_FREE_BOOSTERS = 2) can
+  // otherwise interleave a JS-side read between each other and clobber each
+  // other's `ownedCards` array. Aggregation pipelines can't be combined with
+  // $inc/$addToSet, so deck/openedBoosters/starter fields are expressed as
+  // pipeline equivalents below.
   const updatedPlayer = await players.findOneAndUpdate(
     {
       ...identityFilter(identity),
       starterFreeBoostersRemaining: { $gt: 0 },
       openedBoosterIds: { $ne: boosterId },
-      ownedCardIds: { $nin: cardIds },
     },
-    {
-      $addToSet: {
-        ownedCardIds: { $each: cardIds },
-        deckIds: { $each: cardIds },
-        openedBoosterIds: boosterId,
+    [
+      {
+        $set: {
+          ownedCards: buildOwnedCardsIncrementPipeline(cardIds),
+          deckIds: { $setUnion: [{ $ifNull: ["$deckIds", []] }, cardIds] },
+          openedBoosterIds: { $setUnion: [{ $ifNull: ["$openedBoosterIds", []] }, [boosterId]] },
+          starterFreeBoostersRemaining: { $subtract: [{ $ifNull: ["$starterFreeBoostersRemaining", 0] }, 1] },
+          updatedAt: now,
+        },
       },
-      $inc: {
-        starterFreeBoostersRemaining: -1,
-      },
-      $set: {
-        updatedAt: now,
-      },
-    },
+    ],
     {
       returnDocument: "after",
     },
@@ -341,12 +377,44 @@ async function applyStarterOpeningToPlayer(
     return updatedPlayer;
   }
 
+  // No match → either the player doc is missing, or this booster was already
+  // applied (`openedBoosterIds: { $ne: boosterId }` rejected the filter). The
+  // recovery branch surfaces the latter as success so duplicate-call replays
+  // (network retry, server restart) stay idempotent.
   const currentPlayer = await players.findOne(identityFilter(identity));
   if (currentPlayer && hasAppliedStarterOpening(currentPlayer, boosterId, cardIds)) {
     return currentPlayer;
   }
 
   throw new BoosterOpeningError("starter_booster_unavailable", "Starter booster opening could not be saved for the current player state.", 409);
+}
+
+function buildOwnedCardsIncrementPipeline(cardIds: readonly string[]) {
+  return {
+    $reduce: {
+      input: cardIds,
+      initialValue: { $ifNull: ["$ownedCards", []] },
+      in: {
+        $cond: [
+          { $in: ["$$this", { $ifNull: ["$$value.cardId", []] }] },
+          {
+            $map: {
+              input: "$$value",
+              as: "entry",
+              in: {
+                $cond: [
+                  { $eq: ["$$entry.cardId", "$$this"] },
+                  { cardId: "$$entry.cardId", count: { $add: ["$$entry.count", 1] } },
+                  "$$entry",
+                ],
+              },
+            },
+          },
+          { $concatArrays: ["$$value", [{ cardId: "$$this", count: 1 }]] },
+        ],
+      },
+    },
+  };
 }
 
 async function createOrLoadStarterOpening(
@@ -389,10 +457,36 @@ async function createOrLoadStarterOpening(
   };
 }
 
+// TODO(slice-2): once cards become removable via /sell, deck-membership is no
+// longer a reliable proxy for "this booster was applied"; revisit.
 function hasAppliedStarterOpening(player: MongoPlayerDocument, boosterId: string, cardIds: string[]) {
-  const ownedCardIds = new Set(player.ownedCardIds);
+  const ownedCards = readOwnedCards(player);
   const deckIds = new Set(player.deckIds);
-  return player.openedBoosterIds.includes(boosterId) && cardIds.every((cardId) => ownedCardIds.has(cardId) && deckIds.has(cardId));
+  return player.openedBoosterIds.includes(boosterId) && cardIds.every((cardId) => getOwnedCount(ownedCards, cardId) >= 1 && deckIds.has(cardId));
+}
+
+function readOwnedCards(player: WithId<MongoPlayerDocument> | MongoPlayerDocument): OwnedCardEntry[] {
+  const playerId = "_id" in player ? player._id.toHexString() : "<unsaved>";
+
+  if (Array.isArray(player.ownedCards) && player.ownedCards.length > 0) {
+    const valid: OwnedCardEntry[] = [];
+    for (const entry of player.ownedCards) {
+      if (entry && typeof entry.cardId === "string" && entry.cardId.length > 0 && Number.isInteger(entry.count) && entry.count > 0) {
+        valid.push({ cardId: entry.cardId, count: entry.count });
+      } else {
+        console.warn("MongoPlayerProfileStore: dropping malformed ownedCards entry.", { playerId, entry });
+      }
+    }
+    return valid;
+  }
+
+  if (Array.isArray(player.ownedCardIds)) {
+    return player.ownedCardIds
+      .filter((cardId): cardId is string => typeof cardId === "string" && cardId.length > 0)
+      .map((cardId) => ({ cardId, count: 1 }));
+  }
+
+  return [];
 }
 
 function starterOpeningFilter(playerId: string, boosterId: string): Filter<MongoBoosterOpeningDocument> {
@@ -470,7 +564,7 @@ function fromMongoDocument(document: WithId<MongoPlayerDocument>): StoredPlayerP
   return {
     id: document._id.toHexString(),
     identity: document.identity,
-    ownedCardIds: document.ownedCardIds,
+    ownedCards: readOwnedCards(document),
     deckIds: document.deckIds,
     starterFreeBoostersRemaining: document.starterFreeBoostersRemaining,
     openedBoosterIds: document.openedBoosterIds,

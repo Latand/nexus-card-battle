@@ -6,11 +6,13 @@ import { cards } from "@/features/battle/model/cards";
 import { clanList } from "@/features/battle/model/clans";
 import type { Card, Rarity } from "@/features/battle/model/types";
 import { BattleCard } from "@/features/battle/ui/components/BattleCard";
+import { getOwnedCount, type OwnedCardEntry } from "@/features/inventory/inventoryOps";
 import { cn } from "@/shared/lib/cn";
 import { PLAYER_DECK_SIZE } from "../../model/randomDeck";
 
 type Props = {
   collectionIds: string[];
+  ownedCards: readonly OwnedCardEntry[];
   deckIds: string[];
   profileStatus: "loading" | "ready" | "unavailable";
   profileIdentityMode?: "telegram" | "guest";
@@ -62,6 +64,7 @@ const collectionModes: { id: CollectionMode; label: string }[] = [
 
 export function CollectionDeckScreen({
   collectionIds,
+  ownedCards,
   deckIds: savedDeckIds = [],
   profileStatus,
   profileIdentityMode,
@@ -75,15 +78,15 @@ export function CollectionDeckScreen({
   onPlay,
 }: Props) {
   const ownedSet = useMemo(() => new Set(collectionIds), [collectionIds]);
-  const ownedCards = useMemo(() => cards.filter((card) => ownedSet.has(card.id)), [ownedSet]);
+  const ownedCardCatalog = useMemo(() => cards.filter((card) => ownedSet.has(card.id)), [ownedSet]);
   const [collectionMode, setCollectionMode] = useState<CollectionMode>("owned");
-  const browsingCards = collectionMode === "owned" ? ownedCards : cards;
+  const browsingCards = collectionMode === "owned" ? ownedCardCatalog : cards;
   const canEditDeck = collectionMode === "owned" && deckSaveStatus !== "saving";
   const deckIds = useMemo(
     () => savedDeckIds.filter((cardId) => ownedSet.has(cardId)),
     [ownedSet, savedDeckIds],
   );
-  const [selectedId, setSelectedId] = useState(() => deckIds[0] ?? ownedCards[0]?.id);
+  const [selectedId, setSelectedId] = useState(() => deckIds[0] ?? ownedCardCatalog[0]?.id);
   const [query, setQuery] = useState("");
   const [activeFaction, setActiveFaction] = useState("all");
   const [rarity, setRarity] = useState<RarityFilter>("all");
@@ -316,6 +319,7 @@ export function CollectionDeckScreen({
                 {visibleCards.length > 0 ? visibleCards.map((card) => {
                   const inDeckIndex = deckIds.indexOf(card.id);
                   const owned = ownedSet.has(card.id);
+                  const ownedCount = getOwnedCount(ownedCards, card.id);
 
                   return (
                     <CollectionCardTile
@@ -324,6 +328,7 @@ export function CollectionDeckScreen({
                       selected={selectedCard?.id === card.id}
                       inDeckIndex={inDeckIndex}
                       owned={owned}
+                      ownedCount={ownedCount}
                       editable={canEditDeck && owned}
                       canRemove={canRemoveCard}
                       onSelect={() => setSelectedId(card.id)}
@@ -381,6 +386,7 @@ function CollectionCardTile({
   selected,
   inDeckIndex,
   owned,
+  ownedCount,
   editable,
   canRemove,
   onSelect,
@@ -390,6 +396,7 @@ function CollectionCardTile({
   selected: boolean;
   inDeckIndex: number;
   owned: boolean;
+  ownedCount: number;
   editable: boolean;
   canRemove: boolean;
   onSelect: () => void;
@@ -419,6 +426,15 @@ function CollectionCardTile({
           data-testid={`collection-locked-${card.id}`}
         >
           Закрито
+        </b>
+      ) : null}
+
+      {ownedCount > 0 ? (
+        <b
+          className="pointer-events-none absolute bottom-2 left-2 z-[3] rounded bg-black/70 px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-[#ffe08a]"
+          data-testid={`collection-owned-count-${card.id}`}
+        >
+          Ви маєте: {ownedCount}
         </b>
       ) : null}
 
