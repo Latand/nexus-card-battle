@@ -70,6 +70,7 @@ export type PlayerProfile = {
   losses: number;
   draws: number;
   eloRating: number;
+  avatarUrl?: string;
   onboarding: PlayerOnboardingState;
 };
 
@@ -103,6 +104,7 @@ export function toPlayerProfile(profile: StoredPlayerProfile): PlayerProfile {
   const losses = normalizeNonNegativeInteger(profile.losses, DEFAULT_PLAYER_LOSSES);
   const draws = normalizeNonNegativeInteger(profile.draws, DEFAULT_PLAYER_DRAWS);
   const eloRating = normalizeEloRating(profile.eloRating, DEFAULT_PLAYER_ELO_RATING);
+  const avatarUrl = normalizeAvatarUrl(profile.avatarUrl);
   const level = computeLevelFromXp(totalXp).level;
 
   return {
@@ -119,12 +121,21 @@ export function toPlayerProfile(profile: StoredPlayerProfile): PlayerProfile {
     losses,
     draws,
     eloRating,
+    ...(avatarUrl !== undefined ? { avatarUrl } : {}),
     onboarding: createOnboardingState({
       ownedCardIds,
       deckIds,
       starterFreeBoostersRemaining,
     }),
   };
+}
+
+export function normalizeAvatarUrl(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 2048) return undefined;
+  if (!/^https:\/\//i.test(trimmed)) return undefined;
+  return trimmed;
 }
 
 export function createOnboardingState(profile: Pick<StoredPlayerProfile, "ownedCardIds" | "deckIds" | "starterFreeBoostersRemaining">): PlayerOnboardingState {

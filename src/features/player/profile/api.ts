@@ -1,5 +1,6 @@
 import {
   PlayerIdentityValidationError,
+  normalizeAvatarUrl,
   type PlayerIdentity,
   type PlayerProfile,
   type StoredPlayerProfile,
@@ -35,6 +36,10 @@ export type PlayerMatchRewardsStore = PlayerProfileStore & {
   applyMatchRewards(identity: PlayerIdentity, rewards: ApplyMatchRewardsInput): Promise<StoredPlayerProfile>;
 };
 
+export type PlayerAvatarStore = PlayerProfileStore & {
+  setAvatarUrl(identity: PlayerIdentity, avatarUrl: string): Promise<StoredPlayerProfile>;
+};
+
 export async function handlePlayerProfilePost(request: Request, store: PlayerProfileStore) {
   try {
     const body = await readJsonObject(request);
@@ -58,6 +63,22 @@ export async function handlePlayerProfileGet(request: Request, store: PlayerProf
     const profile = await store.findOrCreateByIdentity(identity);
 
     return playerProfileResponse(toPlayerProfile(profile));
+  } catch (error) {
+    return playerProfileErrorResponse(error);
+  }
+}
+
+export async function handlePlayerAvatarPost(request: Request, store: PlayerAvatarStore) {
+  try {
+    const body = await readJsonObject(request);
+    const identity = parsePlayerIdentity(body.identity);
+    const avatarUrl = normalizeAvatarUrl(body.avatarUrl);
+    if (avatarUrl === undefined) {
+      throw new PlayerAvatarValidationError("avatarUrl must be a valid https URL.");
+    }
+
+    const stored = await store.setAvatarUrl(identity, avatarUrl);
+    return playerProfileResponse(toPlayerProfile(stored));
   } catch (error) {
     return playerProfileErrorResponse(error);
   }
@@ -210,6 +231,13 @@ class MatchFinishedValidationError extends Error {
   }
 }
 
+class PlayerAvatarValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PlayerAvatarValidationError";
+  }
+}
+
 export async function handlePlayerDeckSavePost(request: Request, store: PlayerDeckStore) {
   try {
     const body = await readJsonObject(request);
@@ -252,6 +280,16 @@ function playerProfileErrorResponse(error: unknown) {
     return Response.json(
       {
         error: "invalid_match",
+        message: error.message,
+      },
+      { status: 400 },
+    );
+  }
+
+  if (error instanceof PlayerAvatarValidationError) {
+    return Response.json(
+      {
+        error: "invalid_avatar",
         message: error.message,
       },
       { status: 400 },

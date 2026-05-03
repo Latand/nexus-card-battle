@@ -10,11 +10,12 @@ import {
   DEFAULT_PLAYER_WINS,
   computeLevelFromXp,
   createNewStoredPlayerProfile,
+  normalizeAvatarUrl,
   type PlayerIdentity,
   type StoredPlayerProfile,
 } from "./types";
 import { computeLevelUpBonusForRange } from "./progression";
-import type { ApplyMatchRewardsInput, PlayerDeckStore, PlayerMatchRewardsStore } from "./api";
+import type { ApplyMatchRewardsInput, PlayerAvatarStore, PlayerDeckStore, PlayerMatchRewardsStore } from "./api";
 
 const DEFAULT_MONGODB_URI = "mongodb://127.0.0.1:27017/nexus-card-battle";
 const DEFAULT_MONGODB_DB = "nexus-card-battle";
@@ -25,7 +26,7 @@ const BOOSTER_OPENINGS_COLLECTION = "boosterOpenings";
 // Progression fields are optional so pre-existing documents read cleanly.
 // `level` is intentionally absent — it is derived from totalXp on read,
 // because storing an absolute level would race against $inc(totalXp).
-type MongoPlayerDocument = Omit<StoredPlayerProfile, "id" | "crystals" | "totalXp" | "wins" | "losses" | "draws" | "eloRating"> & {
+type MongoPlayerDocument = Omit<StoredPlayerProfile, "id" | "crystals" | "totalXp" | "wins" | "losses" | "draws" | "eloRating" | "avatarUrl"> & {
   createdAt: Date;
   updatedAt: Date;
   crystals?: number;
@@ -34,6 +35,7 @@ type MongoPlayerDocument = Omit<StoredPlayerProfile, "id" | "crystals" | "totalX
   losses?: number;
   draws?: number;
   eloRating?: number;
+  avatarUrl?: string;
 };
 
 type MongoBoosterOpeningDocument = {
@@ -61,7 +63,7 @@ export function getMongoPlayerProfileStore() {
   return new MongoPlayerProfileStore(clientPromise, dbName);
 }
 
-export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewardsStore {
+export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewardsStore, PlayerAvatarStore {
   private indexesReady?: Promise<void>;
   private boosterOpeningIndexesReady?: Promise<void>;
 
@@ -186,6 +188,31 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
 
       throw error;
     }
+  }
+
+  async setAvatarUrl(identity: PlayerIdentity, avatarUrl: string): Promise<StoredPlayerProfile> {
+    const players = await this.getPlayersCollection();
+    const sanitized = normalizeAvatarUrl(avatarUrl);
+    if (sanitized === undefined) {
+      throw new Error("avatarUrl must be a valid https URL.");
+    }
+
+    const updated = await players.findOneAndUpdate(
+      identityFilter(identity),
+      {
+        $set: {
+          avatarUrl: sanitized,
+          updatedAt: new Date(),
+        },
+      },
+      { returnDocument: "after" },
+    );
+
+    if (!updated) {
+      throw new Error("Player profile did not exist for avatar update.");
+    }
+
+    return fromMongoDocument(updated);
   }
 
   async saveDeck(identity: PlayerIdentity, deckIds: string[]): Promise<StoredPlayerProfile> {
@@ -439,6 +466,7 @@ function identityFilter(identity: PlayerIdentity): Filter<MongoPlayerDocument> {
 }
 
 function fromMongoDocument(document: WithId<MongoPlayerDocument>): StoredPlayerProfile {
+  const avatarUrl = normalizeAvatarUrl(document.avatarUrl);
   return {
     id: document._id.toHexString(),
     identity: document.identity,
@@ -452,6 +480,7 @@ function fromMongoDocument(document: WithId<MongoPlayerDocument>): StoredPlayerP
     losses: nonNegativeIntegerOrDefault(document.losses, DEFAULT_PLAYER_LOSSES),
     draws: nonNegativeIntegerOrDefault(document.draws, DEFAULT_PLAYER_DRAWS),
     eloRating: eloRatingOrDefault(document.eloRating, DEFAULT_PLAYER_ELO_RATING),
+    ...(avatarUrl !== undefined ? { avatarUrl } : {}),
   };
 }
 
