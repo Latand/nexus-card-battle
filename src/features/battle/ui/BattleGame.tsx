@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { postMatchFinished } from "@/features/player/profile/client";
 import type { PlayerIdentity } from "@/features/player/profile/types";
@@ -28,6 +27,7 @@ import { NamePlate } from "./components/ResourceCounter";
 import { SceneBackground } from "./components/SceneBackground";
 import { SelectionOverlay } from "./components/SelectionOverlay";
 import {
+  DEFAULT_REWARD_AVATAR_URL,
   computeXpProgress,
   resolveRewardAvatarUrl,
   resolveRewardTitle,
@@ -1411,14 +1411,7 @@ function RewardAvatarBlock({
       data-testid="reward-avatar-block"
     >
       <div className="relative h-[96px] w-[96px] overflow-hidden rounded-full border-2 border-[#d6a03b]/75 bg-black/55 shadow-[0_0_22px_rgba(214,160,59,0.32)]">
-        <Image
-          src={avatarUrl}
-          alt=""
-          fill
-          sizes="96px"
-          className="object-cover object-top"
-          data-testid="reward-avatar-image"
-        />
+        <RewardAvatarImage src={avatarUrl} />
       </div>
       <div className="grid gap-2 max-[420px]:justify-items-center max-[420px]:text-center">
         <div className="flex flex-wrap items-center gap-2">
@@ -1437,6 +1430,30 @@ function RewardAvatarBlock({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function RewardAvatarImage({ src }: { src: string }) {
+  return <RewardAvatarImageContent key={src} src={src} />;
+}
+
+function RewardAvatarImageContent({ src }: { src: string }) {
+  const [resolvedSrc, setResolvedSrc] = useState(src);
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={resolvedSrc}
+      alt=""
+      width={96}
+      height={96}
+      className="h-full w-full object-cover object-top"
+      data-testid="reward-avatar-image"
+      data-avatar-src={resolvedSrc}
+      onError={() => {
+        if (resolvedSrc !== DEFAULT_REWARD_AVATAR_URL) setResolvedSrc(DEFAULT_REWARD_AVATAR_URL);
+      }}
+    />
   );
 }
 

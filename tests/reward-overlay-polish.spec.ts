@@ -1,6 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockDeckReadyProfile } from "./fixtures/playerProfile";
 
+const TRANSPARENT_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+  "base64",
+);
+
 const PVE_NO_LEVEL_REWARDS = {
   matchXp: 30,
   levelProgress: 15,
@@ -110,6 +115,100 @@ test("PvE win overlay AI button restarts a new AI match in the same screen", asy
   await expect(page.getByTestId("reward-summary")).toBeHidden({ timeout: 5_000 });
   await expect(page.getByTestId("phase-overlay")).toHaveAttribute("data-phase", "match_intro");
   await expect(page.getByTestId("round-status")).toBeVisible({ timeout: 10_000 });
+});
+
+test("reward overlay renders the avatar src verbatim, not through Next image optimization", async ({ page }) => {
+  const telegramAvatarUrl = "https://t.me/i/userpic/example.jpg";
+  await mockDeckReadyProfile(page, { avatarUrl: telegramAvatarUrl });
+
+  await page.route(telegramAvatarUrl, async (route) => {
+    await route.fulfill({ status: 200, contentType: "image/png", body: TRANSPARENT_PNG });
+  });
+
+  await page.route("**/api/player/match-finished", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        rewards: PVE_NO_LEVEL_REWARDS,
+        player: {
+          id: "player-deck-ready-e2e",
+          identity: { mode: "guest", guestId: "guest-deck-ready-e2e" },
+          ownedCardIds: [],
+          deckIds: [],
+          starterFreeBoostersRemaining: 0,
+          openedBoosterIds: ["neon-breach", "factory-shift"],
+          crystals: 0,
+          totalXp: 30,
+          level: 1,
+          wins: 1,
+          losses: 0,
+          draws: 0,
+          eloRating: 1000,
+          avatarUrl: telegramAvatarUrl,
+          onboarding: { starterBoostersAvailable: false, collectionReady: true, deckReady: true, completed: true },
+        },
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByTestId("play-selected-deck").click();
+  await expect(page.getByTestId("round-status")).toBeVisible({ timeout: 10_000 });
+
+  await playUntilRewardOverlay(page);
+  await expect(page.getByTestId("reward-summary")).toBeVisible({ timeout: 60_000 });
+
+  const avatar = page.getByTestId("reward-avatar-image");
+  await expect(avatar).toBeVisible();
+  await expect(avatar).toHaveAttribute("src", telegramAvatarUrl);
+  await expect(avatar).not.toHaveAttribute("src", /\/_next\/image/);
+});
+
+test("reward overlay swaps to the default character art when the avatar URL fails to load", async ({ page }) => {
+  const brokenAvatarUrl = "https://t.me/i/userpic/broken.jpg";
+  await mockDeckReadyProfile(page, { avatarUrl: brokenAvatarUrl });
+
+  await page.route(brokenAvatarUrl, async (route) => {
+    await route.fulfill({ status: 404, body: "" });
+  });
+
+  await page.route("**/api/player/match-finished", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        rewards: PVE_NO_LEVEL_REWARDS,
+        player: {
+          id: "player-deck-ready-e2e",
+          identity: { mode: "guest", guestId: "guest-deck-ready-e2e" },
+          ownedCardIds: [],
+          deckIds: [],
+          starterFreeBoostersRemaining: 0,
+          openedBoosterIds: ["neon-breach", "factory-shift"],
+          crystals: 0,
+          totalXp: 30,
+          level: 1,
+          wins: 1,
+          losses: 0,
+          draws: 0,
+          eloRating: 1000,
+          avatarUrl: brokenAvatarUrl,
+          onboarding: { starterBoostersAvailable: false, collectionReady: true, deckReady: true, completed: true },
+        },
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByTestId("play-selected-deck").click();
+  await expect(page.getByTestId("round-status")).toBeVisible({ timeout: 10_000 });
+
+  await playUntilRewardOverlay(page);
+  await expect(page.getByTestId("reward-summary")).toBeVisible({ timeout: 60_000 });
+
+  const avatar = page.getByTestId("reward-avatar-image");
+  await expect(avatar).toHaveAttribute("src", "/nexus-assets/characters/cyber-brawler-thumb.png", { timeout: 10_000 });
 });
 
 async function playUntilRewardOverlay(page: Page) {

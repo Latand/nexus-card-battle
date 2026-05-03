@@ -30,6 +30,7 @@ export type TestPlayerProfileInput = {
   losses?: number;
   draws?: number;
   eloRating?: number;
+  avatarUrl?: string;
 };
 
 type MockDeckReadyProfileOptions = Partial<TestPlayerProfileInput> & {
@@ -61,6 +62,7 @@ export async function mockDeckReadyProfile(page: Page, options: MockDeckReadyPro
       deckIds: requestBody.deckIds ?? options.deckIds ?? profile?.deckIds ?? PROFILE_DECK_IDS,
       starterFreeBoostersRemaining: options.starterFreeBoostersRemaining ?? profile?.starterFreeBoostersRemaining ?? 0,
       openedBoosterIds: options.openedBoosterIds ?? profile?.openedBoosterIds ?? ["neon-breach", "factory-shift"],
+      avatarUrl: options.avatarUrl ?? profile?.avatarUrl,
     };
     const handled = await options.onDeckSave?.(route, profile);
     if (handled === false) return;
@@ -80,6 +82,7 @@ export async function mockDeckReadyProfile(page: Page, options: MockDeckReadyPro
       deckIds: options.deckIds ?? profile?.deckIds ?? PROFILE_DECK_IDS,
       starterFreeBoostersRemaining: options.starterFreeBoostersRemaining ?? profile?.starterFreeBoostersRemaining ?? 0,
       openedBoosterIds: options.openedBoosterIds ?? profile?.openedBoosterIds ?? ["neon-breach", "factory-shift"],
+      avatarUrl: options.avatarUrl ?? profile?.avatarUrl,
     };
     await seedServerPlayerProfile(page, profile);
     await fulfillPlayerProfile(route, profile);
@@ -142,6 +145,7 @@ function createTestProfileInput(options: MockDeckReadyProfileOptions, identity: 
     deckIds: options.deckIds ?? PROFILE_DECK_IDS,
     starterFreeBoostersRemaining: options.starterFreeBoostersRemaining ?? 0,
     openedBoosterIds: options.openedBoosterIds ?? ["neon-breach", "factory-shift"],
+    avatarUrl: options.avatarUrl,
   };
 }
 
