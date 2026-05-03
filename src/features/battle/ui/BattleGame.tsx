@@ -748,7 +748,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       />
 
       {humanBlockingOverlay ? (
-        <HumanMatchOverlay status={humanStatus} message={humanMessage} onOpenCollection={onOpenCollection} />
+        <HumanMatchOverlay status={humanStatus} message={humanMessage} onOpenCollection={onOpenCollection} onRetryMatch={restartHumanQueue} />
       ) : null}
 
       {!humanBlockingOverlay && !boardHidden ? (
@@ -979,10 +979,12 @@ function HumanMatchOverlay({
   status,
   message,
   onOpenCollection,
+  onRetryMatch,
 }: {
   status: HumanMatchStatus;
   message: string;
   onOpenCollection?: () => void;
+  onRetryMatch?: () => void;
 }) {
   const title = getHumanOverlayTitle(status);
   const subtitle = message || getHumanOverlaySubtitle(status);
@@ -1003,6 +1005,16 @@ function HumanMatchOverlay({
           </strong>
           <span className="max-w-[440px] text-sm font-black uppercase tracking-[0.04em] text-[#d9ceb2]">{subtitle}</span>
         </div>
+        {onRetryMatch && ["opponent_left", "forfeit", "error", "closed"].includes(status) ? (
+          <button
+            className="mx-auto min-h-[42px] rounded-md border-2 border-[#65d7e9]/60 bg-[linear-gradient(180deg,#68e5f5,#218aa3_56%,#0d4151)] px-4 text-xs font-black uppercase text-[#061116] transition hover:brightness-110"
+            type="button"
+            onClick={onRetryMatch}
+            data-testid="human-match-retry"
+          >
+            Знову PvP
+          </button>
+        ) : null}
         {onOpenCollection ? (
           <button
             className="mx-auto min-h-[42px] rounded-md border border-white/12 bg-white/[0.06] px-4 text-xs font-black uppercase text-[#efe3c5] transition hover:border-[#ffe08a]/45 hover:bg-[#ffe08a]/12"

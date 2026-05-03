@@ -3,7 +3,7 @@ import { cards } from "../src/features/battle/model/cards";
 import type { Card } from "../src/features/battle/model/types";
 import { getBoosterById } from "../src/features/boosters/catalog";
 import { STARTER_FREE_BOOSTERS, type PlayerIdentity } from "../src/features/player/profile/types";
-import { fulfillBoosterCatalog, fulfillPlayerProfile, type TestPlayerProfileInput } from "./fixtures/playerProfile";
+import { fulfillBoosterCatalog, fulfillPlayerProfile, seedServerPlayerProfile, type TestPlayerProfileInput } from "./fixtures/playerProfile";
 
 const GUEST_ID_STORAGE_KEY = "nexus:player-guest-id:v1";
 const identity: PlayerIdentity = {
@@ -110,6 +110,36 @@ test("starts an AI battle from the ten-card starter deck-ready state", async ({ 
   await expect(page.getByTestId("round-status")).toBeVisible({ timeout: 10_000 });
   await expect(page.locator('[data-testid^="player-card-"]')).toHaveCount(4);
   await expectPlayerHandToUseDeck(page, fullStarterDeckIds);
+});
+
+test("starts PvP matchmaking from the ten-card starter deck-ready state", async ({ page }) => {
+  const harness = await setupStarterOnboarding(page, "starter-reveal-pvp-e2e");
+
+  await page.goto("/");
+  await expectInitialStarterCatalog(page);
+
+  await openBoosterAndReveal(page, harness, firstBoosterId, firstOpenedCards, {
+    ownedCardIds: firstOpenedCards.map((card) => card.id),
+    deckIds: firstOpenedCards.map((card) => card.id),
+    starterFreeBoostersRemaining: 1,
+    openedBoosterIds: [firstBoosterId],
+  });
+  await page.getByTestId("starter-reveal-continue").click();
+
+  const readyProfile = {
+    ownedCardIds: fullStarterDeckIds,
+    deckIds: fullStarterDeckIds,
+    starterFreeBoostersRemaining: 0,
+    openedBoosterIds: [firstBoosterId, secondBoosterId],
+  };
+  await openBoosterAndReveal(page, harness, secondBoosterId, secondOpenedCards, readyProfile);
+  await page.getByTestId("starter-reveal-continue").click();
+  await expectDeckReady(page);
+  await seedServerPlayerProfile(page, createProfile({ identity: harness.identity, ...readyProfile }));
+
+  await page.getByTestId("starter-deck-ready-play-human").click();
+  await expect(page.getByTestId("human-match-overlay")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("human-match-overlay")).toContainText("Пошук суперника", { timeout: 10_000 });
 });
 
 async function setupStarterOnboarding(page: Page, guestId = identity.guestId) {
@@ -221,6 +251,7 @@ async function expectDeckReady(page: Page) {
   await expect(page.getByTestId("player-profile-shell")).toHaveAttribute("data-starter-free-boosters-remaining", "0");
   await expect(page.locator('[data-testid^="starter-deck-ready-card-"]')).toHaveCount(10);
   await expect(page.getByTestId("starter-deck-ready-play")).toBeEnabled();
+  await expect(page.getByTestId("starter-deck-ready-play-human")).toBeEnabled();
   await expect(page.getByTestId("starter-deck-ready-edit")).toBeEnabled();
 }
 

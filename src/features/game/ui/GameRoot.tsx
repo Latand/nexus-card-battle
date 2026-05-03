@@ -195,15 +195,16 @@ export function GameRoot() {
     setDeckSaveStatus("idle");
     setStarterDeckReadyVisible(isStarterKitReady(nextProfile, allCardIds));
   }, [allCardIds]);
-  const handleStarterDeckPlay = useCallback(() => {
-    if (profileDeckIds.length < PLAYER_DECK_SIZE) return;
+  const handleStarterDeckPlay = useCallback((starterDeckIds: string[], mode: BattleMode = "ai") => {
+    const sanitizedDeckIds = sanitizeDeckIds(starterDeckIds, ownedCardIds);
+    if (sanitizedDeckIds.length < PLAYER_DECK_SIZE) return;
 
     deckTouchedRef.current = true;
-    setDeckIds(profileDeckIds);
+    setDeckIds(sanitizedDeckIds);
     setStarterDeckReadyVisible(false);
-    setBattleMode("ai");
+    setBattleMode(mode);
     setScreen("battle");
-  }, [profileDeckIds]);
+  }, [ownedCardIds]);
   const handleStarterDeckEdit = useCallback(
     (starterDeckIds: string[]) => {
       deckTouchedRef.current = true;
