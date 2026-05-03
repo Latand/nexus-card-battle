@@ -9,6 +9,7 @@ import {
 } from "./types";
 import { cards } from "@/features/battle/model/cards";
 import { MIN_DECK_SIZE } from "@/features/battle/model/constants";
+import { getOwnedCardIds } from "@/features/inventory/inventoryOps";
 import { computeMatchRewards, type MatchResultBucket } from "./progression";
 import { computeLevelFromXp } from "./types";
 import type { RewardSummary } from "@/features/battle/model/types";
@@ -245,7 +246,7 @@ export async function handlePlayerDeckSavePost(request: Request, store: PlayerDe
     const deckIds = parseDeckIds(body.deckIds);
     const profile = await store.findOrCreateByIdentity(identity);
 
-    validateDeckSave(deckIds, profile.ownedCardIds);
+    validateDeckSave(deckIds, getOwnedCardIds(profile.ownedCards));
 
     const savedProfile = await store.saveDeck(identity, deckIds);
     return playerProfileResponse(toPlayerProfile(savedProfile));

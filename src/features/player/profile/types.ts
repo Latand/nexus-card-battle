@@ -1,3 +1,7 @@
+import { getOwnedCardIds, type OwnedCardEntry } from "@/features/inventory/inventoryOps";
+
+export type { OwnedCardEntry } from "@/features/inventory/inventoryOps";
+
 export const STARTER_FREE_BOOSTERS = 2;
 export const DEFAULT_PLAYER_CRYSTALS = 0;
 export const DEFAULT_PLAYER_TOTAL_XP = 0;
@@ -59,7 +63,7 @@ export type PlayerOnboardingState = {
 export type PlayerProfile = {
   id: string;
   identity: PlayerIdentity;
-  ownedCardIds: string[];
+  ownedCards: OwnedCardEntry[];
   deckIds: string[];
   starterFreeBoostersRemaining: number;
   openedBoosterIds: string[];
@@ -80,7 +84,7 @@ export function createNewStoredPlayerProfile(id: string, identity: PlayerIdentit
   return {
     id,
     identity,
-    ownedCardIds: [],
+    ownedCards: [],
     deckIds: [],
     starterFreeBoostersRemaining: STARTER_FREE_BOOSTERS,
     openedBoosterIds: [],
@@ -94,7 +98,8 @@ export function createNewStoredPlayerProfile(id: string, identity: PlayerIdentit
 }
 
 export function toPlayerProfile(profile: StoredPlayerProfile): PlayerProfile {
-  const ownedCardIds = normalizeStringArray(profile.ownedCardIds);
+  const legacyOwnedCardIds = readLegacyOwnedCardIds(profile);
+  const ownedCards = normalizeOwnedCards(profile.ownedCards, legacyOwnedCardIds);
   const deckIds = normalizeStringArray(profile.deckIds);
   const openedBoosterIds = normalizeStringArray(profile.openedBoosterIds);
   const starterFreeBoostersRemaining = normalizeNonNegativeInteger(profile.starterFreeBoostersRemaining, STARTER_FREE_BOOSTERS);
@@ -110,7 +115,7 @@ export function toPlayerProfile(profile: StoredPlayerProfile): PlayerProfile {
   return {
     id: profile.id,
     identity: profile.identity,
-    ownedCardIds,
+    ownedCards,
     deckIds,
     starterFreeBoostersRemaining,
     openedBoosterIds,
@@ -123,7 +128,7 @@ export function toPlayerProfile(profile: StoredPlayerProfile): PlayerProfile {
     eloRating,
     ...(avatarUrl !== undefined ? { avatarUrl } : {}),
     onboarding: createOnboardingState({
-      ownedCardIds,
+      ownedCards,
       deckIds,
       starterFreeBoostersRemaining,
     }),
@@ -138,8 +143,8 @@ export function normalizeAvatarUrl(value: unknown): string | undefined {
   return trimmed;
 }
 
-export function createOnboardingState(profile: Pick<StoredPlayerProfile, "ownedCardIds" | "deckIds" | "starterFreeBoostersRemaining">): PlayerOnboardingState {
-  const collectionReady = profile.ownedCardIds.length > 0;
+export function createOnboardingState(profile: Pick<StoredPlayerProfile, "ownedCards" | "deckIds" | "starterFreeBoostersRemaining">): PlayerOnboardingState {
+  const collectionReady = getOwnedCardIds(profile.ownedCards).length > 0;
   const deckReady = profile.deckIds.length > 0;
 
   return {
@@ -218,6 +223,29 @@ function parseIdentityId(value: unknown, fieldName: "telegramId" | "guestId") {
 function normalizeStringArray(value: unknown) {
   if (!Array.isArray(value)) return [];
   return [...new Set(value.filter((item): item is string => typeof item === "string" && item.length > 0))];
+}
+
+function readLegacyOwnedCardIds(profile: StoredPlayerProfile): string[] {
+  const legacy = (profile as unknown as { ownedCardIds?: unknown }).ownedCardIds;
+  return normalizeStringArray(legacy);
+}
+
+function normalizeOwnedCards(value: unknown, legacyOwnedCardIds: readonly string[]): OwnedCardEntry[] {
+  if (!Array.isArray(value)) {
+    return legacyOwnedCardIds.map((cardId) => ({ cardId, count: 1 }));
+  }
+
+  const merged = new Map<string, number>();
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    const cardId = item.cardId;
+    const count = item.count;
+    if (typeof cardId !== "string" || !cardId) continue;
+    if (typeof count !== "number" || !Number.isInteger(count) || count <= 0) continue;
+    merged.set(cardId, (merged.get(cardId) ?? 0) + count);
+  }
+
+  return [...merged.entries()].map(([cardId, count]) => ({ cardId, count }));
 }
 
 function normalizeNonNegativeInteger(value: unknown, fallback: number) {
