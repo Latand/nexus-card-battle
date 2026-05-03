@@ -368,6 +368,8 @@ export function GameRoot() {
         deckSaveStatus={deckSaveStatus}
         deckReadyToPlay={deckReadyToPlay}
         starterFreeBoostersRemaining={starterFreeBoostersRemaining}
+        playerIdentity={playerIdentity}
+        onPlayerUpdated={setPlayerProfile}
         onDeckChange={handleDeckChange}
         onPlay={handleSavedDeckPlay}
       />

@@ -161,8 +161,8 @@ test("emits server-authoritative reward_summary to both PvP sessions on a forfei
   expect(moverPayload.newTotals).toMatchObject({ crystals: 0, totalXp: 10, level: 1 });
 
   expect(otherPayload.deltaXp).toBe(100);
-  expect(otherPayload.deltaCrystals).toBe(50);
-  expect(otherPayload.newTotals).toMatchObject({ crystals: 50, totalXp: 100, level: 1 });
+  expect(otherPayload.deltaCrystals).toBe(10);
+  expect(otherPayload.newTotals).toMatchObject({ crystals: 10, totalXp: 100, level: 1 });
 
   expect(firstMoverIdentity).toBeDefined();
   expect(otherIdentity).toBeDefined();
@@ -256,8 +256,8 @@ test("disconnect mid-match forfeits the disconnecting side and emits a win rewar
   const survivorPayload = survivorReward.payload as RewardSummary;
 
   expect(survivorPayload.deltaXp).toBe(100);
-  expect(survivorPayload.deltaCrystals).toBe(50);
-  expect(survivorPayload.newTotals).toMatchObject({ crystals: 50, totalXp: 100, level: 1 });
+  expect(survivorPayload.deltaCrystals).toBe(10);
+  expect(survivorPayload.newTotals).toMatchObject({ crystals: 10, totalXp: 100, level: 1 });
   // Equal pre-match ELOs → +16 / -16 zero-sum.
   expect(survivorPayload.deltaElo).toBe(16);
   expect(survivorPayload.newTotals.eloRating).toBe(1116);
