@@ -85,6 +85,20 @@ export type ApplyMatchRewardsContext =
   | { mode: "pve"; result: MatchResultBucket }
   | { mode: "pvp"; result: MatchResultBucket; opponentEloBefore?: number };
 
+export type PvpSideInput = {
+  key: string;
+  identity: PlayerIdentity;
+  result: MatchResultBucket;
+};
+
+export type PvpSideOutcome = {
+  key: string;
+  summary: RewardSummary | null;
+  error?: unknown;
+};
+
+export type PvpEloReadFailureLog = (event: { key: string; error: unknown }) => void;
+
 export async function applyAndSummarizeMatchRewards(
   store: PlayerMatchRewardsStore,
   identity: PlayerIdentity,
@@ -130,6 +144,48 @@ export async function applyAndSummarizeMatchRewards(
   };
 
   return { summary, persisted };
+}
+
+export async function applyPvpMatchRewardsForBothSides(
+  store: PlayerMatchRewardsStore,
+  sides: [PvpSideInput, PvpSideInput],
+  options: { onEloReadFailure?: PvpEloReadFailureLog } = {},
+): Promise<[PvpSideOutcome, PvpSideOutcome]> {
+  const eloReads = await Promise.all(
+    sides.map(async (side) => {
+      try {
+        const profile = toPlayerProfile(await store.findOrCreateByIdentity(side.identity));
+        return { key: side.key, ok: true as const, rating: profile.eloRating };
+      } catch (error) {
+        options.onEloReadFailure?.({ key: side.key, error });
+        return { key: side.key, ok: false as const, error };
+      }
+    }),
+  );
+  // ELO is all-or-nothing per match: an asymmetric apply (one side moves,
+  // the other does not) would break zero-sum and corrupt persistent state.
+  const everyEloRead = eloReads.every((entry) => entry.ok);
+  const ratingByKey = new Map<string, number>();
+  for (const entry of eloReads) if (entry.ok) ratingByKey.set(entry.key, entry.rating);
+
+  const outcomes = await Promise.all(
+    sides.map(async (side, index) => {
+      const opponent = sides[index === 0 ? 1 : 0];
+      const matchInfo: ApplyMatchRewardsContext =
+        everyEloRead && ratingByKey.has(opponent.key)
+          ? { mode: "pvp", result: side.result, opponentEloBefore: ratingByKey.get(opponent.key)! }
+          : { mode: "pvp", result: side.result };
+
+      try {
+        const { summary } = await applyAndSummarizeMatchRewards(store, side.identity, matchInfo);
+        return { key: side.key, summary };
+      } catch (error) {
+        return { key: side.key, summary: null, error };
+      }
+    }),
+  );
+
+  return outcomes as [PvpSideOutcome, PvpSideOutcome];
 }
 
 function levelProgressPercent(levelInfo: { xpIntoLevel: number; xpForNextLevel: number }) {
