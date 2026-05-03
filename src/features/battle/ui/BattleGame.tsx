@@ -20,7 +20,7 @@ import {
   startNextRound,
 } from "../model/game";
 import type { EnemyMove } from "../model/game";
-import type { Card, Clash, GameState, MatchResult, Outcome, Phase, RewardSummary, Side } from "../model/types";
+import type { Card, Clash, GameState, MatchResult, Outcome, Phase, Rarity, RewardSummary, Side } from "../model/types";
 import { BattleOverlay } from "./components/BattleOverlay";
 import { Hand } from "./components/Hand";
 import { NamePlate } from "./components/ResourceCounter";
@@ -1331,6 +1331,28 @@ function RewardOverlay({
               detailTestId="reward-level-up-headline"
             />
           ) : null}
+
+          {visibleTiles.showMilestone
+            ? rewards?.milestoneCardRewards.map((milestone, index) => (
+                // Order is deterministic from milestone-table sort; cardId can
+                // repeat in one match when a small rarity bucket gets picked
+                // twice, so the index disambiguates the React key.
+                <RewardStatTile
+                  key={`${index}-${milestone.cardId}`}
+                  testId="reward-milestone-tile"
+                  icon="🃏"
+                  label="Карта-бонус"
+                  deltaText={milestone.cardName}
+                  detailText={milestoneRarityLabel(milestone.rarity)}
+                  tone="levelUp"
+                  dataAttrs={{
+                    "data-card-id": milestone.cardId,
+                    "data-rarity": milestone.rarity,
+                  }}
+                  detailTestId="reward-milestone-detail"
+                />
+              ))
+            : null}
         </div>
 
         {persistedRewardsError ? (
@@ -1549,6 +1571,13 @@ function statTileDeltaColorClass(tone: "crystal" | "elo" | "loss" | "levelUp") {
   if (tone === "crystal") return "text-[#65d7e9]";
   if (tone === "loss") return "text-[#ff8a7c]";
   return "text-[#ffe08a]";
+}
+
+function milestoneRarityLabel(rarity: Rarity) {
+  if (rarity === "Legend") return "Легенда";
+  if (rarity === "Unique") return "Унікальна";
+  if (rarity === "Rare") return "Рідкісна";
+  return "Звичайна";
 }
 
 function OpponentThinkingIndicator() {

@@ -1128,14 +1128,21 @@ function createMemoryPlayerProfileStore() {
       const xpBeforeMatch = Math.max(0, afterIncrement.totalXp - rewards.deltaXp);
       const oldLevel = computeLevelFromXp(xpBeforeMatch).level;
       const newLevel = computeLevelFromXp(afterIncrement.totalXp).level;
-      if (newLevel <= oldLevel) return afterIncrement;
+      if (newLevel <= oldLevel) return { profile: afterIncrement, milestoneCardRewards: [] };
 
       const bonus = computeLevelUpBonusForRange(oldLevel, newLevel);
-      if (bonus <= 0) return afterIncrement;
+      let latest = afterIncrement;
+      if (bonus > 0) {
+        latest = { ...afterIncrement, crystals: afterIncrement.crystals + bonus };
+        profiles[index] = latest;
+      }
 
-      const afterBonus = { ...afterIncrement, crystals: afterIncrement.crystals + bonus };
-      profiles[index] = afterBonus;
-      return afterBonus;
+      // Op-C — milestone-card grant. Test-mode store does NOT need to import
+      // the full milestones module; the milestone cards are computed inside
+      // the Mongo store path. The server-test memory store keeps Op-C empty
+      // (the e2e Playwright tests that depend on milestone tiles inject a
+      // mocked /api/player/match-finished response anyway).
+      return { profile: latest, milestoneCardRewards: [] };
     },
   };
 }
