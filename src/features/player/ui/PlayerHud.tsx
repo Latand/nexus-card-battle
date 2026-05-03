@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useOnlineCount } from "@/features/presence/client";
 import { DEFAULT_PLAYER_AVATAR_URL, resolveAvatarUrl, useTelegramAvatar } from "@/features/player/profile/avatar";
@@ -121,6 +122,14 @@ function SidebarHud({
         Грати
       </button>
 
+      <Link
+        href="/guide"
+        className="grid min-h-[36px] place-items-center rounded-md border border-[#d4b06a]/35 bg-black/30 px-2 text-[11px] font-black uppercase tracking-[0.14em] text-[#d4b06a] transition hover:border-[#ffe08a]/55 hover:bg-black/45 hover:text-[#ffe08a]"
+        data-testid="player-hud-guide-link"
+      >
+        Як грати
+      </Link>
+
       <div className="mt-auto" />
 
       <div
@@ -194,6 +203,15 @@ function MobileHud({
           </b>
         </span>
       </div>
+
+      <Link
+        href="/guide"
+        aria-label="Як грати"
+        className="inline-flex shrink-0 items-center justify-center rounded-full border border-[#d4b06a]/45 bg-black/40 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#d4b06a] hover:border-[#ffe08a]/65 hover:text-[#ffe08a]"
+        data-testid="player-hud-guide-link-mobile"
+      >
+        Як грати
+      </Link>
 
       <span
         className={cn(
