@@ -6,10 +6,12 @@ const { WebSocketServer } = require("ws");
 const { cards } = require("./src/features/battle/model/cards.ts");
 const { getMongoPlayerProfileStore } = require("./src/features/player/profile/mongo.ts");
 const {
+  computeLevelFromXp,
   createNewStoredPlayerProfile,
   isSamePlayerIdentity,
   parsePlayerIdentity,
 } = require("./src/features/player/profile/types.ts");
+const { computeLevelUpBonusForRange } = require("./src/features/player/profile/progression.ts");
 
 const dev = process.argv.includes("--dev") || process.env.NODE_ENV === "development";
 const hostname = getCliValue("--hostname") || process.env.HOSTNAME || "0.0.0.0";
@@ -719,6 +721,11 @@ function handleTestProfileRequest(request, response) {
           ? Math.max(0, body.starterFreeBoostersRemaining)
           : 0,
         openedBoosterIds: getProfileCardIds(body.openedBoosterIds),
+        crystals: nonNegativeIntegerOrUndefined(body.crystals),
+        totalXp: nonNegativeIntegerOrUndefined(body.totalXp),
+        wins: nonNegativeIntegerOrUndefined(body.wins),
+        losses: nonNegativeIntegerOrUndefined(body.losses),
+        draws: nonNegativeIntegerOrUndefined(body.draws),
       });
 
       response.statusCode = 200;
@@ -771,9 +778,13 @@ function createMemoryPlayerProfileStore() {
       return profile;
     },
     seedProfile(profile) {
+      const definedFields = {};
+      for (const [key, value] of Object.entries(profile)) {
+        if (value !== undefined) definedFields[key] = value;
+      }
       const nextProfile = {
         ...createNewStoredPlayerProfile(profile.id, profile.identity),
-        ...profile,
+        ...definedFields,
       };
       const existingIndex = profiles.findIndex((item) => isSamePlayerIdentity(item.identity, nextProfile.identity));
 
@@ -782,7 +793,41 @@ function createMemoryPlayerProfileStore() {
 
       return nextProfile;
     },
+    async applyMatchRewards(identity, rewards) {
+      const index = profiles.findIndex((profile) => isSamePlayerIdentity(profile.identity, identity));
+      if (index < 0) {
+        throw new Error("Player profile did not exist for match rewards apply.");
+      }
+
+      const current = profiles[index];
+      const counterField = rewards.result === "win" ? "wins" : rewards.result === "loss" ? "losses" : "draws";
+
+      const afterIncrement = {
+        ...current,
+        totalXp: current.totalXp + rewards.deltaXp,
+        crystals: current.crystals + rewards.matchCrystals,
+        [counterField]: (current[counterField] ?? 0) + 1,
+      };
+      profiles[index] = afterIncrement;
+
+      const xpBeforeMatch = Math.max(0, afterIncrement.totalXp - rewards.deltaXp);
+      const oldLevel = computeLevelFromXp(xpBeforeMatch).level;
+      const newLevel = computeLevelFromXp(afterIncrement.totalXp).level;
+      if (newLevel <= oldLevel) return afterIncrement;
+
+      const bonus = computeLevelUpBonusForRange(oldLevel, newLevel);
+      if (bonus <= 0) return afterIncrement;
+
+      const afterBonus = { ...afterIncrement, crystals: afterIncrement.crystals + bonus };
+      profiles[index] = afterBonus;
+      return afterBonus;
+    },
   };
+}
+
+function nonNegativeIntegerOrUndefined(value) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) return undefined;
+  return value;
 }
 
 function getCliValue(name) {

@@ -173,10 +173,21 @@ export type CardReward = {
   levelProgress: number;
 };
 
+export type RewardSummaryTotals = {
+  crystals: number;
+  totalXp: number;
+  level: number;
+};
+
 export type RewardSummary = {
   matchXp: number;
   levelProgress: number;
   cardRewards: CardReward[];
+  deltaXp: number;
+  deltaCrystals: number;
+  leveledUp: boolean;
+  levelUpBonusCrystals: number;
+  newTotals: RewardSummaryTotals;
 };
 
 export type GameState = {

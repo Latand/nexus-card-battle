@@ -93,6 +93,11 @@ export function buildRewards(player: Fighter, result: MatchResult): RewardSummar
       xp: 8 + card.level * 2 + index,
       levelProgress: Math.min(100, 24 + card.level * 13 + index * 9),
     })),
+    deltaXp: 0,
+    deltaCrystals: 0,
+    leveledUp: false,
+    levelUpBonusCrystals: 0,
+    newTotals: { crystals: 0, totalXp: 0, level: 1 },
   };
 }
 

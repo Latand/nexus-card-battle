@@ -1,7 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { cards } from "../src/features/battle/model/cards";
-import { handlePlayerDeckSavePost, handlePlayerProfileGet, handlePlayerProfilePost, type PlayerDeckStore, type PlayerProfileStore } from "../src/features/player/profile/api";
-import { createNewStoredPlayerProfile, isSamePlayerIdentity, type PlayerIdentity, type PlayerProfile, type StoredPlayerProfile } from "../src/features/player/profile/types";
+import {
+  handlePlayerDeckSavePost,
+  handlePlayerMatchFinishedPost,
+  handlePlayerProfileGet,
+  handlePlayerProfilePost,
+  type ApplyMatchRewardsInput,
+  type PlayerDeckStore,
+  type PlayerMatchRewardsStore,
+  type PlayerProfileStore,
+} from "../src/features/player/profile/api";
+import { computeLevelFromXp, createNewStoredPlayerProfile, isSamePlayerIdentity, type PlayerIdentity, type PlayerProfile, type StoredPlayerProfile } from "../src/features/player/profile/types";
+import { computeLevelUpBonusForRange } from "../src/features/player/profile/progression";
+import type { RewardSummary } from "../src/features/battle/model/types";
 
 const ownedDeckIdentity: PlayerIdentity = {
   mode: "guest",
@@ -163,7 +174,130 @@ describe("player profile API", () => {
   });
 });
 
-class MemoryPlayerProfileStore implements PlayerDeckStore {
+describe("player match-finished API (PvE)", () => {
+  const identity: PlayerIdentity = { mode: "guest", guestId: "guest-pve-rewards" };
+
+  test("a fresh profile + PvE win persists +30 XP, no crystals, no level-up, and increments wins", async () => {
+    const store = new MemoryPlayerProfileStore();
+    const response = await postMatchFinished(store, { identity, mode: "pve", result: "win" });
+    const body = (await response.json()) as { rewards: RewardSummary; player: PlayerProfile };
+
+    expect(response.status).toBe(200);
+    expect(body.rewards.deltaXp).toBe(30);
+    expect(body.rewards.deltaCrystals).toBe(0);
+    expect(body.rewards.leveledUp).toBe(false);
+    expect(body.rewards.levelUpBonusCrystals).toBe(0);
+    expect(body.rewards.newTotals).toEqual({ crystals: 0, totalXp: 30, level: 1 });
+
+    expect(body.player.totalXp).toBe(30);
+    expect(body.player.crystals).toBe(0);
+    expect(body.player.level).toBe(1);
+    expect(body.player.wins).toBe(1);
+    expect(body.player.losses).toBe(0);
+    expect(body.player.draws).toBe(0);
+
+    const persisted = store.snapshot(identity);
+    expect(persisted?.totalXp).toBe(30);
+    expect(persisted?.wins).toBe(1);
+  });
+
+  test("a single PvE win never crosses the level-1 boundary (50 * 2^2 = 200 XP needed)", async () => {
+    const store = new MemoryPlayerProfileStore();
+    const response = await postMatchFinished(store, { identity, mode: "pve", result: "win" });
+    const body = (await response.json()) as { rewards: RewardSummary };
+
+    expect(response.status).toBe(200);
+    expect(body.rewards.leveledUp).toBe(false);
+    expect(body.rewards.newTotals.level).toBe(1);
+    expect(body.rewards.newTotals.crystals).toBe(0);
+  });
+
+  test("seven PvE wins accumulate to 210 XP and trigger level-up to level 2 with a 50-crystal bonus", async () => {
+    const store = new MemoryPlayerProfileStore();
+
+    let lastBody: { rewards: RewardSummary; player: PlayerProfile } | undefined;
+    for (let i = 0; i < 7; i += 1) {
+      const response = await postMatchFinished(store, { identity, mode: "pve", result: "win" });
+      lastBody = (await response.json()) as { rewards: RewardSummary; player: PlayerProfile };
+    }
+
+    if (!lastBody) throw new Error("Expected at least one match finished response.");
+
+    expect(lastBody.player.totalXp).toBe(210);
+    expect(lastBody.player.level).toBe(2);
+    expect(lastBody.player.crystals).toBe(50);
+    expect(lastBody.player.wins).toBe(7);
+    expect(lastBody.rewards.leveledUp).toBe(true);
+    expect(lastBody.rewards.deltaCrystals).toBe(50);
+    expect(lastBody.rewards.levelUpBonusCrystals).toBe(50);
+    expect(lastBody.rewards.newTotals).toEqual({ crystals: 50, totalXp: 210, level: 2 });
+  });
+
+  test("PvE draws and losses persist their result counters and XP", async () => {
+    const store = new MemoryPlayerProfileStore();
+    await postMatchFinished(store, { identity, mode: "pve", result: "draw" });
+    await postMatchFinished(store, { identity, mode: "pve", result: "loss" });
+    await postMatchFinished(store, { identity, mode: "pve", result: "loss" });
+
+    const persisted = store.snapshot(identity);
+    expect(persisted?.totalXp).toBe(15 + 5 + 5);
+    expect(persisted?.draws).toBe(1);
+    expect(persisted?.losses).toBe(2);
+    expect(persisted?.wins).toBe(0);
+    expect(persisted?.crystals).toBe(0);
+  });
+
+  test("rejects a PvP request with a 400 invalid_match", async () => {
+    const store = new MemoryPlayerProfileStore();
+    const response = await postMatchFinished(store, { identity, mode: "pvp", result: "win" });
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("invalid_match");
+  });
+
+  test("rejects an invalid result bucket with a 400 invalid_match", async () => {
+    const store = new MemoryPlayerProfileStore();
+    const response = await postMatchFinished(store, { identity, mode: "pve", result: "victory" });
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("invalid_match");
+  });
+
+  test("rejects a missing identity with a 400 invalid_identity", async () => {
+    const store = new MemoryPlayerProfileStore();
+    const response = await postMatchFinished(store, { mode: "pve", result: "win" });
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("invalid_identity");
+  });
+
+  test("two concurrent PvE wins racing across a level threshold add 2x deltaXp and pay the bonus exactly once", async () => {
+    // Both callers' pre-call view says "I crossed level 2"; the persistence
+    // layer must still pay the bonus only once.
+    const racyIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-pve-race" };
+    const store = new MemoryPlayerProfileStore([
+      { ...createNewStoredPlayerProfile("player-race", racyIdentity), totalXp: 195 },
+    ]);
+
+    const responses = await Promise.all([
+      postMatchFinished(store, { identity: racyIdentity, mode: "pve", result: "win" }),
+      postMatchFinished(store, { identity: racyIdentity, mode: "pve", result: "win" }),
+    ]);
+    for (const response of responses) {
+      expect(response.status).toBe(200);
+    }
+
+    const persisted = store.snapshot(racyIdentity);
+    expect(persisted?.totalXp).toBe(195 + 30 + 30);
+    expect(persisted?.crystals).toBe(50);
+    expect(persisted?.wins).toBe(2);
+  });
+});
+
+class MemoryPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewardsStore {
   private readonly profiles: StoredPlayerProfile[];
   private nextId: number;
   createdCount = 0;
@@ -191,11 +325,62 @@ class MemoryPlayerProfileStore implements PlayerDeckStore {
     profile.deckIds = [...deckIds];
     return profile;
   }
+
+  async applyMatchRewards(identity: PlayerIdentity, rewards: ApplyMatchRewardsInput): Promise<StoredPlayerProfile> {
+    const index = this.profiles.findIndex((profile) => isSamePlayerIdentity(profile.identity, identity));
+    if (index < 0) throw new Error("Profile does not exist.");
+
+    const current = this.profiles[index];
+    const counterField =
+      rewards.result === "win" ? "wins" : rewards.result === "loss" ? "losses" : "draws";
+
+    const afterIncrement: StoredPlayerProfile = {
+      ...current,
+      totalXp: current.totalXp + rewards.deltaXp,
+      crystals: current.crystals + rewards.matchCrystals,
+      [counterField]: (current[counterField] ?? 0) + 1,
+    };
+    this.profiles[index] = afterIncrement;
+
+    // Yield so concurrent callers can interleave their own Op A — mirrors
+    // the Mongo round-trip and lets the race test exercise the real window.
+    await Promise.resolve();
+
+    const xpBeforeThisMatch = Math.max(0, afterIncrement.totalXp - rewards.deltaXp);
+    const oldLevel = computeLevelFromXp(xpBeforeThisMatch).level;
+    const newLevel = computeLevelFromXp(afterIncrement.totalXp).level;
+    if (newLevel <= oldLevel) return this.profiles[index];
+
+    const bonus = computeLevelUpBonusForRange(oldLevel, newLevel);
+    if (bonus <= 0) return this.profiles[index];
+
+    const latest = this.profiles[index];
+    const afterBonus: StoredPlayerProfile = { ...latest, crystals: latest.crystals + bonus };
+    this.profiles[index] = afterBonus;
+    return afterBonus;
+  }
+
+  snapshot(identity: PlayerIdentity): StoredPlayerProfile | undefined {
+    return this.profiles.find((profile) => isSamePlayerIdentity(profile.identity, identity));
+  }
 }
 
 function postProfile(store: PlayerProfileStore, body: unknown) {
   return handlePlayerProfilePost(
     new Request("http://localhost/api/player", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    }),
+    store,
+  );
+}
+
+function postMatchFinished(store: PlayerMatchRewardsStore, body: unknown) {
+  return handlePlayerMatchFinishedPost(
+    new Request("http://localhost/api/player/match-finished", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
