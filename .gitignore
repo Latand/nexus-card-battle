@@ -37,7 +37,6 @@ yarn-error.log*
 /analysis/
 /artifacts/
 /responsive-screenshots/
-docker-compose.override.yml
 
 # env files (can opt-in for committing if needed)
 .env*

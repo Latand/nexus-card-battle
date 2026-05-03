@@ -1,0 +1,13 @@
+# Local dev override: expose mongo on host so `bun run dev:next` can connect.
+#
+# Usage:
+#   docker compose up -d mongo            # mongo only, with host port 27017
+#   docker stop nexus-card-battle         # stop the prod container if running
+#   PORT=3011 MONGODB_URI=mongodb://127.0.0.1:27017/nexus-card-battle \
+#     bun run dev:next -- --port 3011     # next dev with HMR
+#
+# Production deploy ignores this file (docker compose -f docker-compose.yml ...).
+services:
+  mongo:
+    ports:
+      - "127.0.0.1:27017:27017"
