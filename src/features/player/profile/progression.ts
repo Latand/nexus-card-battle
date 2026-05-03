@@ -14,6 +14,18 @@ export const PVE_XP_REWARDS = {
   loss: 5,
 } as const;
 
+export const PVP_XP_REWARDS = {
+  win: 100,
+  draw: 50,
+  loss: 10,
+} as const;
+
+export const PVP_CRYSTAL_REWARDS = {
+  win: 50,
+  draw: 20,
+  loss: 0,
+} as const;
+
 export const LEVEL_UP_CRYSTAL_BONUS_PER_LEVEL = 25;
 
 export type MatchResultBucket = "win" | "draw" | "loss";
@@ -55,20 +67,15 @@ export function computeMatchRewards(
   profileBefore: Pick<PlayerProfile, "crystals" | "totalXp" | "level">,
   matchInfo: MatchInfo,
 ): ComputedMatchRewards {
-  if (matchInfo.mode === "pvp") {
-    throw new Error("PvP rewards are not implemented.");
-  }
-
-  if (matchInfo.mode !== "pve") {
+  if (matchInfo.mode !== "pve" && matchInfo.mode !== "pvp") {
     throw new Error(`Unsupported match mode: ${(matchInfo as { mode: string }).mode}`);
   }
 
-  const xpFromMatch = PVE_XP_REWARDS[matchInfo.result];
+  const xpFromMatch = matchInfo.mode === "pvp" ? PVP_XP_REWARDS[matchInfo.result] : PVE_XP_REWARDS[matchInfo.result];
+  const matchCrystals = matchInfo.mode === "pvp" ? PVP_CRYSTAL_REWARDS[matchInfo.result] : 0;
   const crystalsBefore = nonNegativeInteger(profileBefore.crystals, DEFAULT_PLAYER_CRYSTALS);
   const totalXpBefore = nonNegativeInteger(profileBefore.totalXp, DEFAULT_PLAYER_TOTAL_XP);
   const levelBefore = positiveInteger(profileBefore.level, DEFAULT_PLAYER_LEVEL);
-
-  const matchCrystals = 0;
 
   const newTotalXp = totalXpBefore + xpFromMatch;
   const newLevelInfo = computeLevelFromXp(newTotalXp);

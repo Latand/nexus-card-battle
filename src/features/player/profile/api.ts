@@ -67,36 +67,7 @@ export async function handlePlayerMatchFinishedPost(request: Request, store: Pla
     const mode = parseMatchMode(body.mode);
     const result = parseMatchResult(body.result);
 
-    const profile = toPlayerProfile(await store.findOrCreateByIdentity(identity));
-    const rewards = computeMatchRewards(
-      { crystals: profile.crystals, totalXp: profile.totalXp, level: profile.level },
-      { mode, result },
-    );
-
-    const persisted = toPlayerProfile(
-      await store.applyMatchRewards(identity, {
-        result,
-        deltaXp: rewards.deltaXp,
-        matchCrystals: rewards.matchCrystals,
-      }),
-    );
-
-    const persistedLevelInfo = computeLevelFromXp(persisted.totalXp);
-
-    const summary: RewardSummary = {
-      matchXp: rewards.deltaXp,
-      levelProgress: levelProgressPercent(persistedLevelInfo),
-      cardRewards: [],
-      deltaXp: rewards.deltaXp,
-      deltaCrystals: rewards.deltaCrystals,
-      leveledUp: rewards.leveledUp,
-      levelUpBonusCrystals: rewards.levelUpBonusCrystals,
-      newTotals: {
-        crystals: persisted.crystals,
-        totalXp: persisted.totalXp,
-        level: persisted.level,
-      },
-    };
+    const { summary, persisted } = await applyAndSummarizeMatchRewards(store, identity, { mode, result });
 
     return Response.json(
       { rewards: summary, player: persisted },
@@ -105,6 +76,45 @@ export async function handlePlayerMatchFinishedPost(request: Request, store: Pla
   } catch (error) {
     return playerProfileErrorResponse(error);
   }
+}
+
+export async function applyAndSummarizeMatchRewards(
+  store: PlayerMatchRewardsStore,
+  identity: PlayerIdentity,
+  matchInfo: { mode: "pve" | "pvp"; result: MatchResultBucket },
+): Promise<{ summary: RewardSummary; persisted: PlayerProfile }> {
+  const profile = toPlayerProfile(await store.findOrCreateByIdentity(identity));
+  const rewards = computeMatchRewards(
+    { crystals: profile.crystals, totalXp: profile.totalXp, level: profile.level },
+    matchInfo,
+  );
+
+  const persisted = toPlayerProfile(
+    await store.applyMatchRewards(identity, {
+      result: matchInfo.result,
+      deltaXp: rewards.deltaXp,
+      matchCrystals: rewards.matchCrystals,
+    }),
+  );
+
+  const persistedLevelInfo = computeLevelFromXp(persisted.totalXp);
+
+  const summary: RewardSummary = {
+    matchXp: rewards.deltaXp,
+    levelProgress: levelProgressPercent(persistedLevelInfo),
+    cardRewards: [],
+    deltaXp: rewards.deltaXp,
+    deltaCrystals: rewards.deltaCrystals,
+    leveledUp: rewards.leveledUp,
+    levelUpBonusCrystals: rewards.levelUpBonusCrystals,
+    newTotals: {
+      crystals: persisted.crystals,
+      totalXp: persisted.totalXp,
+      level: persisted.level,
+    },
+  };
+
+  return { summary, persisted };
 }
 
 function levelProgressPercent(levelInfo: { xpIntoLevel: number; xpForNextLevel: number }) {

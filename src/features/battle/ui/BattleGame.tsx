@@ -107,6 +107,12 @@ type HumanForfeitMessage = HumanSocketMessage & {
   reason?: string;
 };
 
+type HumanRewardSummaryMessage = HumanSocketMessage & {
+  type: "reward_summary";
+  matchId?: string;
+  payload: RewardSummary;
+};
+
 export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity, playerName, telegramPlayer, mode = "ai", onOpenCollection, onSwitchMode }: BattleGameProps = {}) {
   const isHumanMatch = mode === "human";
   const initialGame = useMemo(
@@ -132,6 +138,9 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const socketRef = useRef<WebSocket | null>(null);
   const gameRef = useRef(game);
   const matchInfoRef = useRef(matchInfo);
+  // Outlives matchInfo so a reward_summary that arrives after forfeit/match
+  // end (when matchInfo has already been cleared) can still be matched.
+  const activeRewardMatchIdRef = useRef<string | null>(null);
   const remoteFirstMoveRef = useRef<{ round: number; move: HumanFirstMove } | null>(null);
   const pendingFirstMovesRef = useRef(new Map<number, HumanFirstMoveMessage>());
   const pendingRoundResolvedRef = useRef(new Map<number, HumanRoundResolvedMessage>());
@@ -500,6 +509,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       const firstCard = getAvailableCards(nextGame.player)[0];
 
       clearHumanMessageBuffers();
+      activeRewardMatchIdRef.current = nextMatch.matchId;
       setMatchInfo(nextMatch);
       setGame(nextGame);
       setSelectedId(firstCard?.id);
@@ -512,6 +522,8 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       setTurnSeconds(TURN_SECONDS);
       setHumanStatus("matched");
       setHumanMessage("");
+      setPersistedRewards(null);
+      setPersistedRewardsError(null);
       return;
     }
 
@@ -527,6 +539,11 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
 
     if (message.type === "match_forfeit") {
       handleHumanForfeit(message as HumanForfeitMessage);
+      return;
+    }
+
+    if (message.type === "reward_summary") {
+      handleHumanRewardSummary(message as HumanRewardSummaryMessage);
       return;
     }
 
@@ -599,7 +616,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     }
 
     const first = message.firstPlayerId === currentMatch.playerId ? "player" : "enemy";
-    const enemyMove = { card: enemyCard, energy: opponentMove.energy };
+    const enemyMove = { card: enemyCard, energy: opponentMove.energy, damageBoost: Boolean(opponentMove.boosted) };
     resolvingHumanRoundRef.current = message.round;
     const outcome = resolveRound(
       currentGame.player,
@@ -634,20 +651,20 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     }));
   }
 
+  function handleHumanRewardSummary(message: HumanRewardSummaryMessage) {
+    if (!message.payload) return;
+    if (!message.matchId || message.matchId !== activeRewardMatchIdRef.current) return;
+    setPersistedRewards(message.payload);
+    setPersistedRewardsError(null);
+  }
+
   function handleHumanForfeit(message: HumanForfeitMessage) {
     const currentMatch = matchInfoRef.current;
     if (!currentMatch || message.matchId !== currentMatch.matchId) return;
 
     const won = message.winnerId === currentMatch.playerId;
-    const loserName = message.loserId === currentMatch.playerId ? gameRef.current.player.name : gameRef.current.enemy.name;
-    const winnerName = message.winnerId === currentMatch.playerId ? gameRef.current.player.name : gameRef.current.enemy.name;
+    const matchResult: MatchResult = won ? "player" : "enemy";
 
-    setHumanStatus("forfeit");
-    setHumanMessage(
-      won
-        ? `Перемога: ${loserName} не встиг зробити хід.`
-        : `Поразка: ${winnerName} перемагає, бо твій час ходу вийшов.`,
-    );
     setMatchInfo(null);
     setPending(null);
     setEnemyLockedMove(null);
@@ -655,6 +672,11 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setSelectionOpen(false);
     setTurnSeconds(0);
     clearHumanMessageBuffers();
+    setGame((value) => ({
+      ...value,
+      phase: "reward_summary",
+      matchResult,
+    }));
   }
 
 
@@ -668,6 +690,9 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setEnemyLockedMove(null);
     setRoundWinnerCardIds(new Set());
     setSelectionOpen(false);
+    setPersistedRewards(null);
+    setPersistedRewardsError(null);
+    activeRewardMatchIdRef.current = null;
     clearHumanMessageBuffers();
 
     if (!isSocketOpen(socket)) return;
@@ -928,7 +953,6 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
           onReset={reset}
           persistedRewards={persistedRewards}
           persistedRewardsError={persistedRewardsError}
-          isHumanMatch={isHumanMatch}
         />
       ) : null}
       {!humanBlockingOverlay && showBattle && pending ? <BattleOverlay outcome={pending} player={game.player} enemy={game.enemy} phase={game.phase} /> : null}
@@ -1129,26 +1153,25 @@ function PhaseOverlay({
   onReset,
   persistedRewards,
   persistedRewardsError,
-  isHumanMatch,
 }: {
   game: GameState;
   verdict: string;
   onReset: () => void;
   persistedRewards: RewardSummary | null;
   persistedRewardsError: string | null;
-  isHumanMatch: boolean;
 }) {
   if (["player_turn", "card_preview", "opponent_turn", "battle_intro", "damage_apply"].includes(game.phase)) return null;
 
   if (game.phase === "reward_summary") {
-    const overlayRewards = !isHumanMatch && persistedRewards ? persistedRewards : game.rewards;
+    const overlayRewards = persistedRewards ?? game.rewards;
+    const showPersistedDetails = persistedRewards !== null;
     return (
       <RewardOverlay
         result={game.matchResult}
         rewards={overlayRewards}
         onReset={onReset}
-        persistedRewardsError={!isHumanMatch ? persistedRewardsError : null}
-        showPersistedDetails={!isHumanMatch}
+        persistedRewardsError={persistedRewardsError}
+        showPersistedDetails={showPersistedDetails}
       />
     );
   }
@@ -1198,6 +1221,9 @@ function RewardOverlay({
   const showUserXpTile = showPersistedDetails && userXpDelta > 0;
   const showLevelUpTile = showPersistedDetails && Boolean(rewards?.leveledUp);
   const newLevel = rewards?.newTotals?.level;
+  const crystalsDelta = rewards?.deltaCrystals ?? 0;
+  const newCrystals = rewards?.newTotals?.crystals ?? 0;
+  const showCrystalsTile = showPersistedDetails && crystalsDelta > 0;
 
   return (
     <section className="fixed inset-0 z-50 grid place-items-center bg-[#05080b] p-3 backdrop-blur-[4px]" data-testid="reward-summary">
@@ -1230,6 +1256,23 @@ function RewardOverlay({
               </span>
             </div>
             <span className="text-2xl font-black text-[#49d2e7]">+{userXpDelta}</span>
+          </div>
+        ) : null}
+
+        {showCrystalsTile ? (
+          <div
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded border border-[#65d7e9]/35 bg-[linear-gradient(180deg,rgba(8,32,40,0.86),rgba(2,14,18,0.86))] px-3 py-2"
+            data-testid="reward-crystals-tile"
+            data-delta-crystals={crystalsDelta}
+            data-new-crystals={newCrystals}
+          >
+            <div className="grid gap-1">
+              <span className="text-xs font-black uppercase tracking-[0.08em] text-[#9bd3df]">Кристали</span>
+              <span className="text-base font-black text-[#fff8df]" data-testid="reward-crystals-line">
+                +{crystalsDelta} 💎 · всього {newCrystals}
+              </span>
+            </div>
+            <span className="text-2xl font-black text-[#65d7e9]">+{crystalsDelta} 💎</span>
           </div>
         ) : null}
 

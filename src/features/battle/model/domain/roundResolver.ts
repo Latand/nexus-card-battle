@@ -110,6 +110,7 @@ export function resolveRound(
   let damage = winnerScore.damage;
   const winnerCard = winner === "player" ? playerCard : enemyChoice.card;
   const loserCard = winner === "player" ? enemyChoice.card : playerCard;
+  const enemyDamageBoost = Boolean(enemyChoice.damageBoost);
   effects.push(...winnerScore.damageEffects.map((effect) => ({ ...effect, target: loser })));
 
   if (winner === "player" && damageBoost) {
@@ -117,11 +118,16 @@ export function resolveRound(
     effects.push({ source: playerCard.name, label: "+2 урону за ривок", value: 2, target: "enemy" });
   }
 
+  if (winner === "enemy" && enemyDamageBoost) {
+    damage += 2;
+    effects.push({ source: enemyChoice.card.name, label: "+2 урону за ривок", value: 2, target: "player" });
+  }
+
   damage = applyQueuedNumberEffects(damage, loserScore.opponentDamageEffects, winner, effects);
   damage = applyMirrorDamageEffects(damage, winnerScore.damageMirrorEffects, winnerCard, loserCard, loser, effects);
 
   let nextPlayer = spendAndUse(player, playerCard.id, playerEnergy + (damageBoost ? DAMAGE_BOOST_COST : 0));
-  let nextEnemy = spendAndUse(enemy, enemyChoice.card.id, enemyChoice.energy);
+  let nextEnemy = spendAndUse(enemy, enemyChoice.card.id, enemyChoice.energy + (enemyDamageBoost ? DAMAGE_BOOST_COST : 0));
 
   if (winner === "player") {
     nextEnemy = { ...nextEnemy, hp: Math.max(0, nextEnemy.hp - damage) };
@@ -142,7 +148,7 @@ export function resolveRound(
     enemyAttack,
     playerEnergy,
     enemyEnergy: enemyChoice.energy,
-    boostedDamage: damageBoost,
+    boostedDamage: damageBoost || enemyDamageBoost,
     winner,
     loser,
     damage,

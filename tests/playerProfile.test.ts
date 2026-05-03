@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { cards } from "../src/features/battle/model/cards";
 import {
+  applyAndSummarizeMatchRewards,
   handlePlayerDeckSavePost,
   handlePlayerMatchFinishedPost,
   handlePlayerProfileGet,
@@ -272,6 +273,54 @@ describe("player match-finished API (PvE)", () => {
 
     expect(response.status).toBe(400);
     expect(body.error).toBe("invalid_identity");
+  });
+
+  test("applyAndSummarizeMatchRewards persists a PvP win and returns the authoritative summary", async () => {
+    const winnerIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-pvp-winner" };
+    const loserIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-pvp-loser" };
+    const store = new MemoryPlayerProfileStore();
+
+    const winner = await applyAndSummarizeMatchRewards(store, winnerIdentity, { mode: "pvp", result: "win" });
+    const loser = await applyAndSummarizeMatchRewards(store, loserIdentity, { mode: "pvp", result: "loss" });
+
+    expect(winner.summary.deltaXp).toBe(100);
+    expect(winner.summary.deltaCrystals).toBe(50);
+    expect(winner.summary.leveledUp).toBe(false);
+    expect(winner.summary.newTotals).toEqual({ crystals: 50, totalXp: 100, level: 1 });
+    expect(winner.persisted.crystals).toBe(50);
+    expect(winner.persisted.totalXp).toBe(100);
+    expect(winner.persisted.wins).toBe(1);
+
+    expect(loser.summary.deltaXp).toBe(10);
+    expect(loser.summary.deltaCrystals).toBe(0);
+    expect(loser.summary.newTotals).toEqual({ crystals: 0, totalXp: 10, level: 1 });
+    expect(loser.persisted.losses).toBe(1);
+
+    const persistedWinner = store.snapshot(winnerIdentity);
+    const persistedLoser = store.snapshot(loserIdentity);
+    expect(persistedWinner?.crystals).toBe(50);
+    expect(persistedWinner?.totalXp).toBe(100);
+    expect(persistedWinner?.wins).toBe(1);
+    expect(persistedLoser?.totalXp).toBe(10);
+    expect(persistedLoser?.losses).toBe(1);
+  });
+
+  test("two concurrent PvP wins racing across a level threshold persist 2x match crystals + a single level-up bonus", async () => {
+    const racyIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-pvp-race" };
+    const store = new MemoryPlayerProfileStore([
+      { ...createNewStoredPlayerProfile("player-pvp-race", racyIdentity), totalXp: 195 },
+    ]);
+
+    await Promise.all([
+      applyAndSummarizeMatchRewards(store, racyIdentity, { mode: "pvp", result: "win" }),
+      applyAndSummarizeMatchRewards(store, racyIdentity, { mode: "pvp", result: "win" }),
+    ]);
+
+    const persisted = store.snapshot(racyIdentity);
+    expect(persisted?.totalXp).toBe(195 + 100 + 100);
+    // 50 (match win) * 2 + 50 (single level-up bonus to level 2)
+    expect(persisted?.crystals).toBe(50 + 50 + 50);
+    expect(persisted?.wins).toBe(2);
   });
 
   test("two concurrent PvE wins racing across a level threshold add 2x deltaXp and pay the bonus exactly once", async () => {

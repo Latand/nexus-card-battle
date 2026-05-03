@@ -5,6 +5,7 @@ import { getAvailableCards } from "./fighters";
 export type EnemyMove = {
   card: Card;
   energy: number;
+  damageBoost?: boolean;
 };
 
 export function getEnemyPreview(enemy: Fighter, playerHp: number) {

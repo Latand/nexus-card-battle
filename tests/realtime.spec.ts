@@ -1,5 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { cards } from "../src/features/battle/model/cards";
+import type { RewardSummary } from "../src/features/battle/model/types";
 import type { PlayerIdentity } from "../src/features/player/profile/types";
 import { mockDeckReadyProfile, PROFILE_DECK_IDS } from "./fixtures/playerProfile";
 
@@ -119,6 +120,206 @@ test("forfeits the active PvP player when their turn times out", async ({ baseUR
   expect(secondResult.loserId).toBe(firstMoverReady.playerId);
   expect(firstResult.winnerId).toBe(otherReady.playerId);
   expect(secondResult.winnerId).toBe(otherReady.playerId);
+
+  first.close();
+  second.close();
+});
+
+test("emits server-authoritative reward_summary to both PvP sessions on a forfeit", async ({ baseURL, request }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const winnerIdentity = testIdentity("rewards-winner");
+  const loserIdentity = testIdentity("rewards-loser");
+  await seedRealtimeProfile(request, winnerIdentity);
+  await seedRealtimeProfile(request, loserIdentity);
+  const first = await connectRealtimeClient(wsUrl, "Rewards A", PROTOCOL_OWNED_DECK_IDS, { identity: winnerIdentity });
+  const second = await connectRealtimeClient(wsUrl, "Rewards B", PROTOCOL_OWNED_DECK_IDS, { identity: loserIdentity });
+
+  const firstReady = await first.waitFor("match_ready");
+  const secondReady = await second.waitFor("match_ready");
+  const firstMover = firstReady.firstPlayerId === firstReady.playerId ? first : second;
+  const firstMoverIdentity = firstMover === first ? winnerIdentity : loserIdentity;
+  const otherIdentity = firstMover === first ? loserIdentity : winnerIdentity;
+  const firstMoverReady = firstMover === first ? firstReady : secondReady;
+
+  firstMover.send({
+    type: "turn_timeout",
+    matchId: firstMoverReady.matchId,
+    round: firstMoverReady.round,
+  });
+
+  const firstReward = await first.waitFor("reward_summary", { timeoutMs: 5_000 });
+  const secondReward = await second.waitFor("reward_summary", { timeoutMs: 5_000 });
+
+  const moverReward = firstMover === first ? firstReward : secondReward;
+  const otherReward = firstMover === first ? secondReward : firstReward;
+
+  const moverPayload = moverReward.payload as RewardSummary;
+  const otherPayload = otherReward.payload as RewardSummary;
+
+  expect(moverPayload.deltaXp).toBe(10);
+  expect(moverPayload.deltaCrystals).toBe(0);
+  expect(moverPayload.newTotals).toMatchObject({ crystals: 0, totalXp: 10, level: 1 });
+
+  expect(otherPayload.deltaXp).toBe(100);
+  expect(otherPayload.deltaCrystals).toBe(50);
+  expect(otherPayload.newTotals).toMatchObject({ crystals: 50, totalXp: 100, level: 1 });
+
+  expect(firstMoverIdentity).toBeDefined();
+  expect(otherIdentity).toBeDefined();
+
+  first.close();
+  second.close();
+});
+
+test("match_ready never carries server-only identity or fighter state", async ({ baseURL, request }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const firstIdentity = testIdentity("payload-leak-a");
+  const secondIdentity = testIdentity("payload-leak-b");
+  await seedRealtimeProfile(request, firstIdentity);
+  await seedRealtimeProfile(request, secondIdentity);
+  const first = await connectRealtimeClient(wsUrl, "Leak A", PROTOCOL_OWNED_DECK_IDS, { identity: firstIdentity });
+  const second = await connectRealtimeClient(wsUrl, "Leak B", PROTOCOL_OWNED_DECK_IDS, { identity: secondIdentity });
+
+  const firstReady = await first.waitFor("match_ready") as unknown as { players: Record<string, Record<string, unknown>> };
+  const secondReady = await second.waitFor("match_ready") as unknown as { players: Record<string, Record<string, unknown>> };
+
+  for (const ready of [firstReady, secondReady]) {
+    for (const player of Object.values(ready.players)) {
+      expect(player).not.toHaveProperty("identity");
+      expect(player).not.toHaveProperty("fighter");
+    }
+  }
+
+  first.close();
+  second.close();
+});
+
+test("rejects PvP moves with energy bids exceeding the fighter's remaining energy after a prior round", async ({ baseURL, request }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const firstIdentity = testIdentity("tamper-energy-a");
+  const secondIdentity = testIdentity("tamper-energy-b");
+  await seedRealtimeProfile(request, firstIdentity);
+  await seedRealtimeProfile(request, secondIdentity);
+  const first = await connectRealtimeClient(wsUrl, "Tamper A", PROTOCOL_OWNED_DECK_IDS, { identity: firstIdentity });
+  const second = await connectRealtimeClient(wsUrl, "Tamper B", PROTOCOL_OWNED_DECK_IDS, { identity: secondIdentity });
+
+  const firstReady = await first.waitFor("match_ready") as unknown as { matchId: string; round: number; firstPlayerId: string; opponentId: string; playerId: string; players: Record<string, { handIds: string[] }> };
+  const secondReady = await second.waitFor("match_ready") as typeof firstReady;
+
+  const firstMover = firstReady.firstPlayerId === firstReady.playerId ? first : second;
+  const secondMover = firstMover === first ? second : first;
+  const firstMoverReady = firstMover === first ? firstReady : secondReady;
+  const secondMoverReady = secondMover === first ? firstReady : secondReady;
+
+  // Both fighters start at 12 energy. Spend down by playing a regular round
+  // first so the next-round energy check has something tighter than 12 to
+  // catch.
+  const firstCard = firstMoverReady.players[firstMoverReady.playerId].handIds[0];
+  const secondCard = secondMoverReady.players[secondMoverReady.playerId].handIds[0];
+
+  firstMover.send({
+    type: "submit_move",
+    matchId: firstMoverReady.matchId,
+    round: firstMoverReady.round,
+    move: { cardId: firstCard, energy: 6, boosted: false },
+  });
+  await secondMover.waitFor("first_move", { timeoutMs: 5_000 });
+
+  secondMover.send({
+    type: "submit_move",
+    matchId: secondMoverReady.matchId,
+    round: secondMoverReady.round,
+    move: { cardId: secondCard, energy: 6, boosted: false },
+  });
+
+  await first.waitFor("round_resolved", { timeoutMs: 5_000 });
+  await second.waitFor("round_resolved", { timeoutMs: 5_000 });
+
+  // It is now the second mover's turn (initiative flips). They have 6 energy
+  // remaining; a bid of 12 is sanitized clean but rejected by the
+  // server-fighter check.
+  const newFirstMoverHand = secondMoverReady.players[secondMoverReady.playerId].handIds;
+  const newCard = newFirstMoverHand.find((id) => id !== secondCard) ?? newFirstMoverHand[0];
+
+  secondMover.send({
+    type: "submit_move",
+    matchId: secondMoverReady.matchId,
+    round: secondMoverReady.round + 1,
+    move: { cardId: newCard, energy: 12, boosted: false },
+  });
+
+  const error = await secondMover.waitFor("error", { timeoutMs: 2_000 });
+  expect(error.message).toBe("Energy bid exceeds the fighter's available energy.");
+
+  first.close();
+  second.close();
+});
+
+test("rejects PvP moves whose boost cost exceeds the fighter's energy", async ({ baseURL, request }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const firstIdentity = testIdentity("tamper-boost-a");
+  const secondIdentity = testIdentity("tamper-boost-b");
+  await seedRealtimeProfile(request, firstIdentity);
+  await seedRealtimeProfile(request, secondIdentity);
+  const first = await connectRealtimeClient(wsUrl, "Boost A", PROTOCOL_OWNED_DECK_IDS, { identity: firstIdentity });
+  const second = await connectRealtimeClient(wsUrl, "Boost B", PROTOCOL_OWNED_DECK_IDS, { identity: secondIdentity });
+
+  const firstReady = await first.waitFor("match_ready") as unknown as { matchId: string; round: number; firstPlayerId: string; playerId: string; players: Record<string, { handIds: string[] }> };
+  const secondReady = await second.waitFor("match_ready") as typeof firstReady;
+
+  const firstMover = firstReady.firstPlayerId === firstReady.playerId ? first : second;
+  const firstMoverReady = firstMover === first ? firstReady : secondReady;
+  const moverPlayer = firstMoverReady.players[firstMoverReady.playerId];
+  const moverCard = moverPlayer.handIds[0];
+
+  // Fighter starts with 12 energy. Bid 12 + boost (cost 3) = 15 → must be rejected.
+  firstMover.send({
+    type: "submit_move",
+    matchId: firstMoverReady.matchId,
+    round: firstMoverReady.round,
+    move: { cardId: moverCard, energy: 12, boosted: true },
+  });
+
+  const error = await firstMover.waitFor("error", { timeoutMs: 2_000 });
+  expect(error.message).toBe("Damage boost requires more energy than the fighter has.");
+
+  await expectNoRealtimeMessage(firstMover, "first_move");
+  await expectNoRealtimeMessage(firstMover, "round_resolved");
+
+  first.close();
+  second.close();
+});
+
+test("rejects PvP moves for cards not in the fighter's hand", async ({ baseURL, request }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const firstIdentity = testIdentity("tamper-card-a");
+  const secondIdentity = testIdentity("tamper-card-b");
+  await seedRealtimeProfile(request, firstIdentity);
+  await seedRealtimeProfile(request, secondIdentity);
+  const first = await connectRealtimeClient(wsUrl, "Card A", PROTOCOL_OWNED_DECK_IDS, { identity: firstIdentity });
+  const second = await connectRealtimeClient(wsUrl, "Card B", PROTOCOL_OWNED_DECK_IDS, { identity: secondIdentity });
+
+  const firstReady = await first.waitFor("match_ready") as unknown as { matchId: string; round: number; firstPlayerId: string; playerId: string; opponentId: string; players: Record<string, { handIds: string[] }> };
+  const secondReady = await second.waitFor("match_ready") as typeof firstReady;
+
+  const firstMover = firstReady.firstPlayerId === firstReady.playerId ? first : second;
+  const firstMoverReady = firstMover === first ? firstReady : secondReady;
+  const moverPlayer = firstMoverReady.players[firstMoverReady.playerId];
+  const otherCardId = PROTOCOL_OWNED_DECK_IDS.find((id) => !moverPlayer.handIds.includes(id));
+  expect(otherCardId).toBeTruthy();
+
+  firstMover.send({
+    type: "submit_move",
+    matchId: firstMoverReady.matchId,
+    round: firstMoverReady.round,
+    move: { cardId: otherCardId as string, energy: 0, boosted: false },
+  });
+
+  const error = await firstMover.waitFor("error", { timeoutMs: 2_000 });
+  expect(error.message).toBe("Card is not in the battle hand.");
+
+  await expectNoRealtimeMessage(firstMover, "first_move");
+  await expectNoRealtimeMessage(firstMover, "round_resolved");
 
   first.close();
   second.close();

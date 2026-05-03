@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   LEVEL_UP_CRYSTAL_BONUS_PER_LEVEL,
   PVE_XP_REWARDS,
+  PVP_CRYSTAL_REWARDS,
+  PVP_XP_REWARDS,
   computeLevelFromXp,
   computeLevelUpBonusForRange,
   computeMatchRewards,
@@ -136,10 +138,66 @@ describe("computeMatchRewards (PvE)", () => {
     expect(rewards.newTotals.crystals).toBe(12 + 50);
   });
 
-  test("PvP rewards throw (computeMatchRewards is PvE-only)", () => {
+  test("rejects an unsupported match mode", () => {
     expect(() =>
-      computeMatchRewards(freshProfile, { mode: "pvp", result: "win" }),
-    ).toThrow(/PvP rewards are not implemented/);
+      computeMatchRewards(freshProfile, { mode: "co-op", result: "win" } as unknown as Parameters<typeof computeMatchRewards>[1]),
+    ).toThrow(/Unsupported match mode/);
+  });
+});
+
+describe("computeMatchRewards (PvP)", () => {
+  const freshProfile = { crystals: 0, totalXp: 0, level: 1 };
+
+  test("PvP win awards 50 crystals + 100 XP", () => {
+    const rewards = computeMatchRewards(freshProfile, { mode: "pvp", result: "win" });
+
+    expect(rewards.deltaXp).toBe(PVP_XP_REWARDS.win);
+    expect(rewards.deltaXp).toBe(100);
+    expect(rewards.matchCrystals).toBe(PVP_CRYSTAL_REWARDS.win);
+    expect(rewards.matchCrystals).toBe(50);
+    expect(rewards.deltaCrystals).toBe(50);
+    expect(rewards.leveledUp).toBe(false);
+    expect(rewards.levelUpBonusCrystals).toBe(0);
+    expect(rewards.newTotals).toEqual({ crystals: 50, totalXp: 100, level: 1 });
+  });
+
+  test("PvP draw awards 20 crystals + 50 XP", () => {
+    const rewards = computeMatchRewards(freshProfile, { mode: "pvp", result: "draw" });
+
+    expect(rewards.deltaXp).toBe(PVP_XP_REWARDS.draw);
+    expect(rewards.deltaXp).toBe(50);
+    expect(rewards.matchCrystals).toBe(PVP_CRYSTAL_REWARDS.draw);
+    expect(rewards.matchCrystals).toBe(20);
+    expect(rewards.deltaCrystals).toBe(20);
+    expect(rewards.leveledUp).toBe(false);
+    expect(rewards.newTotals).toEqual({ crystals: 20, totalXp: 50, level: 1 });
+  });
+
+  test("PvP loss awards 0 crystals + 10 XP", () => {
+    const rewards = computeMatchRewards(freshProfile, { mode: "pvp", result: "loss" });
+
+    expect(rewards.deltaXp).toBe(PVP_XP_REWARDS.loss);
+    expect(rewards.deltaXp).toBe(10);
+    expect(rewards.matchCrystals).toBe(0);
+    expect(rewards.deltaCrystals).toBe(0);
+    expect(rewards.leveledUp).toBe(false);
+    expect(rewards.newTotals).toEqual({ crystals: 0, totalXp: 10, level: 1 });
+  });
+
+  test("PvP win that crosses the level 2 threshold stacks the level-up bonus on top of match crystals", () => {
+    // Level 2 needs 200 XP. 150 + 100 (PvP win XP) = 250 → level 2.
+    const rewards = computeMatchRewards(
+      { crystals: 30, totalXp: 150, level: 1 },
+      { mode: "pvp", result: "win" },
+    );
+
+    expect(rewards.deltaXp).toBe(100);
+    expect(rewards.matchCrystals).toBe(50);
+    expect(rewards.leveledUp).toBe(true);
+    expect(rewards.levelUpBonusCrystals).toBe(2 * LEVEL_UP_CRYSTAL_BONUS_PER_LEVEL);
+    expect(rewards.levelUpBonusCrystals).toBe(50);
+    expect(rewards.deltaCrystals).toBe(100);
+    expect(rewards.newTotals).toEqual({ crystals: 130, totalXp: 250, level: 2 });
   });
 });
 
