@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { postMatchFinished } from "@/features/player/profile/client";
 import type { PlayerIdentity } from "@/features/player/profile/types";
+import { computeLevelFromXp } from "@/features/player/profile/types";
 import { cn } from "@/shared/lib/cn";
 import type { TelegramPlayer } from "@/shared/lib/telegram";
 import { cards } from "../model/cards";
@@ -26,6 +27,13 @@ import { Hand } from "./components/Hand";
 import { NamePlate } from "./components/ResourceCounter";
 import { SceneBackground } from "./components/SceneBackground";
 import { SelectionOverlay } from "./components/SelectionOverlay";
+import {
+  computeXpProgress,
+  resolveRewardAvatarUrl,
+  resolveRewardTitle,
+  selectVisibleTiles,
+  type RewardTitle,
+} from "./rewardOverlayPresenter";
 
 type BattleGameProps = {
   playerCollectionIds?: string[];
@@ -34,6 +42,7 @@ type BattleGameProps = {
   playerName?: string;
   telegramPlayer?: TelegramPlayer;
   mode?: "ai" | "human";
+  avatarUrl?: string;
   onOpenCollection?: () => void;
   onSwitchMode?: (mode: "ai" | "human") => void;
 };
@@ -113,7 +122,7 @@ type HumanRewardSummaryMessage = HumanSocketMessage & {
   payload: RewardSummary;
 };
 
-export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity, playerName, telegramPlayer, mode = "ai", onOpenCollection, onSwitchMode }: BattleGameProps = {}) {
+export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity, playerName, telegramPlayer, mode = "ai", avatarUrl, onOpenCollection, onSwitchMode }: BattleGameProps = {}) {
   const isHumanMatch = mode === "human";
   const initialGame = useMemo(
     () => createInitialGame({ playerCollectionIds, playerDeckIds, playerName }),
@@ -951,7 +960,9 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
           game={game}
           verdict={verdict}
           mode={mode}
-          onReset={reset}
+          avatarUrl={avatarUrl}
+          onReplayAi={() => (mode === "ai" ? reset() : onSwitchMode?.("ai"))}
+          onReplayHuman={() => (mode === "human" ? reset() : onSwitchMode?.("human"))}
           persistedRewards={persistedRewards}
           persistedRewardsError={persistedRewardsError}
         />
@@ -1152,14 +1163,18 @@ function PhaseOverlay({
   game,
   verdict,
   mode,
-  onReset,
+  avatarUrl,
+  onReplayAi,
+  onReplayHuman,
   persistedRewards,
   persistedRewardsError,
 }: {
   game: GameState;
   verdict: string;
   mode: "ai" | "human";
-  onReset: () => void;
+  avatarUrl?: string;
+  onReplayAi: () => void;
+  onReplayHuman: () => void;
   persistedRewards: RewardSummary | null;
   persistedRewardsError: string | null;
 }) {
@@ -1173,7 +1188,10 @@ function PhaseOverlay({
         result={game.matchResult}
         rewards={overlayRewards}
         mode={mode}
-        onReset={onReset}
+        playerName={game.player.name}
+        avatarUrl={avatarUrl}
+        onReplayAi={onReplayAi}
+        onReplayHuman={onReplayHuman}
         persistedRewardsError={persistedRewardsError}
         showPersistedDetails={showPersistedDetails}
       />
@@ -1211,126 +1229,109 @@ function RewardOverlay({
   result,
   rewards,
   mode,
-  onReset,
+  playerName,
+  avatarUrl,
+  onReplayAi,
+  onReplayHuman,
   persistedRewardsError,
   showPersistedDetails,
 }: {
   result?: MatchResult;
   rewards?: RewardSummary;
   mode: "ai" | "human";
-  onReset: () => void;
+  playerName?: string;
+  avatarUrl?: string;
+  onReplayAi: () => void;
+  onReplayHuman: () => void;
   persistedRewardsError: string | null;
   showPersistedDetails: boolean;
 }) {
-  const replayLabel = mode === "human" ? "Новий бій · PvP" : "Новий бій · AI";
-  const title = result === "player" ? "Винагороди за перемогу" : result === "draw" ? "Винагороди за нічию" : "Винагороди за бій";
+  const title = resolveRewardTitle(result);
+  const visibleTiles = selectVisibleTiles(showPersistedDetails ? rewards : null);
   const userXpDelta = rewards?.deltaXp ?? 0;
-  const showUserXpTile = showPersistedDetails && userXpDelta > 0;
-  const showLevelUpTile = showPersistedDetails && Boolean(rewards?.leveledUp);
   const newLevel = rewards?.newTotals?.level;
+  const newTotalXp = rewards?.newTotals?.totalXp;
+  const levelInfo = typeof newTotalXp === "number" ? computeLevelFromXp(newTotalXp) : null;
+  const xpProgress = levelInfo
+    ? computeXpProgress(levelInfo.xpIntoLevel, levelInfo.xpForNextLevel, userXpDelta)
+    : null;
   const crystalsDelta = rewards?.deltaCrystals ?? 0;
   const newCrystals = rewards?.newTotals?.crystals ?? 0;
-  const showCrystalsTile = showPersistedDetails && crystalsDelta > 0;
   const eloDelta = rewards?.deltaElo;
   const newElo = rewards?.newTotals?.eloRating;
-  const showEloTile = showPersistedDetails && typeof eloDelta === "number" && typeof newElo === "number";
   const eloLoss = typeof eloDelta === "number" && eloDelta < 0;
   const previousElo = typeof eloDelta === "number" && typeof newElo === "number" ? newElo - eloDelta : null;
   const formattedEloDelta = typeof eloDelta === "number" ? (eloDelta > 0 ? `+${eloDelta}` : `${eloDelta}`) : "";
+  const displayName = (playerName ?? "").trim() || "Гравець";
+  const resolvedAvatarUrl = resolveRewardAvatarUrl(avatarUrl);
+  const levelUpBonus = rewards?.levelUpBonusCrystals ?? 0;
 
   return (
     <section className="fixed inset-0 z-50 grid place-items-center bg-[#05080b] p-3 backdrop-blur-[4px]" data-testid="reward-summary">
-      <div className="relative grid w-[min(680px,94vw)] gap-4 rounded-md border-2 border-[#d6a03b]/75 bg-[linear-gradient(180deg,rgba(12,18,22,0.98),rgba(4,6,9,0.98))] p-5 shadow-[0_26px_80px_rgba(0,0,0,0.76),inset_0_0_80px_rgba(255,188,50,0.08)]">
-        <div className="grid grid-cols-[72px_minmax(0,1fr)_92px] items-center gap-4 max-[620px]:grid-cols-[56px_minmax(0,1fr)]">
-          <Image src="/nexus-assets/characters/cyber-brawler-thumb.png" alt="" width={72} height={90} className="h-[72px] w-[58px] object-cover object-top" />
-          <div className="grid gap-2">
-            <strong className="text-3xl font-black uppercase leading-none text-[#ffe08a] max-[620px]:text-2xl">{title}</strong>
-            <ProgressBar value={rewards?.levelProgress ?? 0} label={`XP +${rewards?.matchXp ?? 0}`} />
-          </div>
-          <button
-            className="min-h-[44px] rounded-md border-2 border-black/60 bg-[linear-gradient(180deg,#fff26d,#e3b51e_54%,#a66d12)] px-3 text-sm font-black uppercase text-[#1a1408] max-[620px]:col-span-full"
-            type="button"
-            onClick={onReset}
-            data-testid="reward-replay"
-            data-mode={mode}
-          >
-            {replayLabel}
-          </button>
+      <div
+        className="relative grid w-[min(680px,94vw)] gap-4 rounded-md border-2 border-[#d6a03b]/75 bg-[linear-gradient(180deg,rgba(12,18,22,0.98),rgba(4,6,9,0.98))] p-5 shadow-[0_26px_80px_rgba(0,0,0,0.76),inset_0_0_80px_rgba(255,188,50,0.08)]"
+        data-result={result ?? "unknown"}
+      >
+        <RewardTitleBlock title={title} />
+
+        <RewardAvatarBlock
+          avatarUrl={resolvedAvatarUrl}
+          playerName={displayName}
+          level={newLevel ?? rewards?.newTotals?.level ?? 1}
+          xpDelta={userXpDelta}
+          xpProgress={xpProgress}
+          showXpDelta={showPersistedDetails && userXpDelta > 0}
+        />
+
+        <div
+          className="grid grid-cols-3 gap-3 max-[560px]:grid-cols-1"
+          data-testid="reward-stat-tiles"
+        >
+          {visibleTiles.showCrystals ? (
+            <RewardStatTile
+              testId="reward-crystals-tile"
+              icon="💎"
+              label="Кристали"
+              deltaText={`+${crystalsDelta}`}
+              detailText={`всього ${newCrystals}`}
+              tone="crystal"
+              dataAttrs={{ "data-delta-crystals": String(crystalsDelta), "data-new-crystals": String(newCrystals) }}
+              detailTestId="reward-crystals-line"
+            />
+          ) : null}
+
+          {visibleTiles.showElo ? (
+            <RewardStatTile
+              testId="reward-elo-tile"
+              icon="🏆"
+              label="ELO"
+              deltaText={formattedEloDelta}
+              detailText={`${previousElo} → ${newElo}`}
+              tone={eloLoss ? "loss" : "elo"}
+              dataAttrs={{
+                "data-delta-elo": typeof eloDelta === "number" ? String(eloDelta) : "",
+                "data-new-elo": typeof newElo === "number" ? String(newElo) : "",
+              }}
+              detailTestId="reward-elo-line"
+            />
+          ) : null}
+
+          {visibleTiles.showLevelUp ? (
+            <RewardStatTile
+              testId="reward-level-up-tile"
+              icon="⭐"
+              label="Новий рівень"
+              deltaText={`Lv ${newLevel ?? "?"}`}
+              detailText={`+${levelUpBonus} 💎`}
+              tone="levelUp"
+              dataAttrs={{
+                "data-new-level": newLevel !== undefined ? String(newLevel) : "",
+                "data-level-up-bonus": String(levelUpBonus),
+              }}
+              detailTestId="reward-level-up-headline"
+            />
+          ) : null}
         </div>
-
-        {showUserXpTile ? (
-          <div
-            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded border border-[#49d2e7]/35 bg-[linear-gradient(180deg,rgba(8,28,40,0.86),rgba(4,12,18,0.86))] px-3 py-2"
-            data-testid="reward-user-xp-tile"
-            data-delta-xp={userXpDelta}
-          >
-            <div className="grid gap-1">
-              <span className="text-xs font-black uppercase tracking-[0.08em] text-[#9bd3df]">XP гравця</span>
-              <span className="text-base font-black text-[#fff8df]" data-testid="reward-user-xp-line">
-                +{userXpDelta} XP · рівень {newLevel ?? "?"}
-              </span>
-            </div>
-            <span className="text-2xl font-black text-[#49d2e7]">+{userXpDelta}</span>
-          </div>
-        ) : null}
-
-        {showCrystalsTile ? (
-          <div
-            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded border border-[#65d7e9]/35 bg-[linear-gradient(180deg,rgba(8,32,40,0.86),rgba(2,14,18,0.86))] px-3 py-2"
-            data-testid="reward-crystals-tile"
-            data-delta-crystals={crystalsDelta}
-            data-new-crystals={newCrystals}
-          >
-            <div className="grid gap-1">
-              <span className="text-xs font-black uppercase tracking-[0.08em] text-[#9bd3df]">Кристали</span>
-              <span className="text-base font-black text-[#fff8df]" data-testid="reward-crystals-line">
-                +{crystalsDelta} 💎 · всього {newCrystals}
-              </span>
-            </div>
-            <span className="text-2xl font-black text-[#65d7e9]">+{crystalsDelta} 💎</span>
-          </div>
-        ) : null}
-
-        {showEloTile ? (
-          <div
-            className={cn(
-              "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded border px-3 py-2",
-              eloLoss
-                ? "border-[#ff7d6e]/45 bg-[linear-gradient(180deg,rgba(48,12,12,0.88),rgba(20,4,4,0.88))]"
-                : "border-[#ffe08a]/45 bg-[linear-gradient(180deg,rgba(40,30,8,0.88),rgba(18,12,2,0.88))]",
-            )}
-            data-testid="reward-elo-tile"
-            data-delta-elo={eloDelta}
-            data-new-elo={newElo}
-          >
-            <div className="grid gap-1">
-              <span className={cn("text-xs font-black uppercase tracking-[0.08em]", eloLoss ? "text-[#ffb1a8]" : "text-[#ffe08a]")}>Рейтинг ELO</span>
-              <span className="text-base font-black text-[#fff8df]" data-testid="reward-elo-line">
-                {formattedEloDelta} ELO · {previousElo} → {newElo}
-              </span>
-            </div>
-            <span className={cn("text-2xl font-black", eloLoss ? "text-[#ff8a7c]" : "text-[#ffe08a]")}>
-              {formattedEloDelta} 🏆
-            </span>
-          </div>
-        ) : null}
-
-        {showLevelUpTile ? (
-          <div
-            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded border-2 border-[#ffe08a]/70 bg-[linear-gradient(180deg,rgba(60,38,8,0.92),rgba(20,12,2,0.92))] px-3 py-3 shadow-[0_0_18px_rgba(255,224,138,0.28)]"
-            data-testid="reward-level-up-tile"
-            data-new-level={newLevel ?? ""}
-            data-level-up-bonus={rewards?.levelUpBonusCrystals ?? 0}
-          >
-            <div className="grid gap-1">
-              <span className="text-xs font-black uppercase tracking-[0.1em] text-[#ffe08a]">Новий рівень</span>
-              <strong className="text-xl font-black uppercase text-[#fff8df]" data-testid="reward-level-up-headline">
-                Рівень {newLevel} · +{rewards?.levelUpBonusCrystals ?? 0} 💎
-              </strong>
-            </div>
-            <span className="text-3xl font-black text-[#ffe08a]">💎</span>
-          </div>
-        ) : null}
 
         {persistedRewardsError ? (
           <div
@@ -1341,29 +1342,196 @@ function RewardOverlay({
           </div>
         ) : null}
 
-        <div className="grid gap-2">
-          {(rewards?.cardRewards ?? []).map((reward) => (
-            <div key={reward.cardId} className="grid grid-cols-[minmax(112px,180px)_minmax(0,1fr)_54px] items-center gap-3 rounded border border-white/12 bg-black/28 px-3 py-2 max-[620px]:grid-cols-1">
-              <strong className="truncate text-sm font-black uppercase text-[#fff8df]">{reward.cardName}</strong>
-              <ProgressBar value={reward.levelProgress} label={`картка +${reward.xp}`} compact />
-              <span className="text-right text-sm font-black text-[#ffe08a] max-[620px]:text-left">+{reward.xp}</span>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 gap-3 max-[420px]:grid-cols-1">
+          <button
+            className="min-h-[48px] rounded-md border-2 border-black/60 bg-[linear-gradient(180deg,#fff26d,#e3b51e_54%,#a66d12)] px-3 text-sm font-black uppercase text-[#1a1408] transition hover:brightness-110"
+            type="button"
+            onClick={onReplayAi}
+            data-testid="reward-replay-ai"
+            data-mode={mode}
+          >
+            AI
+          </button>
+          <button
+            className="min-h-[48px] rounded-md border-2 border-black/60 bg-[linear-gradient(180deg,#68e5f5,#218aa3_56%,#0d4151)] px-3 text-sm font-black uppercase text-[#061116] transition hover:brightness-110"
+            type="button"
+            onClick={onReplayHuman}
+            data-testid="reward-replay-human"
+            data-mode={mode}
+          >
+            PvP
+          </button>
         </div>
       </div>
     </section>
   );
 }
 
-function ProgressBar({ value, label, compact = false }: { value: number; label: string; compact?: boolean }) {
+function RewardTitleBlock({ title }: { title: RewardTitle }) {
   return (
-    <div className="grid gap-1">
-      <div className={cn("relative overflow-hidden rounded-full border border-black/60 bg-black/55", compact ? "h-4" : "h-6")}>
-        <span className="absolute inset-y-0 left-0 rounded-full bg-[linear-gradient(90deg,#49d2e7,#ffe08a,#70dc57)]" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
-      </div>
-      <span className="text-xs font-black uppercase text-[#d9ceb2]">{label}</span>
+    <div className="grid place-items-center" data-testid="reward-title-block" data-tone={title.tone}>
+      <strong
+        className={cn(
+          "text-[clamp(40px,7vw,72px)] font-black uppercase leading-none [font-family:Impact,Arial_Narrow,sans-serif] [text-shadow:0_4px_0_rgba(0,0,0,0.78)]",
+          rewardTitleColorClass(title.tone),
+        )}
+        data-testid="reward-title"
+      >
+        {title.text}
+      </strong>
     </div>
   );
+}
+
+function rewardTitleColorClass(tone: RewardTitle["tone"]) {
+  if (tone === "victory") return "text-[#ffe08a] [text-shadow:0_0_22px_rgba(255,180,46,0.6),0_4px_0_rgba(0,0,0,0.78)]";
+  if (tone === "draw") return "text-[#9bd3df] [text-shadow:0_0_18px_rgba(155,211,223,0.45),0_4px_0_rgba(0,0,0,0.78)]";
+  if (tone === "defeat") return "text-[#ff8a7c] [text-shadow:0_0_22px_rgba(255,80,68,0.55),0_4px_0_rgba(0,0,0,0.78)]";
+  return "text-[#fff8df]";
+}
+
+function RewardAvatarBlock({
+  avatarUrl,
+  playerName,
+  level,
+  xpDelta,
+  xpProgress,
+  showXpDelta,
+}: {
+  avatarUrl: string;
+  playerName: string;
+  level: number;
+  xpDelta: number;
+  xpProgress: ReturnType<typeof computeXpProgress> | null;
+  showXpDelta: boolean;
+}) {
+  return (
+    <div
+      className="grid grid-cols-[96px_minmax(0,1fr)] items-center gap-4 max-[420px]:grid-cols-1 max-[420px]:justify-items-center"
+      data-testid="reward-avatar-block"
+    >
+      <div className="relative h-[96px] w-[96px] overflow-hidden rounded-full border-2 border-[#d6a03b]/75 bg-black/55 shadow-[0_0_22px_rgba(214,160,59,0.32)]">
+        <Image
+          src={avatarUrl}
+          alt=""
+          fill
+          sizes="96px"
+          className="object-cover object-top"
+          data-testid="reward-avatar-image"
+        />
+      </div>
+      <div className="grid gap-2 max-[420px]:justify-items-center max-[420px]:text-center">
+        <div className="flex flex-wrap items-center gap-2">
+          <strong className="text-xl font-black uppercase text-[#fff8df] max-[420px]:text-lg" data-testid="reward-player-name">
+            {playerName}
+          </strong>
+          <span
+            className="rounded border border-[#ffe08a]/55 bg-black/55 px-2 py-0.5 text-xs font-black uppercase tracking-[0.08em] text-[#ffe08a]"
+            data-testid="reward-player-level"
+          >
+            Lv {level}
+          </span>
+        </div>
+        {xpProgress ? (
+          <RewardXpBar xpProgress={xpProgress} xpDelta={xpDelta} showXpDelta={showXpDelta} />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function RewardXpBar({
+  xpProgress,
+  xpDelta,
+  showXpDelta,
+}: {
+  xpProgress: ReturnType<typeof computeXpProgress>;
+  xpDelta: number;
+  showXpDelta: boolean;
+}) {
+  const highlightWidth = Math.max(0, xpProgress.highlightEndPercent - xpProgress.highlightStartPercent);
+
+  return (
+    <div className="grid gap-1" data-testid="reward-xp-bar">
+      <div
+        className="relative h-3 overflow-hidden rounded-full border border-black/60 bg-black/55"
+        role="progressbar"
+        aria-valuenow={Math.round(xpProgress.percent)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <span
+          className="absolute inset-y-0 left-0 rounded-full bg-[#49d2e7]"
+          style={{ width: `${xpProgress.percent}%` }}
+        />
+        {showXpDelta && highlightWidth > 0 ? (
+          <span
+            className="absolute inset-y-0 rounded-full bg-[linear-gradient(90deg,#ffe08a,#fff26d)] shadow-[0_0_10px_rgba(255,224,138,0.65)] animate-pulse"
+            style={{ left: `${xpProgress.highlightStartPercent}%`, width: `${highlightWidth}%` }}
+            data-testid="reward-xp-bar-delta"
+          />
+        ) : null}
+      </div>
+      <span className="text-[11px] font-black uppercase tracking-[0.06em] text-[#d9ceb2]" data-testid="reward-xp-label">
+        {showXpDelta ? `+${xpDelta} XP · ` : ""}
+        {xpProgress.xpIntoLevel} / {xpProgress.xpForNextLevel} XP
+      </span>
+    </div>
+  );
+}
+
+function RewardStatTile({
+  testId,
+  icon,
+  label,
+  deltaText,
+  detailText,
+  tone,
+  dataAttrs,
+  detailTestId,
+}: {
+  testId: string;
+  icon: string;
+  label: string;
+  deltaText: string;
+  detailText: string;
+  tone: "crystal" | "elo" | "loss" | "levelUp";
+  dataAttrs?: Record<string, string>;
+  detailTestId?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "grid grid-rows-[auto_auto_auto] items-center gap-1 rounded border-2 px-3 py-3 text-center",
+        statTileToneClass(tone),
+      )}
+      data-testid={testId}
+      data-tone={tone}
+      {...dataAttrs}
+    >
+      <span className="text-3xl leading-none">{icon}</span>
+      <span className={cn("text-2xl font-black leading-none", statTileDeltaColorClass(tone))}>{deltaText}</span>
+      <span
+        className="text-[11px] font-black uppercase tracking-[0.06em] text-[#d9ceb2]"
+        data-testid={detailTestId}
+      >
+        {label} · {detailText}
+      </span>
+    </div>
+  );
+}
+
+function statTileToneClass(tone: "crystal" | "elo" | "loss" | "levelUp") {
+  if (tone === "crystal") return "border-[#65d7e9]/45 bg-[linear-gradient(180deg,rgba(8,32,40,0.88),rgba(2,14,18,0.88))]";
+  if (tone === "elo") return "border-[#ffe08a]/55 bg-[linear-gradient(180deg,rgba(40,30,8,0.88),rgba(18,12,2,0.88))]";
+  if (tone === "loss") return "border-[#ff7d6e]/55 bg-[linear-gradient(180deg,rgba(48,12,12,0.88),rgba(20,4,4,0.88))]";
+  return "border-[#ffe08a]/70 bg-[linear-gradient(180deg,rgba(60,38,8,0.92),rgba(20,12,2,0.92))] shadow-[0_0_18px_rgba(255,224,138,0.28)]";
+}
+
+function statTileDeltaColorClass(tone: "crystal" | "elo" | "loss" | "levelUp") {
+  if (tone === "crystal") return "text-[#65d7e9]";
+  if (tone === "loss") return "text-[#ff8a7c]";
+  return "text-[#ffe08a]";
 }
 
 function OpponentThinkingIndicator() {

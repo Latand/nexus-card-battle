@@ -63,7 +63,19 @@ test("PvP reward overlay renders the crystal tile after a server-pushed forfeit 
     const crystalsTile = winningPage.getByTestId("reward-crystals-tile");
     await expect(crystalsTile).toHaveAttribute("data-delta-crystals", "50");
     await expect(crystalsTile).toHaveAttribute("data-new-crystals", "50");
-    await expect(winningPage.getByTestId("reward-crystals-line")).toContainText("+50 💎");
+    await expect(winningPage.getByTestId("reward-crystals-line")).toContainText("всього 50");
+
+    // Match-result title is color-coded per outcome (victory / defeat tone).
+    await expect(winningPage.getByTestId("reward-title")).toHaveText("ПЕРЕМОГА");
+    await expect(losingPage.getByTestId("reward-title")).toHaveText("ПОРАЗКА");
+    await expect(winningPage.getByTestId("reward-title-block")).toHaveAttribute("data-tone", "victory");
+    await expect(losingPage.getByTestId("reward-title-block")).toHaveAttribute("data-tone", "defeat");
+
+    // Avatar block: both sides see avatar + name + level + XP bar.
+    await expect(winningPage.getByTestId("reward-avatar-block")).toBeVisible();
+    await expect(losingPage.getByTestId("reward-avatar-block")).toBeVisible();
+    await expect(winningPage.getByTestId("reward-xp-label")).toContainText("+100 XP");
+    await expect(losingPage.getByTestId("reward-xp-label")).toContainText("+10 XP");
 
     // Both PvP sides see the ELO tile with matching equal-and-opposite deltas
     // (default 1000 vs 1000 → winner +16 → 1016, loser -16 → 984).
@@ -73,25 +85,31 @@ test("PvP reward overlay renders the crystal tile after a server-pushed forfeit 
     await expect(loserEloTile).toBeVisible();
     await expect(winnerEloTile).toHaveAttribute("data-delta-elo", "16");
     await expect(winnerEloTile).toHaveAttribute("data-new-elo", "1016");
+    await expect(winnerEloTile).toHaveAttribute("data-tone", "elo");
     await expect(loserEloTile).toHaveAttribute("data-delta-elo", "-16");
     await expect(loserEloTile).toHaveAttribute("data-new-elo", "984");
-    await expect(winningPage.getByTestId("reward-elo-line")).toContainText("+16 ELO");
+    await expect(loserEloTile).toHaveAttribute("data-tone", "loss");
     await expect(winningPage.getByTestId("reward-elo-line")).toContainText("1000 → 1016");
-    await expect(losingPage.getByTestId("reward-elo-line")).toContainText("-16 ELO");
     await expect(losingPage.getByTestId("reward-elo-line")).toContainText("1000 → 984");
 
-    // Loser still sees the persisted XP tile (PvP loss = +10 XP).
-    await expect(losingPage.getByTestId("reward-user-xp-tile")).toBeVisible();
-    await expect(losingPage.getByTestId("reward-user-xp-tile")).toHaveAttribute("data-delta-xp", "10");
+    // Loser sees no crystals tile (delta = 0) and no level-up tile.
     await expect(losingPage.getByTestId("reward-crystals-tile")).toHaveCount(0);
+    await expect(losingPage.getByTestId("reward-level-up-tile")).toHaveCount(0);
 
-    // The "Новий бій" button on a PvP reward overlay is mode-tagged for PvP
-    // and re-enters the PvP queue (NOT a PvE/AI restart) when clicked.
-    const winnerReplay = winningPage.getByTestId("reward-replay");
-    await expect(winnerReplay).toHaveAttribute("data-mode", "human");
-    await expect(winnerReplay).toContainText("PvP");
-    await expect(winnerReplay).not.toContainText("AI");
-    await winnerReplay.click();
+    // Card-progress section is fully hidden on the new overlay.
+    const cardRewardLocator = losingPage.locator('[data-testid^="reward-card-"]');
+    await expect(cardRewardLocator).toHaveCount(0);
+
+    // Both action buttons are present on every reward overlay.
+    await expect(winningPage.getByTestId("reward-replay-ai")).toBeVisible();
+    await expect(winningPage.getByTestId("reward-replay-human")).toBeVisible();
+    await expect(losingPage.getByTestId("reward-replay-ai")).toBeVisible();
+    await expect(losingPage.getByTestId("reward-replay-human")).toBeVisible();
+
+    // Clicking PvP from a finished PvP match re-enters the queue immediately.
+    const winnerReplayPvp = winningPage.getByTestId("reward-replay-human");
+    await expect(winnerReplayPvp).toContainText("PvP");
+    await winnerReplayPvp.click();
     await expect(winningPage.getByTestId("reward-summary")).toBeHidden({ timeout: 5_000 });
     const humanOverlay = winningPage.getByTestId("human-match-overlay");
     await expect(humanOverlay).toBeVisible({ timeout: 5_000 });
@@ -194,7 +212,7 @@ test("ignores reward_summary payloads that arrive for a different matchId", asyn
 
     await expect(winnerPage.getByTestId("reward-summary")).toHaveCount(0);
     await expect(winnerPage.getByTestId("reward-crystals-tile")).toHaveCount(0);
-    await expect(winnerPage.getByTestId("reward-user-xp-tile")).toHaveCount(0);
+    await expect(winnerPage.getByTestId("reward-elo-tile")).toHaveCount(0);
   } finally {
     await winnerContext.close();
     await loserContext.close();
