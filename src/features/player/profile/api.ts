@@ -14,6 +14,15 @@ import { computeMatchRewards, type MatchResultBucket } from "./progression";
 import { computeLevelFromXp } from "./types";
 import type { RewardSummary } from "@/features/battle/model/types";
 
+export type SellErrorCode = "invalid_card_id" | "invalid_sell_count" | "insufficient_stock" | "card_in_deck";
+
+export class SellError extends Error {
+  constructor(public readonly code: SellErrorCode, message: string, public readonly status: number) {
+    super(message);
+    this.name = "SellError";
+  }
+}
+
 export type PlayerProfileStore = {
   findOrCreateByIdentity(identity: PlayerIdentity): Promise<StoredPlayerProfile>;
 };
@@ -39,6 +48,10 @@ export type PlayerMatchRewardsStore = PlayerProfileStore & {
 
 export type PlayerAvatarStore = PlayerProfileStore & {
   setAvatarUrl(identity: PlayerIdentity, avatarUrl: string): Promise<StoredPlayerProfile>;
+};
+
+export type PlayerSellStore = PlayerProfileStore & {
+  applySellCards(identity: PlayerIdentity, cardId: string, count: number): Promise<StoredPlayerProfile>;
 };
 
 export async function handlePlayerProfilePost(request: Request, store: PlayerProfileStore) {
@@ -83,6 +96,42 @@ export async function handlePlayerAvatarPost(request: Request, store: PlayerAvat
   } catch (error) {
     return playerProfileErrorResponse(error);
   }
+}
+
+export async function handlePlayerSellPost(request: Request, store: PlayerSellStore) {
+  try {
+    const body = await readJsonObject(request);
+    const identity = parsePlayerIdentity(body.identity);
+    const cardId = parseSellCardId(body.cardId);
+    const count = parseSellCount(body.count);
+
+    const stored = await store.applySellCards(identity, cardId, count);
+
+    return Response.json(
+      { player: toPlayerProfile(stored) },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    return playerProfileErrorResponse(error);
+  }
+}
+
+function parseSellCardId(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new SellError("invalid_card_id", "cardId must be a string.", 400);
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new SellError("invalid_card_id", "cardId must not be empty.", 400);
+  }
+  return trimmed;
+}
+
+function parseSellCount(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    throw new SellError("invalid_sell_count", "count must be a positive integer.", 400);
+  }
+  return value;
 }
 
 export async function handlePlayerMatchFinishedPost(request: Request, store: PlayerMatchRewardsStore) {
@@ -267,6 +316,16 @@ function playerProfileResponse(player: PlayerProfile) {
 }
 
 function playerProfileErrorResponse(error: unknown) {
+  if (error instanceof SellError) {
+    return Response.json(
+      {
+        error: error.code,
+        message: error.message,
+      },
+      { status: error.status },
+    );
+  }
+
   if (error instanceof PlayerDeckValidationError) {
     return Response.json(
       {

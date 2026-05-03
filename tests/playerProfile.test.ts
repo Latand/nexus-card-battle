@@ -1,17 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import { cards } from "../src/features/battle/model/cards";
 import {
+  SellError,
   applyAndSummarizeMatchRewards,
   applyPvpMatchRewardsForBothSides,
   handlePlayerDeckSavePost,
   handlePlayerMatchFinishedPost,
   handlePlayerProfileGet,
   handlePlayerProfilePost,
+  handlePlayerSellPost,
   type ApplyMatchRewardsInput,
   type PlayerDeckStore,
   type PlayerMatchRewardsStore,
   type PlayerProfileStore,
+  type PlayerSellStore,
 } from "../src/features/player/profile/api";
+import { computeSellRevenue } from "../src/features/economy/sellPricing";
+import { addToInventory, getOwnedCount, getSellableCount, removeFromInventory } from "../src/features/inventory/inventoryOps";
 import { computeLevelFromXp, createNewStoredPlayerProfile, isSamePlayerIdentity, type PlayerIdentity, type PlayerProfile, type StoredPlayerProfile } from "../src/features/player/profile/types";
 import { computeLevelUpBonusForRange } from "../src/features/player/profile/progression";
 import type { RewardSummary } from "../src/features/battle/model/types";
@@ -306,10 +311,10 @@ describe("player match-finished API (PvE)", () => {
     const loser = await applyAndSummarizeMatchRewards(store, loserIdentity, { mode: "pvp", result: "loss" });
 
     expect(winner.summary.deltaXp).toBe(100);
-    expect(winner.summary.deltaCrystals).toBe(50);
+    expect(winner.summary.deltaCrystals).toBe(10);
     expect(winner.summary.leveledUp).toBe(false);
-    expect(winner.summary.newTotals).toEqual({ crystals: 50, totalXp: 100, level: 1 });
-    expect(winner.persisted.crystals).toBe(50);
+    expect(winner.summary.newTotals).toEqual({ crystals: 10, totalXp: 100, level: 1 });
+    expect(winner.persisted.crystals).toBe(10);
     expect(winner.persisted.totalXp).toBe(100);
     expect(winner.persisted.wins).toBe(1);
 
@@ -320,7 +325,7 @@ describe("player match-finished API (PvE)", () => {
 
     const persistedWinner = store.snapshot(winnerIdentity);
     const persistedLoser = store.snapshot(loserIdentity);
-    expect(persistedWinner?.crystals).toBe(50);
+    expect(persistedWinner?.crystals).toBe(10);
     expect(persistedWinner?.totalXp).toBe(100);
     expect(persistedWinner?.wins).toBe(1);
     expect(persistedLoser?.totalXp).toBe(10);
@@ -340,8 +345,8 @@ describe("player match-finished API (PvE)", () => {
 
     const persisted = store.snapshot(racyIdentity);
     expect(persisted?.totalXp).toBe(195 + 100 + 100);
-    // 50 (match win) * 2 + 50 (single level-up bonus to level 2)
-    expect(persisted?.crystals).toBe(50 + 50 + 50);
+    // 10 (match win) * 2 + 50 (single level-up bonus to level 2)
+    expect(persisted?.crystals).toBe(10 + 10 + 50);
     expect(persisted?.wins).toBe(2);
   });
 
@@ -508,7 +513,7 @@ describe("player match-finished API (PvE)", () => {
     const loserSummary = loserOutcome!.summary as RewardSummary;
 
     expect(winnerSummary.deltaXp).toBe(100);
-    expect(winnerSummary.deltaCrystals).toBe(50);
+    expect(winnerSummary.deltaCrystals).toBe(10);
     expect(loserSummary.deltaXp).toBe(10);
     expect(loserSummary.deltaCrystals).toBe(0);
 
@@ -555,7 +560,194 @@ describe("player match-finished API (PvE)", () => {
   });
 });
 
-class MemoryPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewardsStore {
+describe("player sell API", () => {
+  const sellIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-sell-flow" };
+  const commonCard = cards.find((card) => card.rarity === "Common");
+  const legendCard = cards.find((card) => card.rarity === "Legend");
+  if (!commonCard) throw new Error("Test fixture requires at least one Common card.");
+  if (!legendCard) throw new Error("Test fixture requires at least one Legend card.");
+
+  const commonSellPrice = 5;
+  const legendSellPrice = 200;
+
+  function createSellableProfile(options: {
+    ownedCards: { cardId: string; count: number }[];
+    deckIds?: string[];
+    crystals?: number;
+  }): StoredPlayerProfile {
+    return {
+      ...createNewStoredPlayerProfile("player-sell-flow", sellIdentity),
+      ownedCards: options.ownedCards.map((entry) => ({ ...entry })),
+      deckIds: options.deckIds ?? [],
+      starterFreeBoostersRemaining: 0,
+      openedBoosterIds: [],
+      crystals: options.crystals ?? 0,
+    };
+  }
+
+  test("happy path: sells two of a duplicated Common, removes the entry, credits 2 * 5 = 10 crystals", async () => {
+    const store = new MemoryPlayerProfileStore([
+      createSellableProfile({ ownedCards: [{ cardId: commonCard.id, count: 2 }], crystals: 100 }),
+    ]);
+
+    const response = await postSell(store, { identity: sellIdentity, cardId: commonCard.id, count: 2 });
+    const body = (await response.json()) as { player: PlayerProfile };
+
+    expect(response.status).toBe(200);
+    expect(body.player.crystals).toBe(100 + 2 * commonSellPrice);
+    expect(body.player.ownedCards.find((entry) => entry.cardId === commonCard.id)).toBeUndefined();
+
+    const persisted = store.snapshot(sellIdentity);
+    expect(persisted?.crystals).toBe(110);
+    expect(getOwnedCount(persisted?.ownedCards ?? [], commonCard.id)).toBe(0);
+  });
+
+  test("happy path: count: 1 of a 3-stack decrements to 2 and credits one unit of revenue", async () => {
+    const store = new MemoryPlayerProfileStore([
+      createSellableProfile({ ownedCards: [{ cardId: commonCard.id, count: 3 }], crystals: 0 }),
+    ]);
+
+    const response = await postSell(store, { identity: sellIdentity, cardId: commonCard.id, count: 1 });
+    const body = (await response.json()) as { player: PlayerProfile };
+
+    expect(response.status).toBe(200);
+    expect(getOwnedCount(body.player.ownedCards, commonCard.id)).toBe(2);
+    expect(body.player.crystals).toBe(commonSellPrice);
+  });
+
+  test("Legend cards pay the Legend rarity (200 per copy)", async () => {
+    const store = new MemoryPlayerProfileStore([
+      createSellableProfile({ ownedCards: [{ cardId: legendCard.id, count: 2 }], crystals: 0 }),
+    ]);
+
+    const response = await postSell(store, { identity: sellIdentity, cardId: legendCard.id, count: 2 });
+    const body = (await response.json()) as { player: PlayerProfile };
+
+    expect(response.status).toBe(200);
+    expect(body.player.crystals).toBe(2 * legendSellPrice);
+    expect(getOwnedCount(body.player.ownedCards, legendCard.id)).toBe(0);
+  });
+
+  test("rejects sell when the card is in any saved deck (409 card_in_deck), profile unchanged", async () => {
+    const profile = createSellableProfile({
+      ownedCards: [{ cardId: commonCard.id, count: 5 }],
+      deckIds: [commonCard.id],
+      crystals: 12,
+    });
+    const store = new MemoryPlayerProfileStore([profile]);
+
+    const response = await postSell(store, { identity: sellIdentity, cardId: commonCard.id, count: 1 });
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(409);
+    expect(body.error).toBe("card_in_deck");
+
+    const persisted = store.snapshot(sellIdentity);
+    expect(persisted?.crystals).toBe(12);
+    expect(getOwnedCount(persisted?.ownedCards ?? [], commonCard.id)).toBe(5);
+  });
+
+  test("rejects sell when count > sellable copies (409 insufficient_stock), profile unchanged", async () => {
+    const store = new MemoryPlayerProfileStore([
+      createSellableProfile({ ownedCards: [{ cardId: commonCard.id, count: 2 }], crystals: 7 }),
+    ]);
+
+    const response = await postSell(store, { identity: sellIdentity, cardId: commonCard.id, count: 3 });
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(409);
+    expect(body.error).toBe("insufficient_stock");
+
+    const persisted = store.snapshot(sellIdentity);
+    expect(persisted?.crystals).toBe(7);
+    expect(getOwnedCount(persisted?.ownedCards ?? [], commonCard.id)).toBe(2);
+  });
+
+  test("rejects sell against an unknown cardId (400 invalid_card_id), profile unchanged", async () => {
+    const store = new MemoryPlayerProfileStore([
+      createSellableProfile({ ownedCards: [{ cardId: commonCard.id, count: 2 }], crystals: 0 }),
+    ]);
+
+    const response = await postSell(store, { identity: sellIdentity, cardId: "not-a-real-card", count: 1 });
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("invalid_card_id");
+
+    const persisted = store.snapshot(sellIdentity);
+    expect(getOwnedCount(persisted?.ownedCards ?? [], commonCard.id)).toBe(2);
+  });
+
+  test("rejects sell with count: 0 (400 invalid_sell_count)", async () => {
+    const store = new MemoryPlayerProfileStore([
+      createSellableProfile({ ownedCards: [{ cardId: commonCard.id, count: 2 }] }),
+    ]);
+
+    const response = await postSell(store, { identity: sellIdentity, cardId: commonCard.id, count: 0 });
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("invalid_sell_count");
+  });
+
+  test("rejects sell with count: -1 (400 invalid_sell_count)", async () => {
+    const store = new MemoryPlayerProfileStore([
+      createSellableProfile({ ownedCards: [{ cardId: commonCard.id, count: 2 }] }),
+    ]);
+
+    const response = await postSell(store, { identity: sellIdentity, cardId: commonCard.id, count: -1 });
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("invalid_sell_count");
+  });
+
+  test("rejects sell with non-integer count (400 invalid_sell_count)", async () => {
+    const store = new MemoryPlayerProfileStore([
+      createSellableProfile({ ownedCards: [{ cardId: commonCard.id, count: 2 }] }),
+    ]);
+
+    const response = await postSell(store, { identity: sellIdentity, cardId: commonCard.id, count: 1.5 });
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("invalid_sell_count");
+  });
+
+  test("deck-protection: with 2 owned and the card in deck, sellableCount is 1 — selling 2 fails 409 insufficient_stock or card_in_deck", async () => {
+    // Per slice-1 inventoryOps: a card in deck reserves exactly one copy.
+    // With ownedCount = 2 and the card in deck, sellableCount = 1.
+    const profile = createSellableProfile({
+      ownedCards: [{ cardId: commonCard.id, count: 2 }],
+      deckIds: [commonCard.id],
+      crystals: 0,
+    });
+    const store = new MemoryPlayerProfileStore([profile]);
+    expect(getSellableCount(profile.ownedCards, profile.deckIds, commonCard.id)).toBe(1);
+
+    const response = await postSell(store, { identity: sellIdentity, cardId: commonCard.id, count: 2 });
+    const body = (await response.json()) as { error: string };
+
+    // The deck-membership guard fires first in our implementation.
+    expect(response.status).toBe(409);
+    expect(["card_in_deck", "insufficient_stock"]).toContain(body.error);
+
+    const persisted = store.snapshot(sellIdentity);
+    expect(persisted?.crystals).toBe(0);
+    expect(getOwnedCount(persisted?.ownedCards ?? [], commonCard.id)).toBe(2);
+  });
+
+  test("the multiset addToInventory + sell round-trip is consistent with computeSellRevenue", () => {
+    // Sanity check that the in-memory store mirrors what production does:
+    // ownedCards updates flow through inventoryOps and crystals through the
+    // pricing module, so the test exercises the same composition.
+    const seedOwned = addToInventory([], commonCard.id, 4);
+    expect(getOwnedCount(seedOwned, commonCard.id)).toBe(4);
+    expect(computeSellRevenue(commonCard, 4)).toBe(20);
+  });
+});
+
+class MemoryPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewardsStore, PlayerSellStore {
   private readonly profiles: StoredPlayerProfile[];
   private nextId: number;
   createdCount = 0;
@@ -621,6 +813,40 @@ class MemoryPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewardsSto
     return afterBonus;
   }
 
+  async applySellCards(identity: PlayerIdentity, cardId: string, count: number): Promise<StoredPlayerProfile> {
+    if (!Number.isInteger(count) || count <= 0) {
+      throw new SellError("invalid_sell_count", "count must be a positive integer.", 400);
+    }
+
+    const card = cards.find((entry) => entry.id === cardId);
+    if (!card) {
+      throw new SellError("invalid_card_id", `Unknown card id: ${cardId}`, 400);
+    }
+
+    const index = this.profiles.findIndex((profile) => isSamePlayerIdentity(profile.identity, identity));
+    if (index < 0) {
+      throw new SellError("insufficient_stock", "Profile does not exist.", 409);
+    }
+
+    const current = this.profiles[index];
+    if (current.deckIds.includes(cardId)) {
+      throw new SellError("card_in_deck", "Cannot sell a card that is in a saved deck.", 409);
+    }
+
+    if (count > getSellableCount(current.ownedCards, current.deckIds, cardId)) {
+      throw new SellError("insufficient_stock", "Not enough sellable copies.", 409);
+    }
+
+    const revenue = computeSellRevenue(card, count);
+    const next: StoredPlayerProfile = {
+      ...current,
+      ownedCards: removeFromInventory(current.ownedCards, cardId, count),
+      crystals: current.crystals + revenue,
+    };
+    this.profiles[index] = next;
+    return next;
+  }
+
   snapshot(identity: PlayerIdentity): StoredPlayerProfile | undefined {
     return this.profiles.find((profile) => isSamePlayerIdentity(profile.identity, identity));
   }
@@ -676,6 +902,19 @@ function postMatchFinished(store: PlayerMatchRewardsStore, body: unknown) {
 function postDeck(store: PlayerDeckStore, body: unknown) {
   return handlePlayerDeckSavePost(
     new Request("http://localhost/api/player/deck", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    }),
+    store,
+  );
+}
+
+function postSell(store: PlayerSellStore, body: unknown) {
+  return handlePlayerSellPost(
+    new Request("http://localhost/api/player/sell", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

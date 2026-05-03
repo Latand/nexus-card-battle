@@ -60,6 +60,10 @@ export function getOwnedCount(inventory: readonly OwnedCardEntry[], cardId: stri
   return 0;
 }
 
+// Spare copies ignoring in-deck protection — the server enforces stricter
+// `card_in_deck` rejection (any sell of an in-deck cardId is refused), so UI
+// callers must gate the sell action on `deckIds.includes(cardId)` separately
+// rather than relying on the N-1 returned here.
 export function getSellableCount(
   inventory: readonly OwnedCardEntry[],
   deckIds: readonly string[],
