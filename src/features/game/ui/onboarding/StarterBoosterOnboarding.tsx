@@ -4,10 +4,12 @@ import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import { cards as cardCatalog } from "@/features/battle/model/cards";
 import { clans } from "@/features/battle/model/clans";
+import type { ClanRecord } from "@/features/battle/model/clans";
 import { fetchStarterBoosterCatalog, openStarterBooster } from "@/features/boosters/client";
 import { STARTER_BOOSTER_CARD_COUNT, type BoosterCatalogItem, type BoosterResponse } from "@/features/boosters/types";
 import type { Card, Rarity } from "@/features/battle/model/types";
 import { BattleCard } from "@/features/battle/ui/components/BattleCard";
+import { ClanGlyph, getClanColor } from "@/features/battle/ui/components/ClanGlyph";
 import { STARTER_FREE_BOOSTERS, type PlayerIdentity, type PlayerProfile } from "@/features/player/profile/types";
 import { cn } from "@/shared/lib/cn";
 
@@ -33,14 +35,6 @@ type RevealState = {
 };
 
 const STARTER_KIT_CARD_COUNT = STARTER_FREE_BOOSTERS * STARTER_BOOSTER_CARD_COUNT;
-const boosterAccents = [
-  ["#ffe08a", "#65d7e9"],
-  ["#ef735a", "#a8df5a"],
-  ["#f0b14a", "#d26a8a"],
-  ["#79d3a6", "#efcf6f"],
-  ["#c6b4ff", "#f48c58"],
-  ["#9bd1ff", "#d7e35e"],
-] as const;
 const rarityLabels: Record<Rarity, string> = {
   Common: "Звичайна",
   Rare: "Рідкісна",
@@ -187,17 +181,17 @@ export function StarterBoosterOnboarding({
           data-opened-booster-count={openedCount}
           data-progress-count={progressCount}
         >
-          <header className="grid grid-cols-[minmax(220px,0.8fr)_minmax(280px,1.1fr)_auto] items-stretch gap-3 rounded-md border border-[#d4aa4d]/45 bg-[linear-gradient(180deg,rgba(28,27,19,0.94),rgba(9,11,11,0.97))] p-3 shadow-[0_18px_42px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,242,181,0.12)] max-[980px]:grid-cols-1 max-[620px]:p-2">
-            <div className="grid content-center gap-1">
-              <b className="text-[11px] font-black uppercase tracking-[0.16em] text-[#d6b66d]">Стартова роздача</b>
-              <h1 className="text-[clamp(28px,6vw,54px)] font-black uppercase leading-none text-[#fff0ad] [text-shadow:0_3px_0_rgba(0,0,0,0.72)]">
+          <header className="grid grid-cols-[minmax(220px,0.8fr)_minmax(280px,1.1fr)_auto] items-stretch gap-3 rounded-md bg-[linear-gradient(180deg,rgba(28,27,19,0.92),rgba(9,11,11,0.96))] p-3 shadow-[0_18px_42px_rgba(0,0,0,0.42)] max-[980px]:grid-cols-[minmax(0,1fr)_auto] max-[620px]:grid-cols-1 max-[620px]:gap-2 max-[620px]:p-2">
+            <div className="grid content-center gap-0.5">
+              <b className="text-[11px] font-black uppercase tracking-[0.16em] text-[#d6b66d] max-[620px]:text-[10px]">Стартова роздача</b>
+              <h1 className="text-[clamp(24px,5vw,46px)] font-black uppercase leading-none text-[#fff0ad] [text-shadow:0_3px_0_rgba(0,0,0,0.72)]">
                 Нексус
               </h1>
             </div>
 
             <StarterProgress profile={profileForDisplay} />
 
-            <div className="grid min-w-[240px] grid-cols-3 gap-2 max-[980px]:min-w-0">
+            <div className="grid min-w-[240px] grid-cols-3 gap-2 max-[980px]:hidden">
               <Metric label="Бустерів" value={`${progressCount}/${STARTER_FREE_BOOSTERS}`} />
               <Metric label="Карт" value={profileForDisplay.ownedCardIds.length} testId="starter-owned-count" />
               <Metric label="Ще" value={profileForDisplay.starterFreeBoostersRemaining} />
@@ -210,19 +204,19 @@ export function StarterBoosterOnboarding({
             <StarterReveal reveal={reveal} revealedCount={revealedCount} onDone={finishReveal} />
           ) : (
             <section className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-3">
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 max-[760px]:grid-cols-1">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 max-[760px]:grid-cols-1 max-[760px]:gap-1">
                 <div className="min-w-0">
-                  <strong className="block text-[clamp(24px,4vw,38px)] font-black uppercase leading-none text-[#fff4c4]">
+                  <strong className="block text-[clamp(20px,4vw,38px)] font-black uppercase leading-none text-[#fff4c4]">
                     {openedCount === 0 ? "Обери перший бустер" : "Другий бустер чекає"}
                   </strong>
-                  <p className="mt-2 max-w-[760px] text-sm font-bold leading-snug text-[#cbbd99] max-[520px]:text-xs">
+                  <p className="mt-2 max-w-[760px] text-sm font-bold leading-snug text-[#cbbd99] max-[520px]:mt-1 max-[520px]:text-[11px]">
                     Обери два різні бустери. У кожному 5 нових карт з двох кланів: гарантовано одна легендарна,
                     одна унікальна і ще три карти без повторів з твоєї колекції.
                   </p>
                 </div>
 
-                <div className="grid min-w-[210px] gap-1 rounded-md border border-white/10 bg-black/34 px-3 py-2 text-right max-[760px]:min-w-0 max-[760px]:text-left">
-                  <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#8ed8e6]">Стан</span>
+                <div className="grid min-w-[210px] gap-1 text-right max-[760px]:hidden" data-testid="starter-state-wrap">
+                  <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#7e7567]">Стан</span>
                   <b className="text-sm font-black uppercase text-[#fff0ad]" data-testid="starter-state-label">
                     {openedCount === 0 ? "Перший вибір" : "Другий вибір"}
                   </b>
@@ -267,7 +261,7 @@ export function StarterBoosterOnboarding({
 
               {catalogStatus === "ready" ? (
                 <div
-                  className="booster-catalog-grid grid min-h-0 grid-cols-[repeat(auto-fit,minmax(178px,1fr))] gap-2.5 overflow-y-auto pr-1 max-[430px]:grid-cols-2 max-[430px]:gap-2"
+                  className="booster-catalog-grid grid min-h-0 grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-2.5 overflow-y-auto pr-1 max-[430px]:grid-cols-2 max-[430px]:gap-2"
                   data-testid="starter-booster-catalog"
                 >
                   {boosters.map((booster, index) => (
@@ -422,11 +416,11 @@ function StarterProgress({ profile }: { profile: PlayerProfile }) {
 
   return (
     <section
-      className="grid content-center gap-2 rounded border border-white/10 bg-black/30 px-3 py-2"
+      className="grid content-center gap-2 px-2"
       data-testid="starter-progress"
     >
       <div className="flex items-center justify-between gap-3">
-        <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a99d85]">Прогрес старту</span>
+        <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#7e7567]">Прогрес старту</span>
         <b className="text-sm font-black uppercase text-[#ffe08a]">{profile.starterFreeBoostersRemaining} лишилось</b>
       </div>
       <div className="grid grid-cols-2 gap-2">
@@ -436,10 +430,10 @@ function StarterProgress({ profile }: { profile: PlayerProfile }) {
             <span
               key={index}
               className={cn(
-                "h-3 rounded-sm border transition",
+                "h-2 rounded-full transition",
                 filled
-                  ? "border-[#ffe08a]/70 bg-[linear-gradient(90deg,#ffe08a,#65d7e9)]"
-                  : "border-white/12 bg-white/[0.05]",
+                  ? "bg-[linear-gradient(90deg,#ffe08a,#65d7e9)]"
+                  : "bg-white/[0.06]",
               )}
               data-testid={`starter-progress-slot-${index + 1}`}
               data-filled={filled}
@@ -464,83 +458,71 @@ function BoosterTile({
   opening: boolean;
   onOpen: () => void;
 }) {
-  const [toneA, toneB] = boosterAccents[index % boosterAccents.length];
   const opened = booster.starter.opened;
   const disabled = busy || !booster.starter.canOpen;
-  const clanDetails = booster.clans.map((clanName) => clans[clanName]).filter(Boolean);
-  const style = {
-    "--booster-a": toneA,
-    "--booster-b": toneB,
-  } as CSSProperties;
+  const clanDetails: ClanRecord[] = booster.clans.map((clanName) => clans[clanName]);
 
   return (
     <article
       className={cn(
-        "group relative min-h-[282px] overflow-hidden rounded-md border bg-[linear-gradient(145deg,color-mix(in_srgb,var(--booster-a),#111_24%),rgba(8,10,10,0.96)_42%,color-mix(in_srgb,var(--booster-b),#050809_32%))] p-3 shadow-[0_14px_30px_rgba(0,0,0,0.32),inset_0_1px_0_rgba(255,255,255,0.12)] transition max-[430px]:min-h-[248px] max-[430px]:p-2",
+        "@container/tile group relative grid min-h-[230px] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-md border bg-[#0a0c0c] shadow-[0_14px_30px_rgba(0,0,0,0.32)] transition max-[430px]:min-h-[300px]",
         opened
-          ? "border-[#ffe08a]/65 brightness-75"
+          ? "border-[#ffe08a]/55 brightness-75"
           : booster.starter.canOpen
-            ? "border-white/14 hover:-translate-y-0.5 hover:border-[#fff0ad]/70 hover:brightness-110"
+            ? "border-white/12 hover:-translate-y-0.5 hover:border-[#fff0ad]/55 hover:shadow-[0_18px_36px_rgba(0,0,0,0.42)]"
             : "border-white/10 opacity-70",
       )}
-      style={style}
       data-testid={`starter-booster-card-${booster.id}`}
       data-opened={opened}
       data-can-open={booster.starter.canOpen}
     >
-      <div className="pointer-events-none absolute inset-2 rounded border border-white/12" />
-      <div className="pointer-events-none absolute -right-8 -top-12 h-28 w-28 rotate-12 border-[14px] border-[color-mix(in_srgb,var(--booster-a),transparent_38%)]" />
-      <div className="relative z-[1] grid h-full min-h-[256px] grid-rows-[auto_1fr_auto] gap-3 max-[430px]:min-h-[226px]">
-        <div className="flex items-start justify-between gap-2">
-          <span className="rounded-sm border border-black/35 bg-[#fff0ad] px-1.5 py-1 text-[10px] font-black uppercase leading-none text-[#17100a]">
+      <header className="relative z-[1] grid gap-1.5 px-3 pb-2 pt-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] font-black uppercase leading-none tabular-nums text-[#7e7567]">
             {String(index + 1).padStart(2, "0")}
           </span>
           <span
             className={cn(
-              "rounded-sm border px-1.5 py-1 text-[10px] font-black uppercase leading-none",
-              opened
-                ? "border-[#ffe08a]/60 bg-[#ffe08a] text-[#17100a]"
-                : "border-white/15 bg-black/34 text-[#f6ebd1]",
+              "rounded-sm px-1.5 py-0.5 text-[9px] font-black uppercase leading-none",
+              opened ? "bg-[#ffe08a] text-[#17100a]" : "bg-white/10 text-[#cbbd99]",
             )}
           >
             {opened ? "Відкрито" : "Новий"}
           </span>
         </div>
-
-        <div className="grid content-end gap-2">
-          <strong className="text-[clamp(18px,3vw,25px)] font-black uppercase leading-[0.95] text-[#fff4c4] [text-shadow:0_2px_0_rgba(0,0,0,0.72)]">
-            {booster.name}
-          </strong>
-          <p className="line-clamp-3 text-[11px] font-bold leading-snug text-[#e8d9b6] max-[430px]:line-clamp-2 max-[430px]:text-[10px]">
-            {boosterStories[booster.id] ?? "Два клана, пять новых карт и стартовая связка для первой колоды."}
+        <strong className="truncate text-[clamp(16px,1.45vw,21px)] font-black uppercase leading-tight tracking-[0.02em] text-[#fff4c4] [text-shadow:0_2px_0_rgba(0,0,0,0.6)]">
+          {booster.name}
+        </strong>
+        {boosterStories[booster.id] ? (
+          <p className="line-clamp-2 text-[11px] font-bold leading-snug text-[#a99d85] max-[430px]:text-[10.5px]">
+            {boosterStories[booster.id]}
           </p>
-          <div className="grid grid-cols-3 gap-1 text-center">
-            <BoosterPromise value="5" label="карт" />
-            <BoosterPromise value="1" label="легенда" />
-            <BoosterPromise value="1" label="унікальна" />
-          </div>
-          <div className="grid gap-1">
-            {clanDetails.map((clan) => (
-              <div
-                key={clan.name}
-                className="min-w-0 rounded-sm border border-white/12 bg-black/32 px-2 py-1.5"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <b className="truncate text-[11px] font-black uppercase tracking-[0.04em] text-[#fff0ad]">{clan.name}</b>
-                  <span className="shrink-0 text-[9px] font-black uppercase text-[#8ed8e6]">{clan.bonus.name}</span>
-                </div>
-                <p className="mt-1 line-clamp-2 text-[10px] font-bold leading-snug text-[#cbbd99]">{clan.bonus.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+        ) : null}
+      </header>
 
+      <div className="grid grid-cols-2 @max-[200px]/tile:grid-cols-1 @max-[200px]/tile:grid-rows-2">
+        {clanDetails.map((clan, i) => (
+          <ClanZone key={clan.slug} clan={clan} position={i === 0 ? "first" : "second"} />
+        ))}
+      </div>
+
+      <footer className="relative z-[1] grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 pb-2 pt-1.5">
+        <div className="flex min-w-0 items-baseline gap-1.5 text-[10px] font-black uppercase tracking-[0.06em] text-[#7e7567]">
+          <span className="text-[#ffe08a]">5</span>
+          <span>карт</span>
+          <span className="text-white/15">·</span>
+          <span className="text-[#ffe08a]">1</span>
+          <span className="truncate">легенд</span>
+          <span className="text-white/15">·</span>
+          <span className="text-[#ffe08a]">1</span>
+          <span className="truncate">унік</span>
+        </div>
         <button
           className={cn(
-            "min-h-[38px] rounded border-2 px-3 text-xs font-black uppercase transition",
+            "min-h-[32px] rounded-sm px-3 text-[11px] font-black uppercase tracking-[0.04em] transition",
             disabled
-              ? "cursor-not-allowed border-white/10 bg-black/28 text-[#7c735f]"
-              : "border-black/55 bg-[linear-gradient(180deg,#fff26d,#e2b72e_56%,#966414)] text-[#17100a] hover:brightness-110",
+              ? "cursor-not-allowed bg-white/5 text-[#7c735f]"
+              : "bg-[linear-gradient(180deg,#fff26d,#e2b72e_56%,#966414)] text-[#17100a] hover:brightness-110",
           )}
           type="button"
           disabled={disabled}
@@ -549,17 +531,53 @@ function BoosterTile({
         >
           {opening ? "Запис..." : opened ? "Недоступно" : "Відкрити"}
         </button>
-      </div>
+      </footer>
     </article>
   );
 }
 
-function BoosterPromise({ value, label }: { value: string; label: string }) {
+function ClanZone({ clan, position }: { clan: ClanRecord; position: "first" | "second" }) {
+  const color = getClanColor(clan.name);
+  const style = {
+    "--clan-color": color,
+    color,
+    background: `linear-gradient(135deg, color-mix(in srgb, ${color} 22%, #0a0c0c) 0%, color-mix(in srgb, ${color} 5%, #0a0c0c) 80%)`,
+  } as CSSProperties;
+
   return (
-    <span className="rounded-sm border border-[#ffe08a]/24 bg-[#ffe08a]/10 px-1.5 py-1">
-      <b className="block text-sm font-black leading-none text-[#ffe08a]">{value}</b>
-      <em className="mt-0.5 block truncate text-[8px] font-black uppercase not-italic text-[#e8d9b6]">{label}</em>
-    </span>
+    <div
+      className="relative grid min-h-[120px] grid-rows-[1fr_auto] gap-1.5 px-2.5 pb-2 pt-2.5"
+      style={style}
+      data-clan-zone={clan.slug}
+    >
+      <span
+        className={cn(
+          "pointer-events-none absolute top-0 h-full w-[2px]",
+          position === "first" ? "left-0" : "right-0",
+        )}
+        style={{ background: `linear-gradient(180deg, transparent 0%, ${color} 35%, ${color} 65%, transparent 100%)` }}
+        aria-hidden="true"
+      />
+
+      <div className="grid place-items-center">
+        <ClanGlyph
+          clan={clan.name}
+          className="h-[58px] w-[58px] @max-[200px]/tile:h-[68px] @max-[200px]/tile:w-[68px]"
+        />
+      </div>
+
+      <div className="grid gap-0.5 text-center">
+        <b className="truncate text-[11px] font-black uppercase tracking-[0.04em] text-[#fff4c4]">
+          {clan.name}
+        </b>
+        <span
+          className="block truncate text-[9px] font-black uppercase tracking-[0.04em]"
+          style={{ color: `color-mix(in srgb, ${color} 80%, white 20%)` }}
+        >
+          {clan.bonus.name}
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -589,13 +607,18 @@ function StarterReveal({
       data-revealed-count={revealedCount}
     >
       <div className="flex items-end justify-between gap-3 max-[620px]:grid">
-        <div>
+        <div className="min-w-0">
           <b className="text-[11px] font-black uppercase tracking-[0.16em] text-[#65d7e9]">{reveal.booster.name}</b>
           <h2 className="mt-1 text-[clamp(24px,5vw,42px)] font-black uppercase leading-none text-[#fff0ad]">
             П&apos;ять карт у профілі
           </h2>
+          {boosterStories[reveal.booster.id] ? (
+            <p className="mt-2 max-w-[640px] text-sm font-bold leading-snug text-[#cbbd99] max-[520px]:text-xs">
+              {boosterStories[reveal.booster.id]}
+            </p>
+          ) : null}
         </div>
-        <span className="rounded border border-white/10 bg-black/34 px-3 py-2 text-xs font-black uppercase tracking-[0.08em] text-[#cbbd99]">
+        <span className="shrink-0 rounded border border-white/10 bg-black/34 px-3 py-2 text-xs font-black uppercase tracking-[0.08em] text-[#cbbd99]">
           1 легендарна · 1 унікальна · без повторів
         </span>
       </div>
@@ -697,9 +720,9 @@ function RevealDetail({ label, title, description }: { label: string; title: str
 
 function Metric({ label, value, testId }: { label: string; value: number | string; testId?: string }) {
   return (
-    <div className="rounded border border-white/10 bg-black/36 px-2 py-2" data-testid={testId}>
+    <div className="px-2 py-1" data-testid={testId}>
       <b className="block text-xl font-black leading-none text-[#ffe08a]">{value}</b>
-      <span className="mt-1 block text-[10px] font-black uppercase tracking-[0.1em] text-[#a99d85]">{label}</span>
+      <span className="mt-1 block text-[10px] font-black uppercase tracking-[0.1em] text-[#7e7567]">{label}</span>
     </div>
   );
 }

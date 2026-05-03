@@ -180,11 +180,6 @@ export function SelectionOverlay({
               clanBonusActive={knownEnemyClanBonusActive}
               abilityActive={knownEnemyAbilityActive}
             />
-            {knownEnemyEnergy !== undefined ? (
-              <span className="min-w-[112px] rounded border border-[#7656f0]/70 bg-black/70 px-2 py-1 text-center text-xs font-black uppercase text-[#fff8df] shadow-[0_0_12px_rgba(118,86,240,0.38)]">
-                енергія {knownEnemyEnergy + BASE_ATTACK_ENERGY}
-              </span>
-            ) : null}
           </div>
         ) : (
           <div
