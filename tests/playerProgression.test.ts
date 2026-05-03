@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
   LEVEL_UP_CRYSTAL_BONUS_PER_LEVEL,
-  LEVEL_XP_BASE,
   PVE_XP_REWARDS,
   computeLevelFromXp,
+  computeLevelUpBonusForRange,
   computeMatchRewards,
 } from "../src/features/player/profile/progression";
+import { LEVEL_XP_BASE } from "../src/features/player/profile/types";
 
 // Cumulative XP required to reach the start of level N (so level N exactly,
 // xpIntoLevel = 0). Level 1 needs 0 XP. Level N needs sum_{k=2..N} 50 * k^2.
@@ -79,7 +80,7 @@ describe("computeLevelFromXp", () => {
 describe("computeMatchRewards (PvE)", () => {
   const freshProfile = { crystals: 0, totalXp: 0, level: 1 };
 
-  test("PvE win awards +30 XP, no crystals, no level-up from a single win", () => {
+  test("PvE win awards +30 XP, no crystals, no level-up at zero baseline", () => {
     const rewards = computeMatchRewards(freshProfile, { mode: "pve", result: "win" });
 
     expect(rewards.deltaXp).toBe(PVE_XP_REWARDS.win);
@@ -135,9 +136,30 @@ describe("computeMatchRewards (PvE)", () => {
     expect(rewards.newTotals.crystals).toBe(12 + 50);
   });
 
-  test("PvP throws in slice 1 (server-authoritative path lands in slice 2)", () => {
+  test("PvP rewards throw (computeMatchRewards is PvE-only)", () => {
     expect(() =>
       computeMatchRewards(freshProfile, { mode: "pvp", result: "win" }),
-    ).toThrow(/PvP rewards are not implemented in slice #1/);
+    ).toThrow(/PvP rewards are not implemented/);
+  });
+});
+
+describe("computeLevelUpBonusForRange", () => {
+  test("returns 0 when no levels were crossed", () => {
+    expect(computeLevelUpBonusForRange(1, 1)).toBe(0);
+    expect(computeLevelUpBonusForRange(5, 5)).toBe(0);
+    expect(computeLevelUpBonusForRange(5, 4)).toBe(0);
+  });
+
+  test("crossing one level pays new_level * 25", () => {
+    expect(computeLevelUpBonusForRange(1, 2)).toBe(2 * LEVEL_UP_CRYSTAL_BONUS_PER_LEVEL);
+    expect(computeLevelUpBonusForRange(2, 3)).toBe(3 * LEVEL_UP_CRYSTAL_BONUS_PER_LEVEL);
+    expect(computeLevelUpBonusForRange(9, 10)).toBe(10 * LEVEL_UP_CRYSTAL_BONUS_PER_LEVEL);
+  });
+
+  test("crossing multiple levels sums level * 25 over each crossed level", () => {
+    // 1 -> 3 crosses levels 2 and 3: 50 + 75 = 125.
+    expect(computeLevelUpBonusForRange(1, 3)).toBe(125);
+    // 1 -> 4 crosses 2, 3, 4: 50 + 75 + 100 = 225.
+    expect(computeLevelUpBonusForRange(1, 4)).toBe(225);
   });
 });

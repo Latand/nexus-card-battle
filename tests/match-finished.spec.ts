@@ -70,26 +70,20 @@ test("PvE reward overlay renders the persisted XP tile and level-up tile from /a
   await page.getByTestId("play-selected-deck").click();
   await expect(page.getByTestId("round-status")).toBeVisible({ timeout: 10_000 });
 
-  // Play whatever the AI gives us; we only care about reaching the reward
-  // overlay. The endpoint is mocked so the displayed delta + level-up are
-  // independent of the RNG-driven match outcome.
   await playUntilRewardOverlay(page);
 
   await expect(page.getByTestId("reward-summary")).toBeVisible({ timeout: 60_000 });
 
-  // The endpoint was called with the PvE mode and a valid result bucket.
   await expect.poll(() => matchFinishedRequests.length, { timeout: 5_000 }).toBeGreaterThanOrEqual(1);
   expect(matchFinishedRequests[0]?.mode).toBe("pve");
   expect(["win", "draw", "loss"]).toContain(matchFinishedRequests[0]?.result);
 
-  // Persisted XP tile reflects the +30 PvE win delta.
   const xpTile = page.getByTestId("reward-user-xp-tile");
   await expect(xpTile).toBeVisible();
   await expect(xpTile).toHaveAttribute("data-delta-xp", "30");
   await expect(page.getByTestId("reward-user-xp-line")).toContainText("+30 XP");
   await expect(page.getByTestId("reward-user-xp-line")).toContainText("рівень 2");
 
-  // Level-up tile renders when leveledUp = true and shows the new_level * 25 crystal bonus.
   const levelUpTile = page.getByTestId("reward-level-up-tile");
   await expect(levelUpTile).toBeVisible();
   await expect(levelUpTile).toHaveAttribute("data-new-level", "2");
@@ -168,8 +162,6 @@ async function playUntilRewardOverlay(page: Page) {
     await expect(page.getByTestId("selection-overlay")).toBeVisible();
     await page.getByTestId("selection-ok").click();
 
-    // Wait for the battle overlay sequence to clear (or for the reward overlay
-    // to appear if this was the deciding round).
     await expect
       .poll(
         async () => {

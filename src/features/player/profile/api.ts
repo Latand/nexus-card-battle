@@ -8,12 +8,8 @@ import {
 } from "./types";
 import { cards } from "@/features/battle/model/cards";
 import { MIN_DECK_SIZE } from "@/features/battle/model/constants";
-import {
-  LEVEL_XP_BASE,
-  computeMatchRewards,
-  type ComputedMatchRewardTotals,
-  type MatchResultBucket,
-} from "./progression";
+import { computeMatchRewards, type MatchResultBucket } from "./progression";
+import { computeLevelFromXp } from "./types";
 import type { RewardSummary } from "@/features/battle/model/types";
 
 export type PlayerProfileStore = {
@@ -26,7 +22,10 @@ export type PlayerDeckStore = PlayerProfileStore & {
 
 export type ApplyMatchRewardsInput = {
   result: MatchResultBucket;
-  newTotals: ComputedMatchRewardTotals;
+  deltaXp: number;
+  // Baseline match crystals (NOT the level-up bonus — that is recomputed
+  // inside the store from the authoritative post-$inc totalXp).
+  matchCrystals: number;
 };
 
 export type PlayerMatchRewardsStore = PlayerProfileStore & {
@@ -75,15 +74,18 @@ export async function handlePlayerMatchFinishedPost(request: Request, store: Pla
     );
 
     const persisted = toPlayerProfile(
-      await store.applyMatchRewards(identity, { result, newTotals: rewards.newTotals }),
+      await store.applyMatchRewards(identity, {
+        result,
+        deltaXp: rewards.deltaXp,
+        matchCrystals: rewards.matchCrystals,
+      }),
     );
 
+    const persistedLevelInfo = computeLevelFromXp(persisted.totalXp);
+
     const summary: RewardSummary = {
-      // Slice 1: PvE only awards user XP. The legacy card/match-XP fields are
-      // kept on the type for the existing overlay; we mirror the user XP
-      // delta into matchXp so the existing progress bar still renders sane.
       matchXp: rewards.deltaXp,
-      levelProgress: levelProgressPercent(persisted.totalXp, persisted.level),
+      levelProgress: levelProgressPercent(persistedLevelInfo),
       cardRewards: [],
       deltaXp: rewards.deltaXp,
       deltaCrystals: rewards.deltaCrystals,
@@ -105,30 +107,14 @@ export async function handlePlayerMatchFinishedPost(request: Request, store: Pla
   }
 }
 
-function levelProgressPercent(totalXp: number, level: number) {
-  // Mirrors computeLevelFromXp for the bar fill. We re-derive from totals so
-  // the bar shows the player's standing right now (post-match), independent
-  // of the exact match-info inputs.
-  const xpToReachThisLevel = sumXpToReachLevel(level);
-  const xpForNextLevel = LEVEL_XP_BASE * (level + 1) * (level + 1);
-  const into = Math.max(0, totalXp - xpToReachThisLevel);
-  if (xpForNextLevel <= 0) return 100;
-  return Math.max(0, Math.min(100, Math.round((into / xpForNextLevel) * 100)));
-}
-
-function sumXpToReachLevel(level: number) {
-  let sum = 0;
-  for (let n = 2; n <= level; n += 1) {
-    sum += LEVEL_XP_BASE * n * n;
-  }
-  return sum;
+function levelProgressPercent(levelInfo: { xpIntoLevel: number; xpForNextLevel: number }) {
+  if (levelInfo.xpForNextLevel <= 0) return 100;
+  return Math.max(0, Math.min(100, Math.round((levelInfo.xpIntoLevel / levelInfo.xpForNextLevel) * 100)));
 }
 
 function parseMatchMode(value: unknown): "pve" {
-  // Slice 1 only persists PvE matches. PvP is server-authoritative and
-  // lands in slice 2.
   if (value === "pve") return "pve";
-  throw new MatchFinishedValidationError("mode must be \"pve\" in slice 1.");
+  throw new MatchFinishedValidationError("mode must be \"pve\".");
 }
 
 function parseMatchResult(value: unknown): MatchResultBucket {

@@ -10,7 +10,8 @@ import {
   type PlayerMatchRewardsStore,
   type PlayerProfileStore,
 } from "../src/features/player/profile/api";
-import { createNewStoredPlayerProfile, isSamePlayerIdentity, type PlayerIdentity, type PlayerProfile, type StoredPlayerProfile } from "../src/features/player/profile/types";
+import { computeLevelFromXp, createNewStoredPlayerProfile, isSamePlayerIdentity, type PlayerIdentity, type PlayerProfile, type StoredPlayerProfile } from "../src/features/player/profile/types";
+import { computeLevelUpBonusForRange } from "../src/features/player/profile/progression";
 import type { RewardSummary } from "../src/features/battle/model/types";
 
 const ownedDeckIdentity: PlayerIdentity = {
@@ -246,7 +247,7 @@ describe("player match-finished API (PvE)", () => {
     expect(persisted?.crystals).toBe(0);
   });
 
-  test("rejects a PvP request in slice 1 with a 400 invalid_match", async () => {
+  test("rejects a PvP request with a 400 invalid_match", async () => {
     const store = new MemoryPlayerProfileStore();
     const response = await postMatchFinished(store, { identity, mode: "pvp", result: "win" });
     const body = (await response.json()) as { error: string };
@@ -271,6 +272,28 @@ describe("player match-finished API (PvE)", () => {
 
     expect(response.status).toBe(400);
     expect(body.error).toBe("invalid_identity");
+  });
+
+  test("two concurrent PvE wins racing across a level threshold add 2x deltaXp and pay the bonus exactly once", async () => {
+    // Both callers' pre-call view says "I crossed level 2"; the persistence
+    // layer must still pay the bonus only once.
+    const racyIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-pve-race" };
+    const store = new MemoryPlayerProfileStore([
+      { ...createNewStoredPlayerProfile("player-race", racyIdentity), totalXp: 195 },
+    ]);
+
+    const responses = await Promise.all([
+      postMatchFinished(store, { identity: racyIdentity, mode: "pve", result: "win" }),
+      postMatchFinished(store, { identity: racyIdentity, mode: "pve", result: "win" }),
+    ]);
+    for (const response of responses) {
+      expect(response.status).toBe(200);
+    }
+
+    const persisted = store.snapshot(racyIdentity);
+    expect(persisted?.totalXp).toBe(195 + 30 + 30);
+    expect(persisted?.crystals).toBe(50);
+    expect(persisted?.wins).toBe(2);
   });
 });
 
@@ -310,15 +333,31 @@ class MemoryPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewardsSto
     const current = this.profiles[index];
     const counterField =
       rewards.result === "win" ? "wins" : rewards.result === "loss" ? "losses" : "draws";
-    const updated: StoredPlayerProfile = {
+
+    const afterIncrement: StoredPlayerProfile = {
       ...current,
-      crystals: rewards.newTotals.crystals,
-      totalXp: rewards.newTotals.totalXp,
-      level: rewards.newTotals.level,
+      totalXp: current.totalXp + rewards.deltaXp,
+      crystals: current.crystals + rewards.matchCrystals,
       [counterField]: (current[counterField] ?? 0) + 1,
     };
-    this.profiles[index] = updated;
-    return updated;
+    this.profiles[index] = afterIncrement;
+
+    // Yield so concurrent callers can interleave their own Op A — mirrors
+    // the Mongo round-trip and lets the race test exercise the real window.
+    await Promise.resolve();
+
+    const xpBeforeThisMatch = Math.max(0, afterIncrement.totalXp - rewards.deltaXp);
+    const oldLevel = computeLevelFromXp(xpBeforeThisMatch).level;
+    const newLevel = computeLevelFromXp(afterIncrement.totalXp).level;
+    if (newLevel <= oldLevel) return this.profiles[index];
+
+    const bonus = computeLevelUpBonusForRange(oldLevel, newLevel);
+    if (bonus <= 0) return this.profiles[index];
+
+    const latest = this.profiles[index];
+    const afterBonus: StoredPlayerProfile = { ...latest, crystals: latest.crystals + bonus };
+    this.profiles[index] = afterBonus;
+    return afterBonus;
   }
 
   snapshot(identity: PlayerIdentity): StoredPlayerProfile | undefined {

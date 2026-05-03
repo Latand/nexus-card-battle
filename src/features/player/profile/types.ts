@@ -6,6 +6,36 @@ export const DEFAULT_PLAYER_WINS = 0;
 export const DEFAULT_PLAYER_LOSSES = 0;
 export const DEFAULT_PLAYER_DRAWS = 0;
 
+// Quadratic curve: XP to advance from level N-1 to N is LEVEL_XP_BASE * N^2.
+// Lives here (not in progression.ts) so toPlayerProfile() can derive level
+// from totalXp without a circular import.
+export const LEVEL_XP_BASE = 50;
+
+export type LevelInfo = {
+  level: number;
+  xpIntoLevel: number;
+  xpForNextLevel: number;
+};
+
+export function computeLevelFromXp(totalXp: number): LevelInfo {
+  const safeTotal = Math.max(0, Math.floor(Number.isFinite(totalXp) ? totalXp : 0));
+  let level = 1;
+  let consumed = 0;
+
+  while (true) {
+    const xpForNextLevel = LEVEL_XP_BASE * (level + 1) * (level + 1);
+    if (consumed + xpForNextLevel > safeTotal) {
+      return {
+        level,
+        xpIntoLevel: safeTotal - consumed,
+        xpForNextLevel,
+      };
+    }
+    consumed += xpForNextLevel;
+    level += 1;
+  }
+}
+
 export type PlayerIdentity = TelegramPlayerIdentity | GuestPlayerIdentity;
 
 export type TelegramPlayerIdentity = {
@@ -25,15 +55,6 @@ export type PlayerOnboardingState = {
   completed: boolean;
 };
 
-export type PlayerProgressionTotals = {
-  crystals: number;
-  totalXp: number;
-  level: number;
-  wins: number;
-  losses: number;
-  draws: number;
-};
-
 export type PlayerProfile = {
   id: string;
   identity: PlayerIdentity;
@@ -50,7 +71,7 @@ export type PlayerProfile = {
   onboarding: PlayerOnboardingState;
 };
 
-export type StoredPlayerProfile = Omit<PlayerProfile, "onboarding">;
+export type StoredPlayerProfile = Omit<PlayerProfile, "onboarding" | "level">;
 
 export function createNewStoredPlayerProfile(id: string, identity: PlayerIdentity): StoredPlayerProfile {
   return {
@@ -62,7 +83,6 @@ export function createNewStoredPlayerProfile(id: string, identity: PlayerIdentit
     openedBoosterIds: [],
     crystals: DEFAULT_PLAYER_CRYSTALS,
     totalXp: DEFAULT_PLAYER_TOTAL_XP,
-    level: DEFAULT_PLAYER_LEVEL,
     wins: DEFAULT_PLAYER_WINS,
     losses: DEFAULT_PLAYER_LOSSES,
     draws: DEFAULT_PLAYER_DRAWS,
@@ -76,10 +96,10 @@ export function toPlayerProfile(profile: StoredPlayerProfile): PlayerProfile {
   const starterFreeBoostersRemaining = normalizeNonNegativeInteger(profile.starterFreeBoostersRemaining, STARTER_FREE_BOOSTERS);
   const crystals = normalizeNonNegativeInteger(profile.crystals, DEFAULT_PLAYER_CRYSTALS);
   const totalXp = normalizeNonNegativeInteger(profile.totalXp, DEFAULT_PLAYER_TOTAL_XP);
-  const level = normalizePositiveInteger(profile.level, DEFAULT_PLAYER_LEVEL);
   const wins = normalizeNonNegativeInteger(profile.wins, DEFAULT_PLAYER_WINS);
   const losses = normalizeNonNegativeInteger(profile.losses, DEFAULT_PLAYER_LOSSES);
   const draws = normalizeNonNegativeInteger(profile.draws, DEFAULT_PLAYER_DRAWS);
+  const level = computeLevelFromXp(totalXp).level;
 
   return {
     id: profile.id,
@@ -186,11 +206,6 @@ function normalizeStringArray(value: unknown) {
 
 function normalizeNonNegativeInteger(value: unknown, fallback: number) {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) return fallback;
-  return value;
-}
-
-function normalizePositiveInteger(value: unknown, fallback: number) {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) return fallback;
   return value;
 }
 

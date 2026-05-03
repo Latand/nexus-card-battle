@@ -4,14 +4,15 @@ import type { BoosterOpeningSource, PersistStarterBoosterOpeningInput, Persisted
 import {
   DEFAULT_PLAYER_CRYSTALS,
   DEFAULT_PLAYER_DRAWS,
-  DEFAULT_PLAYER_LEVEL,
   DEFAULT_PLAYER_LOSSES,
   DEFAULT_PLAYER_TOTAL_XP,
   DEFAULT_PLAYER_WINS,
+  computeLevelFromXp,
   createNewStoredPlayerProfile,
   type PlayerIdentity,
   type StoredPlayerProfile,
 } from "./types";
+import { computeLevelUpBonusForRange } from "./progression";
 import type { ApplyMatchRewardsInput, PlayerDeckStore, PlayerMatchRewardsStore } from "./api";
 
 const DEFAULT_MONGODB_URI = "mongodb://127.0.0.1:27017/nexus-card-battle";
@@ -20,15 +21,14 @@ const DEFAULT_MONGODB_SERVER_SELECTION_TIMEOUT_MS = 1_500;
 const PLAYERS_COLLECTION = "players";
 const BOOSTER_OPENINGS_COLLECTION = "boosterOpenings";
 
-// Progression fields are optional on the document type so legacy profiles
-// (written before slice 1) read cleanly. Defaults are applied in
-// fromMongoDocument().
-type MongoPlayerDocument = Omit<StoredPlayerProfile, "id" | "crystals" | "totalXp" | "level" | "wins" | "losses" | "draws"> & {
+// Progression fields are optional so pre-existing documents read cleanly.
+// `level` is intentionally absent — it is derived from totalXp on read,
+// because storing an absolute level would race against $inc(totalXp).
+type MongoPlayerDocument = Omit<StoredPlayerProfile, "id" | "crystals" | "totalXp" | "wins" | "losses" | "draws"> & {
   createdAt: Date;
   updatedAt: Date;
   crystals?: number;
   totalXp?: number;
-  level?: number;
   wins?: number;
   losses?: number;
   draws?: number;
@@ -84,7 +84,6 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
           openedBoosterIds: insertedProfile.openedBoosterIds,
           crystals: insertedProfile.crystals,
           totalXp: insertedProfile.totalXp,
-          level: insertedProfile.level,
           wins: insertedProfile.wins,
           losses: insertedProfile.losses,
           draws: insertedProfile.draws,
@@ -108,33 +107,55 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
   async applyMatchRewards(identity: PlayerIdentity, rewards: ApplyMatchRewardsInput): Promise<StoredPlayerProfile> {
     const players = await this.getPlayersCollection();
     const now = new Date();
-    // Counter increment for the per-result wins/losses/draws bucket.
     const resultCounterField =
       rewards.result === "win" ? "wins" : rewards.result === "loss" ? "losses" : "draws";
 
-    const updatedPlayer = await players.findOneAndUpdate(
+    // Op A is $inc-only so concurrent calls compose; mixing $set of an
+    // absolute total here would let a stale read clobber another caller.
+    const afterIncrement = await players.findOneAndUpdate(
       identityFilter(identity),
       {
-        $set: {
-          crystals: rewards.newTotals.crystals,
-          totalXp: rewards.newTotals.totalXp,
-          level: rewards.newTotals.level,
-          updatedAt: now,
-        },
         $inc: {
+          totalXp: rewards.deltaXp,
+          crystals: rewards.matchCrystals,
           [resultCounterField]: 1,
         },
+        $set: { updatedAt: now },
       },
-      {
-        returnDocument: "after",
-      },
+      { returnDocument: "after" },
     );
 
-    if (!updatedPlayer) {
+    if (!afterIncrement) {
       throw new Error("Player profile did not exist for match rewards apply.");
     }
 
-    return fromMongoDocument(updatedPlayer);
+    // Level boundaries come from the post-Op-A totalXp, not the caller's
+    // pre-call view, so concurrent matches racing across a threshold pay
+    // the bonus exactly once.
+    const authoritativeTotalXp = numberOrZero(afterIncrement.totalXp);
+    const xpBeforeMatch = Math.max(0, authoritativeTotalXp - rewards.deltaXp);
+    const oldLevel = computeLevelFromXp(xpBeforeMatch).level;
+    const newLevel = computeLevelFromXp(authoritativeTotalXp).level;
+
+    if (newLevel <= oldLevel) {
+      return fromMongoDocument(afterIncrement);
+    }
+
+    const bonus = computeLevelUpBonusForRange(oldLevel, newLevel);
+    if (bonus <= 0) {
+      return fromMongoDocument(afterIncrement);
+    }
+
+    const afterBonus = await players.findOneAndUpdate(
+      identityFilter(identity),
+      {
+        $inc: { crystals: bonus },
+        $set: { updatedAt: new Date() },
+      },
+      { returnDocument: "after" },
+    );
+
+    return fromMongoDocument(afterBonus ?? afterIncrement);
   }
 
   async saveStarterBoosterOpening(input: PersistStarterBoosterOpeningInput): Promise<PersistedStarterBoosterOpening> {
@@ -415,11 +436,8 @@ function fromMongoDocument(document: WithId<MongoPlayerDocument>): StoredPlayerP
     deckIds: document.deckIds,
     starterFreeBoostersRemaining: document.starterFreeBoostersRemaining,
     openedBoosterIds: document.openedBoosterIds,
-    // Pre-progression Mongo documents may not include these fields. Default
-    // them so toPlayerProfile downstream produces a complete profile.
     crystals: nonNegativeIntegerOrDefault(document.crystals, DEFAULT_PLAYER_CRYSTALS),
     totalXp: nonNegativeIntegerOrDefault(document.totalXp, DEFAULT_PLAYER_TOTAL_XP),
-    level: positiveIntegerOrDefault(document.level, DEFAULT_PLAYER_LEVEL),
     wins: nonNegativeIntegerOrDefault(document.wins, DEFAULT_PLAYER_WINS),
     losses: nonNegativeIntegerOrDefault(document.losses, DEFAULT_PLAYER_LOSSES),
     draws: nonNegativeIntegerOrDefault(document.draws, DEFAULT_PLAYER_DRAWS),
@@ -431,8 +449,8 @@ function nonNegativeIntegerOrDefault(value: unknown, fallback: number) {
   return value;
 }
 
-function positiveIntegerOrDefault(value: unknown, fallback: number) {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) return fallback;
+function numberOrZero(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
   return value;
 }
 

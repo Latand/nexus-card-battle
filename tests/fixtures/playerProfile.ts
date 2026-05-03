@@ -1,6 +1,6 @@
 import type { Page, Route } from "@playwright/test";
 import { getBoosterCatalogForPlayer } from "../../src/features/boosters/catalog";
-import type { PlayerIdentity } from "../../src/features/player/profile/types";
+import { computeLevelFromXp, type PlayerIdentity } from "../../src/features/player/profile/types";
 
 const GUEST_ID_STORAGE_KEY = "nexus:player-guest-id:v1";
 export const PROFILE_DECK_IDS = [
@@ -112,13 +112,14 @@ export async function fulfillBoosterCatalog(route: Route, profile: TestPlayerPro
 function createPlayerProfileBody(profile: TestPlayerProfileInput) {
   const collectionReady = profile.ownedCardIds.length > 0;
   const deckReady = profile.deckIds.length > 0;
+  const totalXp = profile.totalXp ?? 0;
 
   return {
     ...profile,
     openedBoosterIds: profile.openedBoosterIds ?? [],
     crystals: profile.crystals ?? 0,
-    totalXp: profile.totalXp ?? 0,
-    level: profile.level ?? 1,
+    totalXp,
+    level: profile.level ?? computeLevelFromXp(totalXp).level,
     wins: profile.wins ?? 0,
     losses: profile.losses ?? 0,
     draws: profile.draws ?? 0,

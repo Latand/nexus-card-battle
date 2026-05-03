@@ -340,9 +340,6 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     }
   }, [game, humanStatus, isHumanMatch, pending]);
 
-  // Slice 1: persist PvE match XP/level via the new endpoint as soon as the
-  // match resolves. PvP intentionally still uses the legacy local rewards;
-  // the server-authoritative PvP path lands in slice #2.
   useEffect(() => {
     if (isHumanMatch) return;
     if (game.phase !== "match_result" && game.phase !== "reward_summary") return;
@@ -350,9 +347,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     if (!playerIdentity) return;
 
     const result = matchResultToBucket(game.matchResult);
-    // De-dupe across the match_result -> reward_summary transition so we only
-    // POST once per match. The signature also resets on next match because
-    // `reset()` clears persistedRewards / persistedRewardsError below.
+    // Effect runs once for match_result and again for reward_summary; the ref dedupes the POST.
     const signature = `${game.matchResult}:${result}`;
     if (persistedMatchSignatureRef.current === signature) return;
     persistedMatchSignatureRef.current = signature;
@@ -1146,9 +1141,6 @@ function PhaseOverlay({
   if (["player_turn", "card_preview", "opponent_turn", "battle_intro", "damage_apply"].includes(game.phase)) return null;
 
   if (game.phase === "reward_summary") {
-    // Slice 1: PvE reads the persisted rewards from /api/player/match-finished
-    // and falls back to local rewards if the request is in flight or failed.
-    // PvP keeps using the legacy local rewards until slice #2 lands.
     const overlayRewards = !isHumanMatch && persistedRewards ? persistedRewards : game.rewards;
     return (
       <RewardOverlay
@@ -1202,9 +1194,6 @@ function RewardOverlay({
   showPersistedDetails: boolean;
 }) {
   const title = result === "player" ? "Винагороди за перемогу" : result === "draw" ? "Винагороди за нічию" : "Винагороди за бій";
-  // The persisted PvE rewards populate deltaXp; legacy/local rewards (from
-  // buildRewards) leave it at zero. Use that as the signal that we're
-  // looking at persisted rewards worth surfacing.
   const userXpDelta = rewards?.deltaXp ?? 0;
   const showUserXpTile = showPersistedDetails && userXpDelta > 0;
   const showLevelUpTile = showPersistedDetails && Boolean(rewards?.leveledUp);

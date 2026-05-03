@@ -93,9 +93,6 @@ export function buildRewards(player: Fighter, result: MatchResult): RewardSummar
       xp: 8 + card.level * 2 + index,
       levelProgress: Math.min(100, 24 + card.level * 13 + index * 9),
     })),
-    // Slice 1 progression fields are only populated by the persistent reward
-    // path (PvE match-finished route). Local-only / legacy callers default
-    // them to zero so the overlay renders without "leveled up" tiles.
     deltaXp: 0,
     deltaCrystals: 0,
     leveledUp: false,

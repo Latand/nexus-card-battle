@@ -6,10 +6,12 @@ const { WebSocketServer } = require("ws");
 const { cards } = require("./src/features/battle/model/cards.ts");
 const { getMongoPlayerProfileStore } = require("./src/features/player/profile/mongo.ts");
 const {
+  computeLevelFromXp,
   createNewStoredPlayerProfile,
   isSamePlayerIdentity,
   parsePlayerIdentity,
 } = require("./src/features/player/profile/types.ts");
+const { computeLevelUpBonusForRange } = require("./src/features/player/profile/progression.ts");
 
 const dev = process.argv.includes("--dev") || process.env.NODE_ENV === "development";
 const hostname = getCliValue("--hostname") || process.env.HOSTNAME || "0.0.0.0";
@@ -721,7 +723,6 @@ function handleTestProfileRequest(request, response) {
         openedBoosterIds: getProfileCardIds(body.openedBoosterIds),
         crystals: nonNegativeIntegerOrUndefined(body.crystals),
         totalXp: nonNegativeIntegerOrUndefined(body.totalXp),
-        level: positiveIntegerOrUndefined(body.level),
         wins: nonNegativeIntegerOrUndefined(body.wins),
         losses: nonNegativeIntegerOrUndefined(body.losses),
         draws: nonNegativeIntegerOrUndefined(body.draws),
@@ -800,26 +801,32 @@ function createMemoryPlayerProfileStore() {
 
       const current = profiles[index];
       const counterField = rewards.result === "win" ? "wins" : rewards.result === "loss" ? "losses" : "draws";
-      const updated = {
+
+      const afterIncrement = {
         ...current,
-        crystals: rewards.newTotals.crystals,
-        totalXp: rewards.newTotals.totalXp,
-        level: rewards.newTotals.level,
+        totalXp: current.totalXp + rewards.deltaXp,
+        crystals: current.crystals + rewards.matchCrystals,
         [counterField]: (current[counterField] ?? 0) + 1,
       };
-      profiles[index] = updated;
-      return updated;
+      profiles[index] = afterIncrement;
+
+      const xpBeforeMatch = Math.max(0, afterIncrement.totalXp - rewards.deltaXp);
+      const oldLevel = computeLevelFromXp(xpBeforeMatch).level;
+      const newLevel = computeLevelFromXp(afterIncrement.totalXp).level;
+      if (newLevel <= oldLevel) return afterIncrement;
+
+      const bonus = computeLevelUpBonusForRange(oldLevel, newLevel);
+      if (bonus <= 0) return afterIncrement;
+
+      const afterBonus = { ...afterIncrement, crystals: afterIncrement.crystals + bonus };
+      profiles[index] = afterBonus;
+      return afterBonus;
     },
   };
 }
 
 function nonNegativeIntegerOrUndefined(value) {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) return undefined;
-  return value;
-}
-
-function positiveIntegerOrUndefined(value) {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) return undefined;
   return value;
 }
 
