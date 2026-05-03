@@ -197,6 +197,7 @@ test("ignores reward_summary payloads that arrive for a different matchId", asyn
         matchXp: 999,
         levelProgress: 100,
         cardRewards: [],
+        milestoneCardRewards: [],
         deltaXp: 999,
         deltaCrystals: 999,
         leveledUp: true,

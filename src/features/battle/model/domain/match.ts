@@ -93,6 +93,7 @@ export function buildRewards(player: Fighter, result: MatchResult): RewardSummar
       xp: 8 + card.level * 2 + index,
       levelProgress: Math.min(100, 24 + card.level * 13 + index * 9),
     })),
+    milestoneCardRewards: [],
     deltaXp: 0,
     deltaCrystals: 0,
     leveledUp: false,

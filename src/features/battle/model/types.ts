@@ -180,10 +180,17 @@ export type RewardSummaryTotals = {
   eloRating?: number;
 };
 
+export type MilestoneCardReward = {
+  cardId: string;
+  cardName: string;
+  rarity: Rarity;
+};
+
 export type RewardSummary = {
   matchXp: number;
   levelProgress: number;
   cardRewards: CardReward[];
+  milestoneCardRewards: MilestoneCardReward[];
   deltaXp: number;
   deltaCrystals: number;
   deltaElo?: number;

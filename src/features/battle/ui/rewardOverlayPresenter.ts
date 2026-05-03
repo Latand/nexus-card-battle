@@ -4,6 +4,7 @@ export type RewardVisibleTiles = {
   showCrystals: boolean;
   showElo: boolean;
   showLevelUp: boolean;
+  showMilestone: boolean;
 };
 
 export type RewardTitle = {
@@ -20,14 +21,15 @@ export const DEFAULT_REWARD_AVATAR_URL = "/nexus-assets/characters/cyber-brawler
  */
 export function selectVisibleTiles(rewards?: RewardSummary | null): RewardVisibleTiles {
   if (!rewards) {
-    return { showCrystals: false, showElo: false, showLevelUp: false };
+    return { showCrystals: false, showElo: false, showLevelUp: false, showMilestone: false };
   }
 
   const showCrystals = (rewards.deltaCrystals ?? 0) > 0;
   const showElo = typeof rewards.deltaElo === "number";
   const showLevelUp = Boolean(rewards.leveledUp);
+  const showMilestone = (rewards.milestoneCardRewards?.length ?? 0) > 0;
 
-  return { showCrystals, showElo, showLevelUp };
+  return { showCrystals, showElo, showLevelUp, showMilestone };
 }
 
 export function resolveRewardTitle(result: MatchResult | undefined): RewardTitle {
