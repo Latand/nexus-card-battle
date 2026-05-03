@@ -16,10 +16,14 @@ export const PROFILE_DECK_IDS = [
 ];
 export const PROFILE_OWNED_CARD_IDS = [...PROFILE_DECK_IDS, "dahack-363"];
 
+export type TestPlayerProfileOwnedCardEntry = { cardId: string; count: number };
+
 export type TestPlayerProfileInput = {
   id: string;
   identity: PlayerIdentity;
   ownedCardIds: string[];
+  // Optional explicit multiset; takes precedence over ownedCardIds when provided.
+  ownedCards?: TestPlayerProfileOwnedCardEntry[];
   deckIds: string[];
   starterFreeBoostersRemaining: number;
   openedBoosterIds?: string[];
@@ -59,6 +63,7 @@ export async function mockDeckReadyProfile(page: Page, options: MockDeckReadyPro
       id: options.id ?? profile?.id ?? "player-deck-ready-e2e",
       identity,
       ownedCardIds: options.ownedCardIds ?? profile?.ownedCardIds ?? PROFILE_OWNED_CARD_IDS,
+      ownedCards: options.ownedCards ?? profile?.ownedCards,
       deckIds: requestBody.deckIds ?? options.deckIds ?? profile?.deckIds ?? PROFILE_DECK_IDS,
       starterFreeBoostersRemaining: options.starterFreeBoostersRemaining ?? profile?.starterFreeBoostersRemaining ?? 0,
       openedBoosterIds: options.openedBoosterIds ?? profile?.openedBoosterIds ?? ["neon-breach", "factory-shift"],
@@ -86,6 +91,7 @@ export async function mockDeckReadyProfile(page: Page, options: MockDeckReadyPro
       id: options.id ?? profile?.id ?? "player-deck-ready-e2e",
       identity,
       ownedCardIds: options.ownedCardIds ?? profile?.ownedCardIds ?? PROFILE_OWNED_CARD_IDS,
+      ownedCards: options.ownedCards ?? profile?.ownedCards,
       deckIds: options.deckIds ?? profile?.deckIds ?? PROFILE_DECK_IDS,
       starterFreeBoostersRemaining: options.starterFreeBoostersRemaining ?? profile?.starterFreeBoostersRemaining ?? 0,
       openedBoosterIds: options.openedBoosterIds ?? profile?.openedBoosterIds ?? ["neon-breach", "factory-shift"],
@@ -128,12 +134,14 @@ export async function fulfillBoosterCatalog(route: Route, profile: TestPlayerPro
 }
 
 function createPlayerProfileBody(profile: TestPlayerProfileInput) {
-  const collectionReady = profile.ownedCardIds.length > 0;
+  const ownedCards = profile.ownedCards ?? profile.ownedCardIds.map((cardId) => ({ cardId, count: 1 }));
+  const collectionReady = ownedCards.length > 0 || profile.ownedCardIds.length > 0;
   const deckReady = profile.deckIds.length > 0;
   const totalXp = profile.totalXp ?? 0;
 
   return {
     ...profile,
+    ownedCards,
     openedBoosterIds: profile.openedBoosterIds ?? [],
     crystals: profile.crystals ?? 0,
     totalXp,
@@ -157,6 +165,7 @@ function createTestProfileInput(options: MockDeckReadyProfileOptions, identity: 
     id: options.id ?? "player-deck-ready-e2e",
     identity,
     ownedCardIds: options.ownedCardIds ?? PROFILE_OWNED_CARD_IDS,
+    ownedCards: options.ownedCards,
     deckIds: options.deckIds ?? PROFILE_DECK_IDS,
     starterFreeBoostersRemaining: options.starterFreeBoostersRemaining ?? 0,
     openedBoosterIds: options.openedBoosterIds ?? ["neon-breach", "factory-shift"],

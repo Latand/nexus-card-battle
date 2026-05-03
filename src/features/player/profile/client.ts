@@ -106,6 +106,35 @@ export async function savePlayerAvatar(identity: PlayerIdentity, avatarUrl: stri
   return body.player;
 }
 
+export type SellCardsResult =
+  | { ok: true; player: PlayerProfile }
+  | { ok: false; error: "invalid_card_id" | "invalid_sell_count" | "insufficient_stock" | "card_in_deck" | "unknown"; message?: string };
+
+export async function sellPlayerCards(identity: PlayerIdentity, cardId: string, count: number): Promise<SellCardsResult> {
+  const response = await fetch("/api/player/sell", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ identity, cardId, count }),
+  });
+
+  if (response.ok) {
+    const body = (await response.json()) as { player?: PlayerProfile };
+    if (!body.player) {
+      return { ok: false, error: "unknown", message: "Sell response did not include player." };
+    }
+    return { ok: true, player: body.player };
+  }
+
+  const body = (await response.json().catch(() => undefined)) as { error?: string; message?: string } | undefined;
+  const code = body?.error;
+  if (code === "invalid_card_id" || code === "invalid_sell_count" || code === "insufficient_stock" || code === "card_in_deck") {
+    return { ok: false, error: code, message: body?.message };
+  }
+  return { ok: false, error: "unknown", message: body?.message ?? `Sell failed: ${response.status}` };
+}
+
 export async function savePlayerDeck(identity: PlayerIdentity, deckIds: string[]): Promise<PlayerProfile> {
   const response = await fetch("/api/player/deck", {
     method: "POST",

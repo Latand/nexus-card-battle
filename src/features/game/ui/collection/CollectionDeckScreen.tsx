@@ -1,12 +1,15 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { cards } from "@/features/battle/model/cards";
 import { clanList } from "@/features/battle/model/clans";
 import type { Card, Rarity } from "@/features/battle/model/types";
 import { BattleCard } from "@/features/battle/ui/components/BattleCard";
-import { getOwnedCount, type OwnedCardEntry } from "@/features/inventory/inventoryOps";
+import { SELL_PRICES_BY_RARITY } from "@/features/economy/sellPricing";
+import { getOwnedCount, getSellableCount, type OwnedCardEntry } from "@/features/inventory/inventoryOps";
+import { sellPlayerCards } from "@/features/player/profile/client";
+import type { PlayerIdentity, PlayerProfile } from "@/features/player/profile/types";
 import { cn } from "@/shared/lib/cn";
 import { PLAYER_DECK_SIZE } from "../../model/randomDeck";
 
@@ -22,9 +25,16 @@ type Props = {
   deckSaveStatus: "idle" | "saving" | "saved" | "error";
   deckReadyToPlay: boolean;
   starterFreeBoostersRemaining: number;
+  playerIdentity?: PlayerIdentity | null;
+  onPlayerUpdated?: (profile: PlayerProfile) => void;
   onDeckChange: (deckIds: string[]) => void;
   onPlay: (deckIds: string[], mode: "ai" | "human") => void;
 };
+
+type SellStatus =
+  | { kind: "idle" }
+  | { kind: "selling" }
+  | { kind: "error"; message: string };
 
 type CollectionMode = "owned" | "base";
 type RarityFilter = Rarity | "all";
@@ -74,6 +84,8 @@ export function CollectionDeckScreen({
   deckSaveStatus,
   deckReadyToPlay,
   starterFreeBoostersRemaining,
+  playerIdentity,
+  onPlayerUpdated,
   onDeckChange,
   onPlay,
 }: Props) {
@@ -92,6 +104,35 @@ export function CollectionDeckScreen({
   const [rarity, setRarity] = useState<RarityFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("rarity");
   const [visiblePage, setVisiblePage] = useState({ key: "", limit: GRID_LIMIT });
+  const [sellStatus, setSellStatus] = useState<SellStatus>({ kind: "idle" });
+
+  const handleSellCard = useCallback(
+    async (card: Card, count: number) => {
+      if (!playerIdentity || !onPlayerUpdated) return;
+      if (count <= 0) return;
+
+      const ownedCount = getOwnedCount(ownedCards, card.id);
+      const lastCopy = ownedCount === count;
+      const requiresConfirm = card.rarity === "Legend" || lastCopy;
+      if (requiresConfirm && typeof window !== "undefined") {
+        const message = lastCopy
+          ? `Видалити останню копію ${card.name}?`
+          : `Продати ${count} × ${card.name}?`;
+        if (!window.confirm(message)) return;
+      }
+
+      setSellStatus({ kind: "selling" });
+      const result = await sellPlayerCards(playerIdentity, card.id, count);
+      if (result.ok) {
+        onPlayerUpdated(result.player);
+        setSellStatus({ kind: "idle" });
+        return;
+      }
+
+      setSellStatus({ kind: "error", message: sellErrorMessage(result.error) });
+    },
+    [onPlayerUpdated, ownedCards, playerIdentity],
+  );
 
   const deckCards = useMemo(() => deckIds.map((cardId) => cards.find((card) => card.id === cardId)).filter(Boolean) as Card[], [deckIds]);
   const browsingCardIds = useMemo(() => new Set(browsingCards.map((card) => card.id)), [browsingCards]);
@@ -369,6 +410,12 @@ export function CollectionDeckScreen({
                   owned={ownedSet.has(selectedCard.id)}
                   editable={canEditDeck && ownedSet.has(selectedCard.id)}
                   canRemove={canRemoveCard}
+                  ownedCount={getOwnedCount(ownedCards, selectedCard.id)}
+                  sellableCount={getSellableCount(ownedCards, deckIds, selectedCard.id)}
+                  cardInDeck={deckIds.includes(selectedCard.id)}
+                  canSell={Boolean(playerIdentity && onPlayerUpdated) && profileStatus === "ready"}
+                  sellStatus={sellStatus}
+                  onSell={(count) => void handleSellCard(selectedCard, count)}
                   onToggle={() => (deckIds.includes(selectedCard.id) ? removeCard(selectedCard.id) : addCard(selectedCard))}
                 />
               ) : null}
@@ -676,6 +723,12 @@ function CardDetails({
   owned,
   editable,
   canRemove,
+  ownedCount,
+  sellableCount,
+  cardInDeck,
+  canSell,
+  sellStatus,
+  onSell,
   onToggle,
 }: {
   card: Card;
@@ -683,9 +736,19 @@ function CardDetails({
   owned: boolean;
   editable: boolean;
   canRemove: boolean;
+  ownedCount: number;
+  sellableCount: number;
+  cardInDeck: boolean;
+  canSell: boolean;
+  sellStatus: SellStatus;
+  onSell: (count: number) => void;
   onToggle: () => void;
 }) {
   const disableRemove = editable && inDeck && !canRemove;
+  const inDeckCount = cardInDeck ? 1 : 0;
+  const reserveCount = Math.max(0, ownedCount - inDeckCount);
+  const sellPrice = SELL_PRICES_BY_RARITY[card.rarity];
+  const isSelling = sellStatus.kind === "selling";
 
   return (
     <section className="card-details rounded-md bg-black/40 p-3 max-[860px]:grid max-[860px]:grid-cols-[minmax(190px,216px)_minmax(0,1fr)] max-[860px]:gap-3 max-[560px]:grid-cols-[minmax(112px,132px)_minmax(0,1fr)] max-[420px]:p-2">
@@ -724,6 +787,67 @@ function CardDetails({
           <DetailRow label="Уміння" title={card.ability.name} description={card.ability.description} />
           <DetailRow label="Бонус" title={card.bonus.name} description={card.bonus.description} />
         </dl>
+
+        {owned && canSell ? (
+          <section
+            className="mt-3 grid gap-2 rounded-md border border-white/10 bg-black/35 p-2"
+            data-testid="collection-sell-panel"
+            data-card-id={card.id}
+          >
+            <div className="flex items-baseline justify-between gap-2">
+              <strong className="text-[10px] font-black uppercase tracking-[0.12em] text-[#d4b06a]">Продати</strong>
+              <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#9ed6e4]">
+                {sellPrice} 💎 / шт.
+              </span>
+            </div>
+
+            <p
+              className="text-[11px] font-bold leading-snug text-[#efe3c5]"
+              data-testid="collection-sell-summary"
+            >
+              Ви маєте: {ownedCount} ({inDeckCount} у колоді, {reserveCount} запасних)
+            </p>
+
+            {cardInDeck ? (
+              <p
+                className="text-[10px] font-black uppercase tracking-[0.08em] text-[#ffb39d]"
+                data-testid="collection-sell-disabled-reason"
+              >
+                Видали з колоди, щоб продати
+              </p>
+            ) : null}
+
+            <div className="grid grid-cols-2 gap-2 max-[560px]:grid-cols-1">
+              <button
+                className={sellButtonClass()}
+                type="button"
+                disabled={cardInDeck || sellableCount < 1 || isSelling}
+                onClick={() => onSell(1)}
+                data-testid="collection-sell-1"
+              >
+                {sellableCount === 1 && !cardInDeck ? "Продати" : "Продати 1"}
+              </button>
+              <button
+                className={sellButtonClass()}
+                type="button"
+                disabled={cardInDeck || sellableCount < 2 || isSelling}
+                onClick={() => onSell(sellableCount)}
+                data-testid="collection-sell-all"
+              >
+                Продати всі дублікати
+              </button>
+            </div>
+
+            {sellStatus.kind === "error" ? (
+              <p
+                className="text-[10px] font-black uppercase tracking-[0.08em] text-[#ffb39d]"
+                data-testid="collection-sell-error"
+              >
+                {sellStatus.message}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
       </div>
     </section>
   );
@@ -856,4 +980,16 @@ function factionButtonClass(active: boolean) {
 
 function utilityButtonClass() {
   return "rounded bg-white/[0.06] px-3 py-2 text-xs font-black uppercase text-[#efe3c5] transition hover:bg-[#ffe08a]/14 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-white/[0.06]";
+}
+
+function sellButtonClass() {
+  return "min-h-[36px] rounded-md bg-[linear-gradient(180deg,rgba(255,224,138,0.18),rgba(211,162,72,0.08))] px-3 text-[11px] font-black uppercase text-[#ffe8a6] transition hover:bg-[#ffe08a]/16 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-[linear-gradient(180deg,rgba(255,224,138,0.18),rgba(211,162,72,0.08))]";
+}
+
+function sellErrorMessage(error: "invalid_card_id" | "invalid_sell_count" | "insufficient_stock" | "card_in_deck" | "unknown") {
+  if (error === "card_in_deck") return "Видали з колоди, щоб продати";
+  if (error === "insufficient_stock") return "Недостатньо копій для продажу";
+  if (error === "invalid_card_id") return "Невідома карта";
+  if (error === "invalid_sell_count") return "Невірна кількість";
+  return "Не вдалося продати";
 }
