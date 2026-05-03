@@ -982,6 +982,7 @@ function handleTestProfileRequest(request, response) {
         losses: nonNegativeIntegerOrUndefined(body.losses),
         draws: nonNegativeIntegerOrUndefined(body.draws),
         eloRating: nonNegativeIntegerOrUndefined(body.eloRating),
+        avatarUrl: typeof body.avatarUrl === "string" && body.avatarUrl.trim() ? body.avatarUrl.trim() : undefined,
       });
 
       response.statusCode = 200;
@@ -1048,6 +1049,15 @@ function createMemoryPlayerProfileStore() {
       else profiles.push(nextProfile);
 
       return nextProfile;
+    },
+    async setAvatarUrl(identity, avatarUrl) {
+      const index = profiles.findIndex((profile) => isSamePlayerIdentity(profile.identity, identity));
+      if (index < 0) {
+        throw new Error("Player profile did not exist for avatar update.");
+      }
+
+      profiles[index] = { ...profiles[index], avatarUrl };
+      return profiles[index];
     },
     async applyMatchRewards(identity, rewards) {
       const index = profiles.findIndex((profile) => isSamePlayerIdentity(profile.identity, identity));

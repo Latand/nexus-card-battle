@@ -62,6 +62,13 @@ export async function mockDeckReadyProfile(page: Page, options: MockDeckReadyPro
       deckIds: requestBody.deckIds ?? options.deckIds ?? profile?.deckIds ?? PROFILE_DECK_IDS,
       starterFreeBoostersRemaining: options.starterFreeBoostersRemaining ?? profile?.starterFreeBoostersRemaining ?? 0,
       openedBoosterIds: options.openedBoosterIds ?? profile?.openedBoosterIds ?? ["neon-breach", "factory-shift"],
+      crystals: options.crystals ?? profile?.crystals,
+      totalXp: options.totalXp ?? profile?.totalXp,
+      level: options.level ?? profile?.level,
+      wins: options.wins ?? profile?.wins,
+      losses: options.losses ?? profile?.losses,
+      draws: options.draws ?? profile?.draws,
+      eloRating: options.eloRating ?? profile?.eloRating,
       avatarUrl: options.avatarUrl ?? profile?.avatarUrl,
     };
     const handled = await options.onDeckSave?.(route, profile);
@@ -82,6 +89,13 @@ export async function mockDeckReadyProfile(page: Page, options: MockDeckReadyPro
       deckIds: options.deckIds ?? profile?.deckIds ?? PROFILE_DECK_IDS,
       starterFreeBoostersRemaining: options.starterFreeBoostersRemaining ?? profile?.starterFreeBoostersRemaining ?? 0,
       openedBoosterIds: options.openedBoosterIds ?? profile?.openedBoosterIds ?? ["neon-breach", "factory-shift"],
+      crystals: options.crystals ?? profile?.crystals,
+      totalXp: options.totalXp ?? profile?.totalXp,
+      level: options.level ?? profile?.level,
+      wins: options.wins ?? profile?.wins,
+      losses: options.losses ?? profile?.losses,
+      draws: options.draws ?? profile?.draws,
+      eloRating: options.eloRating ?? profile?.eloRating,
       avatarUrl: options.avatarUrl ?? profile?.avatarUrl,
     };
     await seedServerPlayerProfile(page, profile);
@@ -128,6 +142,7 @@ function createPlayerProfileBody(profile: TestPlayerProfileInput) {
     losses: profile.losses ?? 0,
     draws: profile.draws ?? 0,
     eloRating: profile.eloRating ?? 1000,
+    ...(profile.avatarUrl ? { avatarUrl: profile.avatarUrl } : {}),
     onboarding: {
       starterBoostersAvailable: profile.starterFreeBoostersRemaining > 0,
       collectionReady,
@@ -145,6 +160,13 @@ function createTestProfileInput(options: MockDeckReadyProfileOptions, identity: 
     deckIds: options.deckIds ?? PROFILE_DECK_IDS,
     starterFreeBoostersRemaining: options.starterFreeBoostersRemaining ?? 0,
     openedBoosterIds: options.openedBoosterIds ?? ["neon-breach", "factory-shift"],
+    crystals: options.crystals,
+    totalXp: options.totalXp,
+    level: options.level,
+    wins: options.wins,
+    losses: options.losses,
+    draws: options.draws,
+    eloRating: options.eloRating,
     avatarUrl: options.avatarUrl,
   };
 }

@@ -5,8 +5,10 @@ import { cards } from "@/features/battle/model/cards";
 import { BattleGame } from "@/features/battle/ui/BattleGame";
 import { RealtimeBattleGame } from "@/features/battle/ui/RealtimeBattleGame";
 import { STARTER_BOOSTER_CARD_COUNT } from "@/features/boosters/types";
-import { fetchPlayerProfile, resolveClientPlayerIdentity, savePlayerDeck } from "@/features/player/profile/client";
+import { readTelegramPhotoUrl, useTelegramAvatar } from "@/features/player/profile/avatar";
+import { fetchPlayerProfile, resolveClientPlayerIdentity, savePlayerAvatar, savePlayerDeck } from "@/features/player/profile/client";
 import { STARTER_FREE_BOOSTERS, type PlayerIdentity, type PlayerProfile } from "@/features/player/profile/types";
+import { PlayerHud } from "@/features/player/ui/PlayerHud";
 import type { TelegramPlayer } from "@/shared/lib/telegram";
 import { PLAYER_DECK_SIZE } from "../model/randomDeck";
 import { CollectionDeckScreen } from "./collection/CollectionDeckScreen";
@@ -36,6 +38,7 @@ type TelegramWindow = Window & {
           username?: string;
           first_name?: string;
           last_name?: string;
+          photo_url?: string;
         };
       };
     };
@@ -236,8 +239,43 @@ export function GameRoot() {
     setProfileRetryKey((current) => current + 1);
   }, []);
 
+  const liveTelegramAvatarUrl = useTelegramAvatar();
+  const handlePlayFromHud = useCallback(() => {
+    if (!deckReadyToPlay || profileDeckIds.length < PLAYER_DECK_SIZE) return;
+    handleSavedDeckPlay(profileDeckIds, "ai");
+  }, [deckReadyToPlay, handleSavedDeckPlay, profileDeckIds]);
+  const hudCanPlay =
+    profileStatus === "ready" && deckReadyToPlay && profileDeckIds.length >= PLAYER_DECK_SIZE;
+
+  // Persist Telegram photo_url onto the profile when it differs from what we
+  // already stored. We do this once per (identity, photoUrl) tuple so a slow
+  // network or transient 4xx does not retry-storm.
+  useEffect(() => {
+    if (!playerIdentity || !playerProfile || profileStatus !== "ready") return;
+    const livePhoto = liveTelegramAvatarUrl ?? readTelegramPhotoUrl();
+    if (!livePhoto) return;
+    if (playerProfile.avatarUrl === livePhoto) return;
+
+    let cancelled = false;
+    void savePlayerAvatar(playerIdentity, livePhoto)
+      .then((nextProfile) => {
+        if (cancelled) return;
+        setPlayerProfile((current) => (current ? { ...current, avatarUrl: nextProfile.avatarUrl } : current));
+      })
+      .catch((error) => {
+        // Persistence failure is non-fatal: the live Telegram photo continues
+        // to render via useTelegramAvatar() for this session.
+        if (cancelled) return;
+        console.warn("Failed to persist Telegram avatar URL.", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [liveTelegramAvatarUrl, playerIdentity, playerProfile, profileStatus]);
+
   if (screen === "battle") {
-    const persistedAvatarUrl = (playerProfile as { avatarUrl?: string } | null)?.avatarUrl;
+    const persistedAvatarUrl = playerProfile?.avatarUrl;
     return (
       <>
         {battleMode === "human" ? (
@@ -287,7 +325,13 @@ export function GameRoot() {
 
   if (showStarterOnboarding && playerIdentity && playerProfile) {
     return (
-      <>
+      <HudShell
+        profile={playerProfile}
+        playerName={playerName}
+        liveTelegramAvatarUrl={liveTelegramAvatarUrl}
+        canPlay={hudCanPlay}
+        onPlay={handlePlayFromHud}
+      >
         <StarterBoosterOnboarding
           identity={playerIdentity}
           profile={playerProfile}
@@ -299,12 +343,18 @@ export function GameRoot() {
           onEditDeck={handleStarterDeckEdit}
         />
         <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
-      </>
+      </HudShell>
     );
   }
 
   return (
-    <>
+    <HudShell
+      profile={playerProfile}
+      playerName={playerName}
+      liveTelegramAvatarUrl={liveTelegramAvatarUrl}
+      canPlay={hudCanPlay}
+      onPlay={handlePlayFromHud}
+    >
       <CollectionDeckScreen
         collectionIds={ownedCardIds}
         deckIds={deckIds}
@@ -320,7 +370,40 @@ export function GameRoot() {
         onPlay={handleSavedDeckPlay}
       />
       <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
-    </>
+    </HudShell>
+  );
+}
+
+function HudShell({
+  profile,
+  playerName,
+  liveTelegramAvatarUrl,
+  canPlay,
+  onPlay,
+  children,
+}: {
+  profile: PlayerProfile | null;
+  playerName?: string;
+  liveTelegramAvatarUrl: string | null;
+  canPlay: boolean;
+  onPlay: () => void;
+  children: React.ReactNode;
+}) {
+  if (!profile) {
+    return <>{children}</>;
+  }
+
+  return (
+    <div className="md:flex md:min-h-screen md:items-stretch">
+      <PlayerHud
+        profile={profile}
+        playerName={playerName}
+        liveAvatarUrl={liveTelegramAvatarUrl}
+        canPlay={canPlay}
+        onPlay={onPlay}
+      />
+      <div className="md:min-w-0 md:flex-1">{children}</div>
+    </div>
   );
 }
 
