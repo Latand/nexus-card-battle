@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { PlayerIdentity } from "../src/features/player/profile/types";
-import { mockDeckReadyProfile } from "./fixtures/playerProfile";
+import { mockDeckReadyProfile, PROFILE_DECK_IDS, PROFILE_OWNED_CARD_IDS } from "./fixtures/playerProfile";
 
 const HUD_PROFILE_FIELDS = {
   crystals: 247,
@@ -184,6 +184,115 @@ test("HUD avatar falls back to the live Telegram photo when no avatarUrl is pers
 
   await expect.poll(() => persistedUrls.length).toBeGreaterThanOrEqual(1);
   expect(persistedUrls[0]).toBe(TELEGRAM_PHOTO_URL);
+});
+
+test("a stale avatar-save response does not roll back deck mutations made while the save was in flight", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  await page.route("https://telegram.org/js/telegram-web-app.js", async (route) => {
+    await route.fulfill({ contentType: "application/javascript", body: "" });
+  });
+  await page.addInitScript((photoUrl) => {
+    Object.defineProperty(window, "Telegram", {
+      configurable: true,
+      value: {
+        WebApp: {
+          initData: "mvp-hud-stale-race",
+          initDataUnsafe: {
+            user: {
+              id: 3030303,
+              username: "stalerace",
+              first_name: "Stale",
+              last_name: "Race",
+              photo_url: photoUrl,
+            },
+          },
+          ready() {},
+          expand() {},
+          disableVerticalSwipes() {},
+          isVersionAtLeast() {
+            return false;
+          },
+        },
+      },
+    });
+  }, TELEGRAM_PHOTO_URL);
+
+  const identity: PlayerIdentity = { mode: "telegram", telegramId: "3030303" };
+  const extraOwnedCardId = PROFILE_OWNED_CARD_IDS.find((cardId) => !PROFILE_DECK_IDS.includes(cardId));
+  if (!extraOwnedCardId) throw new Error("Fixture must include an owned card outside the deck.");
+
+  const baseProfilePayload = {
+    id: "player-hud-stale-race",
+    identity,
+    ownedCardIds: PROFILE_OWNED_CARD_IDS,
+    deckIds: PROFILE_DECK_IDS,
+    starterFreeBoostersRemaining: 0,
+    openedBoosterIds: ["neon-breach", "factory-shift"],
+    crystals: HUD_PROFILE_FIELDS.crystals,
+    totalXp: HUD_PROFILE_FIELDS.totalXp,
+    level: 2,
+    wins: HUD_PROFILE_FIELDS.wins,
+    losses: HUD_PROFILE_FIELDS.losses,
+    draws: HUD_PROFILE_FIELDS.draws,
+    eloRating: HUD_PROFILE_FIELDS.eloRating,
+    onboarding: { starterBoostersAvailable: false, collectionReady: true, deckReady: true, completed: true },
+  };
+
+  let resolveAvatarRoute: (() => void) | undefined;
+  const avatarRouteReady = new Promise<void>((resolve) => {
+    resolveAvatarRoute = resolve;
+  });
+
+  await page.route("**/api/player/avatar", async (route) => {
+    const requestBody = route.request().postDataJSON() as { avatarUrl?: string };
+    await avatarRouteReady;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        player: { ...baseProfilePayload, deckIds: PROFILE_DECK_IDS, avatarUrl: requestBody.avatarUrl },
+      }),
+    });
+  });
+
+  await page.route("**/api/player/deck", async (route) => {
+    const requestBody = route.request().postDataJSON() as { deckIds?: string[] };
+    const nextDeckIds = requestBody.deckIds ?? PROFILE_DECK_IDS;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        player: { ...baseProfilePayload, deckIds: nextDeckIds },
+      }),
+    });
+  });
+
+  await page.route("**/api/player", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ player: baseProfilePayload }),
+    });
+  });
+
+  await page.goto("/");
+
+  await expect(page.getByTestId("player-hud-sidebar")).toBeVisible();
+  await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(PROFILE_DECK_IDS.length);
+
+  const profileShell = page.getByTestId("player-profile-shell");
+
+  await page.getByTestId(`collection-toggle-${extraOwnedCardId}`).click({ force: true });
+  await expect(page.getByTestId("deck-save-status")).toHaveAttribute("data-status", "saved");
+  await expect(profileShell).toHaveAttribute("data-profile-deck-count", String(PROFILE_DECK_IDS.length + 1));
+  await expect(page.getByTestId(`deck-card-${extraOwnedCardId}`)).toBeVisible();
+
+  resolveAvatarRoute?.();
+
+  await expect(page.getByTestId("player-hud-avatar-sidebar")).toHaveAttribute("data-avatar-src", TELEGRAM_PHOTO_URL);
+  await expect(profileShell).toHaveAttribute("data-profile-deck-count", String(PROFILE_DECK_IDS.length + 1));
+  await expect(page.getByTestId(`deck-card-${extraOwnedCardId}`)).toBeVisible();
 });
 
 test("HUD is hidden during active battle phases", async ({ page }) => {

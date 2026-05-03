@@ -260,7 +260,7 @@ export function GameRoot() {
     void savePlayerAvatar(playerIdentity, livePhoto)
       .then((nextProfile) => {
         if (cancelled) return;
-        setPlayerProfile(nextProfile);
+        setPlayerProfile((current) => (current ? { ...current, avatarUrl: nextProfile.avatarUrl } : current));
       })
       .catch((error) => {
         // Persistence failure is non-fatal: the live Telegram photo continues
