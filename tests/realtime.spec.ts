@@ -1,5 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { cards } from "../src/features/battle/model/cards";
+import type { RewardSummary } from "../src/features/battle/model/types";
 import type { PlayerIdentity } from "../src/features/player/profile/types";
 import { mockDeckReadyProfile, PROFILE_DECK_IDS } from "./fixtures/playerProfile";
 
@@ -119,6 +120,52 @@ test("forfeits the active PvP player when their turn times out", async ({ baseUR
   expect(secondResult.loserId).toBe(firstMoverReady.playerId);
   expect(firstResult.winnerId).toBe(otherReady.playerId);
   expect(secondResult.winnerId).toBe(otherReady.playerId);
+
+  first.close();
+  second.close();
+});
+
+test("emits server-authoritative reward_summary to both PvP sessions on a forfeit", async ({ baseURL, request }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const winnerIdentity = testIdentity("rewards-winner");
+  const loserIdentity = testIdentity("rewards-loser");
+  await seedRealtimeProfile(request, winnerIdentity);
+  await seedRealtimeProfile(request, loserIdentity);
+  const first = await connectRealtimeClient(wsUrl, "Rewards A", PROTOCOL_OWNED_DECK_IDS, { identity: winnerIdentity });
+  const second = await connectRealtimeClient(wsUrl, "Rewards B", PROTOCOL_OWNED_DECK_IDS, { identity: loserIdentity });
+
+  const firstReady = await first.waitFor("match_ready");
+  const secondReady = await second.waitFor("match_ready");
+  const firstMover = firstReady.firstPlayerId === firstReady.playerId ? first : second;
+  const firstMoverIdentity = firstMover === first ? winnerIdentity : loserIdentity;
+  const otherIdentity = firstMover === first ? loserIdentity : winnerIdentity;
+  const firstMoverReady = firstMover === first ? firstReady : secondReady;
+
+  firstMover.send({
+    type: "turn_timeout",
+    matchId: firstMoverReady.matchId,
+    round: firstMoverReady.round,
+  });
+
+  const firstReward = await first.waitFor("reward_summary", { timeoutMs: 5_000 });
+  const secondReward = await second.waitFor("reward_summary", { timeoutMs: 5_000 });
+
+  const moverReward = firstMover === first ? firstReward : secondReward;
+  const otherReward = firstMover === first ? secondReward : firstReward;
+
+  const moverPayload = moverReward.payload as RewardSummary;
+  const otherPayload = otherReward.payload as RewardSummary;
+
+  expect(moverPayload.deltaXp).toBe(10);
+  expect(moverPayload.deltaCrystals).toBe(0);
+  expect(moverPayload.newTotals).toMatchObject({ crystals: 0, totalXp: 10, level: 1 });
+
+  expect(otherPayload.deltaXp).toBe(100);
+  expect(otherPayload.deltaCrystals).toBe(50);
+  expect(otherPayload.newTotals).toMatchObject({ crystals: 50, totalXp: 100, level: 1 });
+
+  expect(firstMoverIdentity).toBeDefined();
+  expect(otherIdentity).toBeDefined();
 
   first.close();
   second.close();
