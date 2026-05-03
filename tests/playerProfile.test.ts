@@ -672,8 +672,11 @@ describe("player match rewards — milestone card grants (Op-C)", () => {
     // We seed at 50700 - 1 to be just below L15? Actually 50700 is exactly the start of L14.
     // We will seed XP that reaches L14 with about 1XP under L15 boundary.
     // To avoid arithmetic mistakes, just pump synthetic XP that crosses 14->15.
+    const initialTotalXp = 0;
+    const initialWins = 0;
+    const xpGrantedByMatch = 200_000;
     const store = new MemoryPlayerProfileStore([
-      { ...createNewStoredPlayerProfile("player-missing", identity), totalXp: 0 },
+      { ...createNewStoredPlayerProfile("player-missing", identity), totalXp: initialTotalXp },
     ]);
     store.milestoneCardPool = [
       milestoneCard("rare-1", "Rare 1", "Rare"),
@@ -688,7 +691,7 @@ describe("player match rewards — milestone card grants (Op-C)", () => {
     try {
       result = await store.applyMatchRewards(identity, {
         result: "win",
-        deltaXp: 200_000,
+        deltaXp: xpGrantedByMatch,
         matchCrystals: 0,
         rng: fixedRng(),
       });
@@ -703,7 +706,14 @@ describe("player match rewards — milestone card grants (Op-C)", () => {
     // partial). XP and level-up crystals still applied.
     expect(milestoneCardRewards).toEqual([]);
     expect(latest.ownedCards).toEqual([]);
-    expect(latest.crystals).toBeGreaterThan(0); // level-up bonus still paid
+    // Op-A invariants: XP $inc and the win counter $inc must persist even
+    // when Op-C throws, otherwise a future regression silently zeroing XP
+    // would only fail elsewhere.
+    expect(latest.totalXp).toBe(initialTotalXp + xpGrantedByMatch);
+    expect(latest.wins).toBe(initialWins + 1);
+    // Op-B invariant: level-up bonus crystals were paid (the "still
+    // persists" half of the test name).
+    expect(latest.crystals).toBeGreaterThan(0);
   });
 });
 
