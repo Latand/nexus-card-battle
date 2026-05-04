@@ -40,6 +40,7 @@ type BattleGameProps = {
   playerDeckIds?: string[];
   playerIdentity?: PlayerIdentity;
   playerName?: string;
+  playerEloRating?: number;
   telegramPlayer?: TelegramPlayer;
   mode?: "ai" | "human";
   avatarUrl?: string;
@@ -131,11 +132,11 @@ type HumanChatMessage = {
   createdAt: number;
 };
 
-export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity, playerName, telegramPlayer, mode = "ai", avatarUrl, onOpenCollection, onSwitchMode, onPlayerUpdated }: BattleGameProps = {}) {
+export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity, playerName, playerEloRating, telegramPlayer, mode = "ai", avatarUrl, onOpenCollection, onSwitchMode, onPlayerUpdated }: BattleGameProps = {}) {
   const isHumanMatch = mode === "human";
   const initialGame = useMemo(
-    () => createInitialGame({ playerCollectionIds, playerDeckIds, playerName }),
-    [playerCollectionIds, playerDeckIds, playerName],
+    () => createInitialGame({ playerCollectionIds, playerDeckIds, playerName, playerEloRating }),
+    [playerCollectionIds, playerDeckIds, playerName, playerEloRating],
   );
   const [game, setGame] = useState(() => initialGame);
   const [selectedId, setSelectedId] = useState(() => getAvailableCards(initialGame.player)[0]?.id);
@@ -840,7 +841,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       return;
     }
 
-    const next = createInitialGame({ playerCollectionIds, playerDeckIds, playerName });
+    const next = createInitialGame({ playerCollectionIds, playerDeckIds, playerName, playerEloRating });
     const firstCard = getAvailableCards(next.player)[0];
 
     setGame(next);

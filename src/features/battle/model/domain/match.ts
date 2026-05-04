@@ -10,13 +10,16 @@ export type CreateInitialGameOptions = {
   enemyCollectionIds?: string[];
   enemyDeckIds?: string[];
   enemyOpponentId?: string;
+  playerEloRating?: number;
   playerName?: string;
 };
 
 export function createInitialGame(options: CreateInitialGameOptions = {}): GameState {
   const nextPlayerCollectionIds = options.playerCollectionIds ?? playerCollectionIds;
   const nextPlayerDeckIds = options.playerDeckIds ?? playerDeckIds;
-  const opponent = options.enemyOpponentId || (!options.enemyCollectionIds && !options.enemyDeckIds) ? selectAiOpponent(options.enemyOpponentId) : null;
+  const opponent = options.enemyOpponentId || (!options.enemyCollectionIds && !options.enemyDeckIds)
+    ? selectAiOpponent({ opponentId: options.enemyOpponentId, playerEloRating: options.playerEloRating })
+    : null;
   const nextEnemyCollectionIds = options.enemyCollectionIds ?? opponent?.collectionIds ?? enemyCollectionIds;
   const nextEnemyDeckIds = options.enemyDeckIds ?? opponent?.deckIds ?? enemyDeckIds;
   const playerName = options.playerName?.trim() || "Гравець";

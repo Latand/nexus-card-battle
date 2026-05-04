@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { aiOpponents } from "../src/features/battle/model/loadouts";
+import { aiOpponents, selectAiOpponent } from "../src/features/battle/model/loadouts";
 import { createInitialGame } from "../src/features/battle/model/game";
 import { makeFighter } from "../src/features/battle/model/domain/fighters";
 import { findCard } from "../src/features/battle/model/domain/decks";
@@ -31,6 +31,24 @@ describe("AI opponents", () => {
     expect(game.enemy.title).toBe(opponent.title);
     expect(game.enemy.aiProfile?.opponentId).toBe(opponent.id);
     expect(game.enemy.deck.cardIds).toEqual(opponent.deckIds);
+  });
+
+  test("selects AI opponent tier from player ELO instead of the full random roster", () => {
+    expect(selectAiOpponent({ playerEloRating: 900 }).id).toBe(aiOpponents[0].id);
+    expect(selectAiOpponent({ playerEloRating: 1000 }).id).toBe(aiOpponents[1].id);
+    expect(selectAiOpponent({ playerEloRating: 1250 }).id).toBe(aiOpponents[4].id);
+    expect(selectAiOpponent({ playerEloRating: 1700 }).id).toBe(aiOpponents[7].id);
+    expect(selectAiOpponent({ playerEloRating: 2100 }).id).toBe(aiOpponents[9].id);
+  });
+
+  test("AI battle creation uses player ELO tier unless a specific opponent is requested", () => {
+    const starterGame = createInitialGame({ playerEloRating: 1000 });
+    const highEloGame = createInitialGame({ playerEloRating: 1900 });
+    const forcedGame = createInitialGame({ playerEloRating: 900, enemyOpponentId: aiOpponents[9].id });
+
+    expect(starterGame.enemy.aiProfile?.opponentId).toBe(aiOpponents[1].id);
+    expect(highEloGame.enemy.aiProfile?.opponentId).toBe(aiOpponents[8].id);
+    expect(forcedGame.enemy.aiProfile?.opponentId).toBe(aiOpponents[9].id);
   });
 });
 

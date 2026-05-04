@@ -51,6 +51,11 @@ export type AiOpponent = {
   deckIds: string[];
 };
 
+export type SelectAiOpponentOptions = {
+  opponentId?: string;
+  playerEloRating?: number;
+};
+
 export const aiOpponents: AiOpponent[] = [
   {
     id: "sparring-operator",
@@ -437,12 +442,33 @@ export const aiOpponents: AiOpponent[] = [
 export const enemyCollectionIds = aiOpponents[0].collectionIds;
 export const enemyDeckIds = aiOpponents[0].deckIds;
 
-export function selectAiOpponent(opponentId?: string) {
+export function selectAiOpponent(options: SelectAiOpponentOptions | string = {}) {
+  const nextOptions = typeof options === "string" ? { opponentId: options } : options;
+  const opponentId = nextOptions.opponentId;
+
   if (opponentId) {
     return aiOpponents.find((opponent) => opponent.id === opponentId) ?? aiOpponents[0];
   }
 
+  if (typeof nextOptions.playerEloRating === "number" && Number.isFinite(nextOptions.playerEloRating)) {
+    return aiOpponents[getAiOpponentIndexForElo(nextOptions.playerEloRating)];
+  }
+
   return aiOpponents[randomIndex(aiOpponents.length)];
+}
+
+export function getAiOpponentIndexForElo(eloRating: number) {
+  const safeElo = Math.max(0, Math.round(eloRating));
+  if (safeElo < 950) return 0;
+  if (safeElo < 1075) return 1;
+  if (safeElo < 1175) return 2;
+  if (safeElo < 1250) return 3;
+  if (safeElo < 1375) return 4;
+  if (safeElo < 1500) return 5;
+  if (safeElo < 1650) return 6;
+  if (safeElo < 1800) return 7;
+  if (safeElo < 2000) return 8;
+  return 9;
 }
 
 export function toFighterAiProfile(opponent: AiOpponent): FighterAiProfile {

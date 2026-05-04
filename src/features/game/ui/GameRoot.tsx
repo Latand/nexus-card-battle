@@ -310,6 +310,7 @@ export function GameRoot() {
             playerDeckIds={deckIds}
             playerIdentity={playerIdentity ?? undefined}
             playerName={playerName}
+            playerEloRating={playerProfile?.eloRating}
             avatarUrl={persistedAvatarUrl}
             onOpenCollection={() => setScreen("collection")}
             onSwitchMode={(nextMode) => setBattleMode(nextMode)}
