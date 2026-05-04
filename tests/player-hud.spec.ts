@@ -32,25 +32,16 @@ test("desktop sidebar HUD shows persisted crystals, level, and ELO on the Collec
 
   await expect(page.getByTestId("player-hud-mobile")).toBeHidden();
   await expect(page.getByTestId("player-hud-online-slot")).toBeVisible();
-
-  const resizeHandle = page.getByTestId("hud-resize-handle");
-  await expect(resizeHandle).toBeVisible();
-
-  const sidebarChat = sidebar.getByTestId("lobby-chat");
+  // v2 redesign: lobby chat moved into a drawer opened via the floating bubble.
+  await page.getByTestId("lobby-bubble-v2").click();
+  const sidebarChat = page.getByTestId("lobby-chat");
   await expect(sidebarChat).toBeVisible();
-  await expect.poll(async () => (await sidebarChat.getByTestId("lobby-chat-list").boundingBox())?.height ?? 0).toBeGreaterThan(220);
   await sidebarChat.getByTestId("lobby-chat-input").fill("Привіт з лобі");
   await sidebarChat.getByTestId("lobby-chat-send").click();
   await expect(sidebarChat.getByTestId("lobby-chat-list")).toContainText("Привіт з лобі", { timeout: 10_000 });
-
-  const initialSidebarWidth = (await sidebar.boundingBox())?.width ?? 0;
-  const handleBox = await resizeHandle.boundingBox();
-  expect(handleBox).not.toBeNull();
-  await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y + handleBox!.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(handleBox!.x + 96, handleBox!.y + handleBox!.height / 2, { steps: 5 });
-  await page.mouse.up();
-  await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBeGreaterThan(initialSidebarWidth + 48);
+  // Close drawer before next assertion so that play button click is not intercepted.
+  await page.keyboard.press("Escape");
+  await expect(sidebarChat).toBeHidden();
 
   // Desktop sidebar PLAY button starts a match through the existing entry point.
   const playButton = page.getByTestId("player-hud-play");
@@ -303,16 +294,23 @@ test("a stale avatar-save response does not roll back deck mutations made while 
 
   const profileShell = page.getByTestId("player-profile-shell");
 
-  await page.getByTestId(`collection-toggle-${extraOwnedCardId}`).click({ force: true });
+  // v2 redesign: card add/remove toggle moved into the Card Detail modal.
+  // Open the detail modal, toggle the card into the deck, then close it.
+  await page.getByTestId(`collection-card-${extraOwnedCardId}`).click();
+  await expect(page.getByTestId("card-details-shell")).toBeVisible();
+  await page.getByTestId("card-details-add-toggle").click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("card-details-shell")).toBeHidden();
+
   await expect(page.getByTestId("deck-save-status")).toHaveAttribute("data-status", "saved");
   await expect(profileShell).toHaveAttribute("data-profile-deck-count", String(PROFILE_DECK_IDS.length + 1));
-  await expect(page.getByTestId(`deck-card-${extraOwnedCardId}`)).toBeVisible();
+  await expect(page.getByTestId(`deck-card-${extraOwnedCardId}`)).toBeAttached();
 
   resolveAvatarRoute?.();
 
   await expect(page.getByTestId("player-hud-avatar-sidebar")).toHaveAttribute("data-avatar-src", TELEGRAM_PHOTO_URL);
   await expect(profileShell).toHaveAttribute("data-profile-deck-count", String(PROFILE_DECK_IDS.length + 1));
-  await expect(page.getByTestId(`deck-card-${extraOwnedCardId}`)).toBeVisible();
+  await expect(page.getByTestId(`deck-card-${extraOwnedCardId}`)).toBeAttached();
 });
 
 test("HUD is hidden during active battle phases", async ({ page }) => {

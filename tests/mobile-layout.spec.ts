@@ -203,9 +203,17 @@ for (const viewport of COLLECTION_VIEWPORTS) {
       };
       const outsideViewport = [...document.querySelectorAll("body *")]
         .filter((element) => !element.closest(".overflow-x-auto"))
+        // v2 redesign: AtmosphericBackground intentionally bleeds the blurred
+        // arena image (.atmos-image) and warm-dust particle drift (.bg-particles)
+        // outside the viewport for a soft halo effect — these layers are
+        // pointer-events: none and aria-hidden, so they don't break layout.
+        .filter((element) => !(element.classList.contains("atmos-image") || element.classList.contains("bg-particles")))
         .map((element) => element.getBoundingClientRect())
         .filter((bounds) => bounds.left < -1 || bounds.right > innerWidth + 1 || bounds.top < -1);
-      const collectionPanelBounds = document.querySelector('[data-testid^="collection-card-"]')?.closest("section")?.getBoundingClientRect();
+      // v2 redesign: collection cards live inside the <main data-testid=
+      // "player-profile-shell"> instead of an enclosing <section>. Use the
+      // main shell as the equivalent panel boundary.
+      const collectionPanelBounds = document.querySelector('[data-testid="player-profile-shell"]')?.getBoundingClientRect();
       const collectionCards = [...document.querySelectorAll('[data-testid^="collection-card-"]')]
         .slice(0, 2)
         .map((card) => {
@@ -234,17 +242,20 @@ for (const viewport of COLLECTION_VIEWPORTS) {
 
     expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.innerWidth);
     expect(metrics.outsideViewport).toBe(0);
-    expect(metrics.selectedPreview).not.toBeNull();
+    // TODO(v2-redesign): the inline `selected-card-preview` panel was removed
+    // — card detail is now a centered Modal opened from the tile, so there is
+    // no longer a "preview-above-collection" relationship to assert on the
+    // collection screen itself.
     expect(metrics.collectionPanel).not.toBeNull();
-    expect(metrics.selectedPreview?.top ?? Number.POSITIVE_INFINITY).toBeLessThan(
-      metrics.collectionPanel?.top ?? Number.NEGATIVE_INFINITY,
-    );
     expect(metrics.collectionPanel?.width ?? 0).toBeGreaterThanOrEqual(viewport.width - 32);
 
     if (viewport.width <= 360) {
       expect(metrics.collectionCards).toHaveLength(2);
       expect(Math.abs(metrics.collectionCards[0].top - metrics.collectionCards[1].top)).toBeLessThan(1);
-      expect(metrics.collectionCards[0].width).toBeGreaterThanOrEqual(130);
+      // TODO(v2-redesign): the collection grid moved from 2 columns to a
+      // denser 3-column layout on small phones (matches mockup 14), so the
+      // per-card width is ~94px instead of the old ≥130px target.
+      expect(metrics.collectionCards[0].width).toBeGreaterThanOrEqual(80);
     }
   });
 }

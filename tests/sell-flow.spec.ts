@@ -85,16 +85,19 @@ test("Collection card detail sells a duplicate card, decrements badge, and credi
 
   await expect(page.getByTestId("player-profile-shell")).toHaveAttribute("data-collection-mode", "owned");
 
-  // Open the card detail by selecting the tile.
-  await page.getByLabel(`Обрати ${sellableCard.name}`).click();
+  // v2 redesign: open the Card Detail modal by clicking the tile.
+  await page.getByTestId(`collection-card-${sellableCard.id}`).click();
+  const detailShell = page.getByTestId("card-details-shell");
+  await expect(detailShell).toBeVisible();
+  await expect(detailShell).toHaveAttribute("data-card-id", sellableCard.id);
 
-  // Sell summary line appears with the expected breakdown.
-  await expect(page.getByTestId("collection-sell-summary")).toContainText("Ви маєте: 2 (0 у колоді, 2 запасних)");
+  // Owned-count tile shows "×2" before sell.
+  await expect(page.getByTestId(`collection-owned-count-${sellableCard.id}`)).toHaveText(`×${currentExtraCount}`);
 
   // Sell 1 duplicate (no last-copy confirm needed).
-  await page.getByTestId("collection-sell-1").click();
+  await page.getByTestId("card-details-sell-button").click();
 
-  // Owned-count badge decrements from 2 to 1.
+  // Owned-count badge decrements to ×1.
   await expect(page.getByTestId(`collection-owned-count-${sellableCard.id}`)).toHaveText("×1");
 
   // HUD crystals incremented by the card's rarity sell price. data-profile-crystals
@@ -164,12 +167,23 @@ test("Collection sell-all duplicates keeps one copy in the collection", async ({
   });
 
   await page.goto("/");
-  await page.getByLabel(`Обрати ${sellableCard.name}`).click();
-  await expect(page.getByTestId("collection-sell-summary")).toContainText("Ви маєте: 3");
+  // v2 redesign: open Card Detail modal via the tile.
+  await page.getByTestId(`collection-card-${sellableCard.id}`).click();
+  await expect(page.getByTestId("card-details-shell")).toBeVisible();
+  await expect(page.getByTestId(`collection-owned-count-${sellableCard.id}`)).toHaveText("×3");
 
-  await page.getByTestId("collection-sell-all").click();
+  // TODO(v2-redesign): the inline "sell all duplicates" button merged with
+  // single-sell into one "Sell 1" button in the Card Detail modal. Repeated
+  // clicks now sell one copy per click, which is closer to the design but
+  // changes the per-click count semantics. Click N-1 times to sell down to a
+  // single copy and assert the final state.
+  const initialExtra = 3;
+  for (let i = 0; i < initialExtra - 1; i += 1) {
+    await page.getByTestId("card-details-sell-button").click();
+    await expect(page.getByTestId(`collection-owned-count-${sellableCard.id}`)).toHaveText(`×${initialExtra - 1 - i}`);
+  }
 
-  expect(lastSellCount).toBe(2);
+  expect(lastSellCount).toBe(1);
   await expect(page.getByTestId(`collection-owned-count-${sellableCard.id}`)).toHaveText("×1");
 });
 
@@ -188,12 +202,16 @@ test("Collection card detail disables sell when the card is in any saved deck", 
   const inDeckCard = cards.find((card) => card.id === inDeckCardId);
   if (!inDeckCard) throw new Error(`Card ${inDeckCardId} must exist in card pool.`);
 
-  await page.getByLabel(`Обрати ${inDeckCard.name}`).click();
+  // v2 redesign: open Card Detail modal for the deck-locked card.
+  await page.getByTestId(`collection-card-${inDeckCard.id}`).click();
+  await expect(page.getByTestId("card-details-shell")).toBeVisible();
 
-  // Helper text uses the exact uk-UA phrase.
-  await expect(page.getByTestId("collection-sell-disabled-reason")).toHaveText("Видали з колоди, щоб продати");
+  // TODO(v2-redesign): the dedicated "collection-sell-disabled-reason" copy
+  // moved out of an inline panel into the modal's deck status line. The
+  // "У вас: N · у колоді" line communicates the same fact ("can't sell while
+  // in deck") and the sell button is disabled.
+  await expect(page.getByTestId("card-details-shell")).toContainText("у колоді");
 
-  // Both sell buttons are present but disabled.
-  await expect(page.getByTestId("collection-sell-1")).toBeDisabled();
-  await expect(page.getByTestId("collection-sell-all")).toBeDisabled();
+  // The single sell button is present but disabled while the card is in deck.
+  await expect(page.getByTestId("card-details-sell-button")).toBeDisabled();
 });

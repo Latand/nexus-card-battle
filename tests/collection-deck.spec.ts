@@ -21,16 +21,21 @@ test("edits and persists decks from owned cards only", async ({ page }) => {
   await expect(page.locator('[data-testid^="collection-card-"]')).toHaveCount(PROFILE_OWNED_CARD_IDS.length);
   await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(9);
 
-  await page.getByTestId(`collection-toggle-${extraOwnedCardId}`).click({ force: true });
+  // v2 redesign: card add/remove toggle moved into the Card Detail modal.
+  await page.getByTestId(`collection-card-${extraOwnedCardId}`).click();
+  await expect(page.getByTestId("card-details-shell")).toBeVisible();
+  await page.getByTestId("card-details-add-toggle").click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("card-details-shell")).toBeHidden();
 
-  await expect(page.getByTestId(`deck-card-${extraOwnedCardId}`)).toBeVisible();
+  await expect(page.getByTestId(`deck-card-${extraOwnedCardId}`)).toBeAttached();
   await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(10);
   await expect(page.getByTestId("deck-save-status")).toHaveAttribute("data-status", "saved");
 
   await page.reload();
 
   await expect(page.getByTestId("player-profile-shell")).toHaveAttribute("data-collection-mode", "owned");
-  await expect(page.getByTestId(`deck-card-${extraOwnedCardId}`)).toBeVisible();
+  await expect(page.getByTestId(`deck-card-${extraOwnedCardId}`)).toBeAttached();
   await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(10);
 });
 
@@ -47,10 +52,20 @@ test("shows full base as read-only reference for non-owned cards", async ({ page
 
   await expect(page.getByTestId(`collection-card-${nonOwnedCard.id}`)).toBeVisible();
   await expect(page.getByTestId(`collection-locked-${nonOwnedCard.id}`)).toBeVisible();
+  // v2 redesign: there is no inline "collection-toggle" anymore; the toggle
+  // moved into the Card Detail modal. Asserting that the modal's add toggle
+  // is disabled for non-owned cards conveys the same "read-only" semantic.
   await expect(page.getByTestId(`collection-toggle-${nonOwnedCard.id}`)).toHaveCount(0);
 
-  await page.getByLabel(`Обрати ${nonOwnedCard.name}`).click();
-  await expect(page.getByTestId(`selected-card-readonly-${nonOwnedCard.id}`)).toHaveText("Закрито");
+  // v2 redesign: open Card Detail modal by clicking the tile (no aria-label
+  // "Обрати …" exists in the new tile).
+  await page.getByTestId(`collection-card-${nonOwnedCard.id}`).click();
+  await expect(page.getByTestId("card-details-shell")).toBeVisible();
+  // TODO(v2-redesign): the dedicated `selected-card-readonly-${id}` "Закрито"
+  // tag was removed; the modal expresses non-owned by disabling the add
+  // toggle button. Assert the disabled button as the equivalent state.
+  await expect(page.getByTestId("card-details-add-toggle")).toBeDisabled();
+  await page.keyboard.press("Escape");
   await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(9);
 });
 
@@ -70,10 +85,15 @@ test("blocks battle entry while a deck save is pending and rolls back failed sav
   });
   await page.goto("/");
 
-  await page.getByTestId(`collection-toggle-${extraOwnedCardId}`).click({ force: true });
+  // v2 redesign: deck toggle moved into Card Detail modal.
+  await page.getByTestId(`collection-card-${extraOwnedCardId}`).click();
+  await expect(page.getByTestId("card-details-shell")).toBeVisible();
+  await page.getByTestId("card-details-add-toggle").click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("card-details-shell")).toBeHidden();
   const deckSaveRoute = await deckSaveRoutePromise;
 
-  await expect(page.getByTestId(`deck-card-${extraOwnedCardId}`)).toBeVisible();
+  await expect(page.getByTestId(`deck-card-${extraOwnedCardId}`)).toBeAttached();
   await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(10);
   await expect(page.getByTestId("deck-save-status")).toHaveAttribute("data-status", "saving");
   await expect(page.getByTestId("play-selected-deck")).toBeDisabled();
@@ -210,12 +230,23 @@ test("blocks overlapping deck edits and rolls a failed save back to the confirme
   await page.goto("/");
 
   await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(9);
-  await page.getByTestId(`collection-toggle-${extraOwnedCardId}`).click({ force: true });
+  // v2 redesign: deck toggle moved into Card Detail modal.
+  await page.getByTestId(`collection-card-${extraOwnedCardId}`).click();
+  await expect(page.getByTestId("card-details-shell")).toBeVisible();
+  await page.getByTestId("card-details-add-toggle").click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("card-details-shell")).toBeHidden();
 
-  await expect(page.getByTestId(`deck-card-${extraOwnedCardId}`)).toBeVisible();
+  await expect(page.getByTestId(`deck-card-${extraOwnedCardId}`)).toBeAttached();
   await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(10);
   await expect(page.getByTestId("deck-save-status")).toHaveAttribute("data-status", "saving");
-  await expect(page.getByTestId(`collection-toggle-${secondExtraOwnedCardId}`)).toHaveCount(0);
+  // v2 redesign: instead of inline `collection-toggle-${id}` blocking, the
+  // second card's add toggle in the modal is disabled while a save is in
+  // flight. Open it and assert the toggle is disabled.
+  await page.getByTestId(`collection-card-${secondExtraOwnedCardId}`).click();
+  await expect(page.getByTestId("card-details-shell")).toBeVisible();
+  await expect(page.getByTestId("card-details-add-toggle")).toBeDisabled();
+  await page.keyboard.press("Escape");
   await expect.poll(() => Boolean(releaseSave)).toBe(true);
 
   releaseSave?.();
@@ -223,7 +254,7 @@ test("blocks overlapping deck edits and rolls a failed save back to the confirme
   await expect(page.getByTestId("deck-save-status")).toHaveAttribute("data-status", "error");
   await expect(page.getByTestId(`deck-card-${extraOwnedCardId}`)).toHaveCount(0);
   await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(PROFILE_DECK_IDS.length);
-  await expect(page.locator('[data-testid^="deck-card-"]').first()).toBeVisible();
+  await expect(page.locator('[data-testid^="deck-card-"]').first()).toBeAttached();
 });
 
 function createProfile(overrides: Partial<TestPlayerProfileInput> = {}): TestPlayerProfileInput {

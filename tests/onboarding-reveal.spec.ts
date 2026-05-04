@@ -53,8 +53,10 @@ test("opens two different starter boosters, survives reload, reaches deck ready,
   await expect(page.getByTestId("player-profile-shell")).toHaveAttribute("data-starter-free-boosters-remaining", "1");
   await expect(page.getByTestId("starter-state-label")).toHaveText("Другий вибір");
   await expect(page.getByTestId(`starter-booster-card-${firstBoosterId}`)).toHaveAttribute("data-opened", "true");
-  await expect(page.getByTestId(`starter-booster-open-${firstBoosterId}`)).toBeDisabled();
-  await expect(page.getByTestId(`starter-booster-open-${secondBoosterId}`)).toBeEnabled();
+  // v2 redesign: the open button moved into BoosterDetailModal — assert
+  // the equivalent state via data-can-open on the catalog tile.
+  await expect(page.getByTestId(`starter-booster-card-${firstBoosterId}`)).toHaveAttribute("data-can-open", "false");
+  await expect(page.getByTestId(`starter-booster-card-${secondBoosterId}`)).toHaveAttribute("data-can-open", "true");
   expect(harness.catalogRequestCount()).toBeGreaterThanOrEqual(2);
 
   await page.reload();
@@ -64,8 +66,8 @@ test("opens two different starter boosters, survives reload, reaches deck ready,
   await expect(page.getByTestId("player-profile-shell")).toHaveAttribute("data-profile-owned-card-count", "5");
   await expect(page.getByTestId("player-profile-shell")).toHaveAttribute("data-profile-deck-count", "5");
   await expect(page.getByTestId("player-profile-shell")).toHaveAttribute("data-starter-free-boosters-remaining", "1");
-  await expect(page.getByTestId(`starter-booster-open-${firstBoosterId}`)).toBeDisabled();
-  await expect(page.getByTestId(`starter-booster-open-${secondBoosterId}`)).toBeEnabled();
+  await expect(page.getByTestId(`starter-booster-card-${firstBoosterId}`)).toHaveAttribute("data-can-open", "false");
+  await expect(page.getByTestId(`starter-booster-card-${secondBoosterId}`)).toHaveAttribute("data-can-open", "true");
 
   await openBoosterAndReveal(page, harness, secondBoosterId, secondOpenedCards, {
     ownedCardIds: fullStarterDeckIds,
@@ -225,6 +227,9 @@ async function openBoosterAndReveal(
   nextProfile: RevealProfileState,
 ) {
   const openRoutePromise = harness.waitForOpenRoute();
+  // v2 redesign: clicking the tile opens BoosterDetailModal; the actual
+  // "ВІДКРИТИ" CTA lives inside the modal.
+  await page.getByTestId(`starter-booster-card-${boosterId}`).click();
   await page.getByTestId(`starter-booster-open-${boosterId}`).click();
   const openRoute = await openRoutePromise;
   const openBody = openRoute.request().postDataJSON() as { identity: PlayerIdentity; boosterId: string };
