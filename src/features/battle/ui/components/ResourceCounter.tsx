@@ -95,12 +95,14 @@ export function ResourcePills({
 
 export function NamePlate({
   name,
+  subtitle,
   player = false,
   energy,
   health,
   statuses = [],
 }: {
   name: string;
+  subtitle?: string;
   player?: boolean;
   energy?: number;
   health?: number;
@@ -116,11 +118,19 @@ export function NamePlate({
         withResources
           ? "grid-cols-2 grid-rows-[auto_auto_auto] items-center gap-x-3 gap-y-0.5 max-[620px]:gap-x-1.5"
           : "place-items-center",
+        player && "shadow-[inset_0_0_0_1px_rgba(255,224,138,0.16)]",
       )}
     >
-      <strong className="relative z-[1] col-span-full min-w-0 truncate text-center text-xl font-black uppercase tracking-[0.02em] text-[#f4fbff] max-[960px]:text-lg max-[760px]:text-base max-[620px]:text-[13px]">
-        {name}
-      </strong>
+      <div className="relative z-[1] col-span-full grid min-w-0 justify-items-center leading-none">
+        <strong className="min-w-0 max-w-full truncate text-center text-xl font-black uppercase tracking-[0.02em] text-[#f4fbff] max-[960px]:text-lg max-[760px]:text-base max-[620px]:text-[13px]">
+          {name}
+        </strong>
+        {subtitle ? (
+          <span className="mt-0.5 max-w-full truncate text-[9px] font-black uppercase tracking-[0.08em] text-[#f5c96d] max-[760px]:text-[8px]">
+            {subtitle}
+          </span>
+        ) : null}
+      </div>
       {withResources ? <CompactResource label="Енергія" value={energy} tone="energy" /> : null}
       {withResources ? <CompactResource label="HP" value={health} tone="health" align="right" /> : null}
       {withResources && statuses.length > 0 ? (

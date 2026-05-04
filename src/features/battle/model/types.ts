@@ -13,6 +13,17 @@ export type Phase =
   | "reward_summary";
 
 export type Rarity = "Common" | "Rare" | "Unique" | "Legend";
+export type AiDifficulty = "rookie" | "adept" | "veteran" | "elite" | "champion";
+export type AiStyle = "balanced" | "aggressive" | "control" | "attrition" | "tempo";
+
+export type FighterAiProfile = {
+  opponentId: string;
+  level: number;
+  difficulty: AiDifficulty;
+  style: AiStyle;
+  aggression: number;
+  riskTolerance: number;
+};
 
 export type EffectTiming = "control" | "before_attack" | "attack" | "damage" | "after_damage";
 export type EffectStat = "ability" | "bonus" | "power" | "attack" | "damage" | "hp" | "energy" | "status";
@@ -113,6 +124,7 @@ export type Fighter = {
   name: string;
   title: string;
   avatarUrl: string;
+  aiProfile?: FighterAiProfile;
   hp: number;
   energy: number;
   statuses: FighterStatus[];

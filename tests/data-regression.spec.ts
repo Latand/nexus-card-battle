@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { cards, sourceCards } from "../src/features/battle/model/cards";
 import { clanList, clans } from "../src/features/battle/model/clans";
-import { createCardCollection, createInitialGame, score } from "../src/features/battle/model/game";
+import { aiOpponents, createCardCollection, createInitialGame, score } from "../src/features/battle/model/game";
 import { fulfillBoosterCatalog, fulfillPlayerProfile, type TestPlayerProfileInput } from "./fixtures/playerProfile";
 
 const GUEST_ID_STORAGE_KEY = "nexus:player-guest-id:v1";
@@ -33,14 +33,15 @@ test("default battle data and validation do not keep C.O.R.R. fallbacks", () => 
   expect(() => createCardCollection("regression", ["corr-1285"])).toThrow(/Unknown collection card ids: corr-1285/);
 });
 
-test("default AI opponent uses a softer varied deck", () => {
-  const game = createInitialGame();
+test("starter AI opponent uses a softer varied deck", () => {
+  const game = createInitialGame({ enemyOpponentId: aiOpponents[0].id });
   const enemyCards = game.enemy.deck.cardIds.map((cardId) => {
     const card = cards.find((item) => item.id === cardId);
     expect(card).toBeTruthy();
     return card!;
   });
 
+  expect(game.enemy.name).toBe(aiOpponents[0].name);
   expect(enemyCards).toHaveLength(12);
   expect(new Set(enemyCards.map((card) => card.id)).size).toBe(12);
   expect(new Set(enemyCards.map((card) => card.clan))).toEqual(new Set(["Metropolis", "Workers", "Toyz"]));

@@ -913,7 +913,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
         >
           ⌛ {turnSeconds} сек
         </div>
-        <NamePlate name={game.enemy.name} energy={game.enemy.energy} health={game.enemy.hp} statuses={game.enemy.statuses} />
+        <NamePlate name={game.enemy.name} subtitle={game.enemy.title} energy={game.enemy.energy} health={game.enemy.hp} statuses={game.enemy.statuses} />
         <button className={barButtonClass("border-l border-white/10 hover:bg-[linear-gradient(180deg,#ffe08a,#c98326)] hover:text-[#15100a]")} type="button" onClick={onOpenCollection}>
           Колоди
         </button>

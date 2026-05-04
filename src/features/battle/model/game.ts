@@ -7,3 +7,5 @@ export type { EnemyMove } from "./domain/opponentStrategy";
 export { resolveRound } from "./domain/roundResolver";
 export type { ScoreOptions, ScoreResult } from "./domain/scoring";
 export { hasApplicableAbilityEffect, isAbilityBlocked, score } from "./domain/scoring";
+export { aiOpponents, selectAiOpponent } from "./loadouts";
+export type { AiOpponent } from "./loadouts";
