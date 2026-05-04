@@ -148,6 +148,10 @@ test("starts PvP matchmaking from the ten-card starter deck-ready state", async 
   await expect(page.getByTestId("human-match-overlay")).toContainText("Пошук суперника", { timeout: 10_000 });
   await expect(page.getByTestId("human-match-session-name")).not.toContainText("Гравець", { timeout: 10_000 });
   await expect(page.getByTestId("human-match-online-count")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("human-match-chat")).toBeVisible({ timeout: 10_000 });
+  await page.getByTestId("human-match-chat-input").fill("Привіт з арени");
+  await page.getByTestId("human-match-chat-send").click();
+  await expect(page.getByTestId("human-match-chat-list")).toContainText("Привіт з арени", { timeout: 10_000 });
 });
 
 async function setupStarterOnboarding(page: Page, guestId = identity.guestId) {

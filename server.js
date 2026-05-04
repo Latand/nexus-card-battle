@@ -40,11 +40,14 @@ const handle = app.getRequestHandler();
 
 const sessions = new Map();
 const matches = new Map();
+const chatHistory = [];
 const testPlayerProfileStore = process.env.NEXUS_TEST_PROFILE_STORE === "1" ? createMemoryPlayerProfileStore() : null;
 const matchmakingQueue = new MatchmakingQueue();
 const onlinePresence = new OnlinePresence();
 const BATTLE_HAND_SIZE = 4;
 const MIN_DECK_SIZE = 9;
+const MAX_CHAT_MESSAGES = 200;
+const MAX_CHAT_TEXT_LENGTH = 240;
 const TURN_SECONDS = Number.parseInt(process.env.PVP_TURN_SECONDS || "75", 10);
 const TURN_TIMEOUT_GRACE_SECONDS = Number.parseInt(process.env.PVP_TURN_TIMEOUT_GRACE_SECONDS || "10", 10);
 const MATCHMAKING_TICK_MS = Number.parseInt(process.env.PVP_MATCHMAKING_TICK_MS || "5000", 10);
@@ -112,6 +115,7 @@ app.prepare().then(() => {
     sessions.set(session.id, session);
     onlinePresence.add(session);
     send(session, { type: "session", clientId: session.id, playerName: session.guestName });
+    send(session, { type: "chat_history", messages: chatHistory });
     broadcastOnlineCount();
 
     ws.on("pong", () => {
@@ -203,8 +207,38 @@ function handleSocketMessage(session, message) {
     return;
   }
 
+  if (message.type === "chat_message") {
+    publishChatMessage(session, message);
+    return;
+  }
+
   if (message.type === "ping") {
     send(session, { type: "pong" });
+  }
+}
+
+function publishChatMessage(session, message) {
+  const text = sanitizeChatText(message.text);
+  if (!text) {
+    sendError(session, "Chat message is empty.");
+    return;
+  }
+
+  const chatMessage = {
+    id: createId("chat"),
+    authorId: session.id,
+    authorName: getSessionDisplayName(session),
+    text,
+    createdAt: Date.now(),
+  };
+
+  chatHistory.push(chatMessage);
+  if (chatHistory.length > MAX_CHAT_MESSAGES) {
+    chatHistory.splice(0, chatHistory.length - MAX_CHAT_MESSAGES);
+  }
+
+  for (const activeSession of sessions.values()) {
+    send(activeSession, { type: "chat_message", ...chatMessage });
   }
 }
 
@@ -941,6 +975,11 @@ function sanitizeUser(value) {
   if (!telegramId && !name && !username) return null;
 
   return { telegramId, name, username };
+}
+
+function sanitizeChatText(value) {
+  if (typeof value !== "string") return "";
+  return value.replace(/\s+/g, " ").trim().slice(0, MAX_CHAT_TEXT_LENGTH);
 }
 
 function sanitizeShortString(value, maxLength) {
