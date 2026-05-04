@@ -223,7 +223,7 @@ export function CollectionDeckScreen({
       <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,rgba(11,15,17,0.96),rgba(5,7,10,0.98)),url('/nexus-assets/backgrounds/arena-bar-1024x576.png')] bg-cover bg-center px-4 py-4 max-[760px]:px-2">
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(250,199,76,0.06),transparent_24%,transparent_76%,rgba(75,204,220,0.06))]" />
 
-        <section className="relative z-10 mx-auto grid max-w-[1480px] gap-3">
+        <section className="relative z-10 mx-auto grid max-w-[1480px] gap-3 min-[1121px]:mx-0">
           <header className="grid min-h-[68px] grid-cols-[200px_minmax(240px,1fr)_auto] items-center gap-3 rounded-md bg-[linear-gradient(180deg,rgba(20,25,28,0.9),rgba(8,10,13,0.95))] px-4 py-2 shadow-[0_18px_44px_rgba(0,0,0,0.42)] max-[1040px]:grid-cols-[minmax(0,1fr)_auto] max-[760px]:grid-cols-1 max-[760px]:gap-2 max-[760px]:px-3 max-[760px]:py-2">
             <div className="grid gap-0.5">
               <b className="text-[11px] font-black uppercase tracking-[0.18em] text-[#d4b06a] max-[760px]:text-[10px]">Бойова картотека</b>

@@ -65,7 +65,7 @@ function SidebarHud({
 }) {
   return (
     <aside
-      className="hidden min-[1121px]:flex min-[1121px]:flex-col min-[1121px]:gap-3 min-[1121px]:sticky min-[1121px]:top-0 min-[1121px]:z-40 min-[1121px]:h-screen min-[1121px]:w-[220px] min-[1121px]:shrink-0 min-[1121px]:border-r min-[1121px]:border-[#d4b06a]/25 min-[1121px]:bg-[linear-gradient(180deg,rgba(20,25,28,0.96),rgba(8,10,13,0.98))] min-[1121px]:px-3 min-[1121px]:py-4 min-[1121px]:shadow-[0_18px_44px_rgba(0,0,0,0.42)]"
+      className="hidden min-[1121px]:sticky min-[1121px]:top-0 min-[1121px]:z-40 min-[1121px]:flex min-[1121px]:h-screen min-[1121px]:min-h-0 min-[1121px]:w-full min-[1121px]:min-w-0 min-[1121px]:flex-col min-[1121px]:gap-3 min-[1121px]:bg-[linear-gradient(180deg,rgba(20,25,28,0.96),rgba(8,10,13,0.98))] min-[1121px]:px-3 min-[1121px]:py-4 min-[1121px]:shadow-[0_18px_44px_rgba(0,0,0,0.42)]"
       data-testid="player-hud-sidebar"
       data-profile-crystals={profile.crystals}
       data-profile-level={profile.level}
@@ -113,7 +113,7 @@ function SidebarHud({
 
       <OnlineBadge onlineCount={onlineCount} testId="player-hud-online-slot" countTestId="player-hud-online-count" />
 
-      <LobbyChatPanel className="min-h-0" userName={lobbyUserName} />
+      <LobbyChatPanel className="min-h-[158px] flex-1" userName={lobbyUserName} />
 
       <button
         type="button"
@@ -138,7 +138,6 @@ function SidebarHud({
         Як грати
       </Link>
 
-      <div className="mt-auto" />
     </aside>
   );
 }
@@ -290,7 +289,7 @@ function LobbyChatPanel({
   return (
     <section
       className={cn(
-        "grid min-h-0 gap-2 rounded-md border border-[#65d7e9]/24 bg-[#071016]/82 p-2 text-left shadow-[inset_0_0_34px_rgba(101,215,233,0.06)]",
+        "grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-2 rounded-md border border-[#65d7e9]/24 bg-[#071016]/82 p-2 text-left shadow-[inset_0_0_34px_rgba(101,215,233,0.06)]",
         className,
       )}
       data-testid="lobby-chat"
@@ -303,7 +302,7 @@ function LobbyChatPanel({
         ref={listRef}
         className={cn(
           "grid content-start gap-1 overflow-y-auto pr-1 [scrollbar-color:#65d7e9_#071016] [scrollbar-width:thin]",
-          compact ? "max-h-[92px] min-h-[58px]" : "max-h-[170px] min-h-[116px]",
+          compact ? "max-h-[92px] min-h-[58px]" : "min-h-[116px]",
         )}
         data-testid="lobby-chat-list"
       >

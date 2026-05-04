@@ -32,11 +32,25 @@ test("desktop sidebar HUD shows persisted crystals, level, and ELO on the Collec
 
   await expect(page.getByTestId("player-hud-mobile")).toBeHidden();
   await expect(page.getByTestId("player-hud-online-slot")).toBeVisible();
+
+  const resizeHandle = page.getByTestId("hud-resize-handle");
+  await expect(resizeHandle).toBeVisible();
+
   const sidebarChat = sidebar.getByTestId("lobby-chat");
   await expect(sidebarChat).toBeVisible();
+  await expect.poll(async () => (await sidebarChat.getByTestId("lobby-chat-list").boundingBox())?.height ?? 0).toBeGreaterThan(220);
   await sidebarChat.getByTestId("lobby-chat-input").fill("Привіт з лобі");
   await sidebarChat.getByTestId("lobby-chat-send").click();
   await expect(sidebarChat.getByTestId("lobby-chat-list")).toContainText("Привіт з лобі", { timeout: 10_000 });
+
+  const initialSidebarWidth = (await sidebar.boundingBox())?.width ?? 0;
+  const handleBox = await resizeHandle.boundingBox();
+  expect(handleBox).not.toBeNull();
+  await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y + handleBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handleBox!.x + 96, handleBox!.y + handleBox!.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBeGreaterThan(initialSidebarWidth + 48);
 
   // Desktop sidebar PLAY button starts a match through the existing entry point.
   const playButton = page.getByTestId("player-hud-play");
