@@ -99,6 +99,44 @@ test("assigns generated names to anonymous PvP sessions and keeps Telegram names
   telegram.close();
 });
 
+test("broadcasts PvP chat messages and keeps only the latest 200 in session history", async ({ baseURL, request }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const firstIdentity = testIdentity("chat-a");
+  const secondIdentity = testIdentity("chat-b");
+  const lateIdentity = testIdentity("chat-late");
+  const firstProfile = await seedRealtimeProfile(request, firstIdentity);
+  const secondProfile = await seedRealtimeProfile(request, secondIdentity);
+  const lateProfile = await seedRealtimeProfile(request, lateIdentity);
+  const first = await connectRealtimeClient(wsUrl, "Chat A", firstProfile.deckIds, { identity: firstIdentity, user: null });
+  const second = await connectRealtimeClient(wsUrl, "Chat B", secondProfile.deckIds, { identity: secondIdentity, user: null });
+
+  const firstSession = await first.waitFor("session") as unknown as { playerName?: string };
+  await second.waitFor("session");
+
+  first.send({ type: "chat_message", text: "  Привіт, арено!  " });
+  const delivered = await second.waitFor("chat_message", { timeoutMs: 5_000 }) as unknown as { authorName?: string; text?: string };
+  expect(delivered.authorName).toBe(firstSession.playerName);
+  expect(delivered.text).toBe("Привіт, арено!");
+
+  for (let index = 0; index < 205; index += 1) {
+    first.send({ type: "chat_message", text: `chat-retention-${String(index).padStart(3, "0")}` });
+  }
+  await second.waitForMessage((message) => message.type === "chat_message" && message.text === "chat-retention-204", { timeoutMs: 10_000 });
+
+  const late = await connectRealtimeClient(wsUrl, "Chat Late", lateProfile.deckIds, { identity: lateIdentity, user: null });
+  const history = await late.waitFor("chat_history", { timeoutMs: 5_000 }) as unknown as { messages?: { text?: string }[] };
+  const historyTexts = history.messages?.map((message) => message.text) ?? [];
+
+  expect(historyTexts).toHaveLength(200);
+  expect(historyTexts).not.toContain("chat-retention-000");
+  expect(historyTexts).toContain("chat-retention-005");
+  expect(historyTexts.at(-1)).toBe("chat-retention-204");
+
+  first.close();
+  second.close();
+  late.close();
+});
+
 test("matches valid saved decks while filtering stale owned cards out of PvP collection", async ({ baseURL, request }) => {
   const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
   const staleOwnedIdentity = testIdentity("stale-owned-valid-deck");
@@ -814,6 +852,32 @@ async function connectRealtimeClient(
             if (nextHandlers.length > 0) waiters.set(type, nextHandlers);
             else waiters.delete(type);
             reject(new Error(`Timed out waiting for ${type}.`));
+          }, waitOptions.timeoutMs);
+        }
+      });
+    },
+    waitForMessage(predicate: (message: RealtimeMessage) => boolean, waitOptions: { timeoutMs?: number } = {}) {
+      const existing = messages.find(predicate);
+      if (existing) return Promise.resolve(existing);
+
+      return new Promise<RealtimeMessage>((resolve, reject) => {
+        let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+        const handler = (message: RealtimeMessage) => {
+          if (!predicate(message)) return;
+          if (timeoutHandle) clearTimeout(timeoutHandle);
+          socket.removeEventListener("message", onMessage);
+          resolve(message);
+        };
+        const onMessage = (event: MessageEvent) => {
+          handler(JSON.parse(String(event.data)) as RealtimeMessage);
+        };
+
+        socket.addEventListener("message", onMessage);
+
+        if (waitOptions.timeoutMs !== undefined) {
+          timeoutHandle = setTimeout(() => {
+            socket.removeEventListener("message", onMessage);
+            reject(new Error("Timed out waiting for realtime message."));
           }, waitOptions.timeoutMs);
         }
       });

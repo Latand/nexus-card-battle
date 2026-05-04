@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { useOnlineCount } from "@/features/presence/client";
+import { useEffect, useRef, useState } from "react";
+import { useLobbyChat, useOnlineCount, type LobbyChatMessage } from "@/features/presence/client";
 import { DEFAULT_PLAYER_AVATAR_URL, resolveAvatarUrl, useTelegramAvatar } from "@/features/player/profile/avatar";
 import type { PlayerProfile } from "@/features/player/profile/types";
 import { cn } from "@/shared/lib/cn";
@@ -33,12 +33,14 @@ export function PlayerHud({ profile, playerName, liveAvatarUrl, canPlay, onPlay 
         canPlay={canPlay}
         onPlay={onPlay}
         onlineCount={onlineCount}
+        lobbyUserName={playerName?.trim()}
       />
       <MobileHud
         profile={profile}
         playerName={displayName}
         avatarUrl={avatarUrl}
         onlineCount={onlineCount}
+        lobbyUserName={playerName?.trim()}
       />
     </>
   );
@@ -51,6 +53,7 @@ function SidebarHud({
   canPlay,
   onPlay,
   onlineCount,
+  lobbyUserName,
 }: {
   profile: PlayerProfile;
   playerName: string;
@@ -58,6 +61,7 @@ function SidebarHud({
   canPlay: boolean;
   onPlay: () => void;
   onlineCount: number | null;
+  lobbyUserName?: string;
 }) {
   return (
     <aside
@@ -107,6 +111,10 @@ function SidebarHud({
         />
       </div>
 
+      <OnlineBadge onlineCount={onlineCount} testId="player-hud-online-slot" countTestId="player-hud-online-count" />
+
+      <LobbyChatPanel className="min-h-0" userName={lobbyUserName} />
+
       <button
         type="button"
         className={cn(
@@ -131,29 +139,6 @@ function SidebarHud({
       </Link>
 
       <div className="mt-auto" />
-
-      <div
-        className={cn(
-          "grid min-h-[44px] place-items-center rounded-md border px-2 text-[11px] font-black uppercase tracking-[0.12em]",
-          onlineCount === null
-            ? "border-dashed border-white/10 bg-black/20 text-[#5d5443]"
-            : "border-[#3da06a]/40 bg-[#0d2017] text-[#bff0c4]",
-        )}
-        data-testid="player-hud-online-slot"
-        data-online-count={onlineCount === null ? "" : String(onlineCount)}
-      >
-        {onlineCount === null ? (
-          "Онлайн"
-        ) : (
-          <span className="flex items-center gap-1.5">
-            <span aria-hidden="true">🟢</span>
-            <b className="text-[#dff7d8]" data-testid="player-hud-online-count">
-              {onlineCount}
-            </b>
-            <span className="tracking-[0.14em] text-[#9bd3a4]">онлайн</span>
-          </span>
-        )}
-      </div>
     </aside>
   );
 }
@@ -163,77 +148,216 @@ function MobileHud({
   playerName,
   avatarUrl,
   onlineCount,
+  lobbyUserName,
 }: {
   profile: PlayerProfile;
   playerName: string;
   avatarUrl: string;
   onlineCount: number | null;
+  lobbyUserName?: string;
 }) {
   return (
-    <header
-      className="sticky top-0 z-40 flex items-center gap-2 border-b border-[#d4b06a]/25 bg-[linear-gradient(180deg,rgba(18,22,25,0.94),rgba(8,10,13,0.96))] px-2 py-1.5 shadow-[0_8px_22px_rgba(0,0,0,0.45)] min-[1121px]:hidden"
-      data-testid="player-hud-mobile"
-      data-profile-crystals={profile.crystals}
-      data-profile-level={profile.level}
-      data-profile-elo={profile.eloRating}
-    >
-      <HudAvatar src={avatarUrl} size={40} testId="player-hud-avatar-mobile" />
+    <div className="sticky top-0 z-40 grid gap-0 border-b border-[#d4b06a]/25 bg-[linear-gradient(180deg,rgba(18,22,25,0.97),rgba(8,10,13,0.98))] shadow-[0_8px_22px_rgba(0,0,0,0.45)] min-[1121px]:hidden">
+      <header
+        className="flex items-center gap-2 px-2 py-1.5"
+        data-testid="player-hud-mobile"
+        data-profile-crystals={profile.crystals}
+        data-profile-level={profile.level}
+        data-profile-elo={profile.eloRating}
+      >
+        <HudAvatar src={avatarUrl} size={40} testId="player-hud-avatar-mobile" />
 
-      <div className="grid min-w-0 flex-1 gap-0.5">
-        <strong
-          className="block truncate text-[11px] font-black uppercase tracking-[0.06em] text-[#fff0ad]"
-          data-testid="player-hud-name-mobile"
+        <div className="grid min-w-0 flex-1 gap-0.5">
+          <strong
+            className="block truncate text-[11px] font-black uppercase tracking-[0.06em] text-[#fff0ad]"
+            data-testid="player-hud-name-mobile"
+          >
+            {playerName}
+          </strong>
+          <span
+            className="block truncate text-[10px] font-black uppercase tracking-[0.08em] text-[#cbbd99]"
+            data-testid="player-hud-stats-mobile"
+          >
+            <b className="text-[#9ed6e4]" data-testid="player-hud-level-mobile">
+              Lv {profile.level}
+            </b>
+            {" · 💎 "}
+            <b className="text-[#ffe08a]" data-testid="player-hud-crystals-mobile">
+              {profile.crystals}
+            </b>
+            {" · 🏆 "}
+            <b className="text-[#fff7df]" data-testid="player-hud-elo-mobile">
+              {profile.eloRating}
+            </b>
+          </span>
+        </div>
+
+        <Link
+          href="/guide"
+          aria-label="Як грати"
+          className="inline-flex shrink-0 items-center justify-center rounded-full border border-[#d4b06a]/45 bg-black/40 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#d4b06a] hover:border-[#ffe08a]/65 hover:text-[#ffe08a]"
+          data-testid="player-hud-guide-link-mobile"
         >
-          {playerName}
-        </strong>
+          Як грати
+        </Link>
+
         <span
-          className="block truncate text-[10px] font-black uppercase tracking-[0.08em] text-[#cbbd99]"
-          data-testid="player-hud-stats-mobile"
+          className={cn(
+            "inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none tracking-[0.04em]",
+            onlineCount === null
+              ? "border border-white/15 bg-black/45 text-transparent"
+              : "border border-[#3da06a]/40 bg-[#0d2017] text-[#dff7d8]",
+          )}
+          data-testid="player-hud-online-slot-mobile"
+          data-online-count={onlineCount === null ? "" : String(onlineCount)}
+          aria-hidden={onlineCount === null ? "true" : undefined}
         >
-          <b className="text-[#9ed6e4]" data-testid="player-hud-level-mobile">
-            Lv {profile.level}
-          </b>
-          {" · 💎 "}
-          <b className="text-[#ffe08a]" data-testid="player-hud-crystals-mobile">
-            {profile.crystals}
-          </b>
-          {" · 🏆 "}
-          <b className="text-[#fff7df]" data-testid="player-hud-elo-mobile">
-            {profile.eloRating}
-          </b>
+          {onlineCount === null ? (
+            <span className="block h-2 w-2 rounded-full bg-white/15" />
+          ) : (
+            <>
+              <span aria-hidden="true">🟢</span>
+              <b data-testid="player-hud-online-count-mobile">{onlineCount}</b>
+            </>
+          )}
         </span>
+      </header>
+      <LobbyChatPanel compact className="mx-2 mb-2" userName={lobbyUserName} />
+    </div>
+  );
+}
+
+function OnlineBadge({
+  onlineCount,
+  testId,
+  countTestId,
+}: {
+  onlineCount: number | null;
+  testId: string;
+  countTestId: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "grid min-h-[44px] place-items-center rounded-md border px-2 text-[11px] font-black uppercase tracking-[0.12em]",
+        onlineCount === null
+          ? "border-dashed border-white/10 bg-black/20 text-[#5d5443]"
+          : "border-[#3da06a]/40 bg-[#0d2017] text-[#bff0c4]",
+      )}
+      data-testid={testId}
+      data-online-count={onlineCount === null ? "" : String(onlineCount)}
+    >
+      {onlineCount === null ? (
+        "Онлайн"
+      ) : (
+        <span className="flex items-center gap-1.5">
+          <span aria-hidden="true">🟢</span>
+          <b className="text-[#dff7d8]" data-testid={countTestId}>
+            {onlineCount}
+          </b>
+          <span className="tracking-[0.14em] text-[#9bd3a4]">онлайн</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
+function LobbyChatPanel({
+  compact = false,
+  className,
+  userName,
+}: {
+  compact?: boolean;
+  className?: string;
+  userName?: string;
+}) {
+  const { sessionId, chatMessages, sendMessage } = useLobbyChat(userName);
+  const [draft, setDraft] = useState("");
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const canSend = draft.trim().length > 0;
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    list.scrollTop = list.scrollHeight;
+  }, [chatMessages.length]);
+
+  function submit() {
+    if (!sendMessage(draft)) return;
+    setDraft("");
+  }
+
+  return (
+    <section
+      className={cn(
+        "grid min-h-0 gap-2 rounded-md border border-[#65d7e9]/24 bg-[#071016]/82 p-2 text-left shadow-[inset_0_0_34px_rgba(101,215,233,0.06)]",
+        className,
+      )}
+      data-testid="lobby-chat"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#8db6bf]">Чат</span>
+        <span className="text-[10px] font-black uppercase tracking-[0.1em] text-[#5f7f86]">{chatMessages.length}/200</span>
       </div>
-
-      <Link
-        href="/guide"
-        aria-label="Як грати"
-        className="inline-flex shrink-0 items-center justify-center rounded-full border border-[#d4b06a]/45 bg-black/40 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#d4b06a] hover:border-[#ffe08a]/65 hover:text-[#ffe08a]"
-        data-testid="player-hud-guide-link-mobile"
-      >
-        Як грати
-      </Link>
-
-      <span
+      <div
+        ref={listRef}
         className={cn(
-          "inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none tracking-[0.04em]",
-          onlineCount === null
-            ? "border border-white/15 bg-black/45 text-transparent"
-            : "border border-[#3da06a]/40 bg-[#0d2017] text-[#dff7d8]",
+          "grid content-start gap-1 overflow-y-auto pr-1 [scrollbar-color:#65d7e9_#071016] [scrollbar-width:thin]",
+          compact ? "max-h-[92px] min-h-[58px]" : "max-h-[170px] min-h-[116px]",
         )}
-        data-testid="player-hud-online-slot-mobile"
-        data-online-count={onlineCount === null ? "" : String(onlineCount)}
-        aria-hidden={onlineCount === null ? "true" : undefined}
+        data-testid="lobby-chat-list"
       >
-        {onlineCount === null ? (
-          <span className="block h-2 w-2 rounded-full bg-white/15" />
+        {chatMessages.length === 0 ? (
+          <span className="self-center text-center text-[11px] font-bold text-[#6f7f82]">Повідомлень ще немає.</span>
         ) : (
-          <>
-            <span aria-hidden="true">🟢</span>
-            <b data-testid="player-hud-online-count-mobile">{onlineCount}</b>
-          </>
+          chatMessages.map((message) => (
+            <LobbyChatBubble key={message.id} message={message} own={message.authorId === sessionId} />
+          ))
         )}
-      </span>
-    </header>
+      </div>
+      <form
+        className="grid grid-cols-[1fr_auto] gap-1.5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+      >
+        <input
+          className="min-h-[34px] min-w-0 rounded-md border border-white/10 bg-black/28 px-2 text-xs font-bold text-[#f8eed8] outline-none transition placeholder:text-[#6f7f82] focus:border-[#65d7e9]/70"
+          value={draft}
+          maxLength={240}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="Написати..."
+          data-testid="lobby-chat-input"
+        />
+        <button
+          className="min-h-[34px] rounded-md border border-[#65d7e9]/45 bg-[#65d7e9]/14 px-2 text-[11px] font-black uppercase text-[#d9fbff] transition enabled:hover:bg-[#65d7e9]/24 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.04] disabled:text-[#647276]"
+          type="submit"
+          disabled={!canSend}
+          data-testid="lobby-chat-send"
+        >
+          OK
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function LobbyChatBubble({ message, own }: { message: LobbyChatMessage; own: boolean }) {
+  return (
+    <article
+      className={cn(
+        "max-w-[94%] rounded-md border px-2 py-1",
+        own
+          ? "justify-self-end border-[#ffe08a]/24 bg-[#201807]/86 text-right"
+          : "justify-self-start border-white/10 bg-white/[0.055]",
+      )}
+    >
+      <b className={cn("block truncate text-[9px] font-black uppercase tracking-[0.08em]", own ? "text-[#fff0ad]" : "text-[#d9fbff]")}>
+        {message.authorName}
+      </b>
+      <span className="block break-words text-[11px] font-bold leading-snug text-[#efe3c5]">{message.text}</span>
+    </article>
   );
 }
 

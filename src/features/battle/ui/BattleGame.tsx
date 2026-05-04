@@ -123,6 +123,14 @@ type HumanRewardSummaryMessage = HumanSocketMessage & {
   payload: RewardSummary;
 };
 
+type HumanChatMessage = {
+  id: string;
+  authorId: string;
+  authorName: string;
+  text: string;
+  createdAt: number;
+};
+
 export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity, playerName, telegramPlayer, mode = "ai", avatarUrl, onOpenCollection, onSwitchMode, onPlayerUpdated }: BattleGameProps = {}) {
   const isHumanMatch = mode === "human";
   const initialGame = useMemo(
@@ -140,8 +148,11 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const [roundWinnerCardIds, setRoundWinnerCardIds] = useState<ReadonlySet<string>>(() => new Set());
   const [humanStatus, setHumanStatus] = useState<HumanMatchStatus>(isHumanMatch ? "connecting" : "idle");
   const [humanMessage, setHumanMessage] = useState("");
+  const [humanSessionId, setHumanSessionId] = useState("");
   const [humanSessionName, setHumanSessionName] = useState("");
   const [humanOnlineCount, setHumanOnlineCount] = useState<number | null>(null);
+  const [humanChatMessages, setHumanChatMessages] = useState<HumanChatMessage[]>([]);
+  const [humanChatDraft, setHumanChatDraft] = useState("");
   const [matchInfo, setMatchInfo] = useState<HumanMatchInfo | null>(null);
   const [persistedRewards, setPersistedRewards] = useState<RewardSummary | null>(null);
   const [persistedRewardsError, setPersistedRewardsError] = useState<string | null>(null);
@@ -186,8 +197,11 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       if (disposed) return;
       setHumanStatus("connecting");
       setMatchInfo(null);
+      setHumanSessionId("");
       setHumanSessionName("");
       setHumanOnlineCount(null);
+      setHumanChatMessages([]);
+      setHumanChatDraft("");
     }, 0);
     socketRef.current = socket;
     remoteFirstMoveRef.current = null;
@@ -511,10 +525,26 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
 
   function handleHumanSocketMessage(message: HumanSocketMessage) {
     if (message.type === "session") {
+      if (typeof message.clientId === "string") {
+        setHumanSessionId(message.clientId);
+      }
       const nextSessionName = sanitizeHumanSessionName(message.playerName);
       if (nextSessionName) {
         humanSessionNameRef.current = nextSessionName;
         setHumanSessionName(nextSessionName);
+      }
+      return;
+    }
+
+    if (message.type === "chat_history") {
+      setHumanChatMessages(normalizeHumanChatHistory(message.messages));
+      return;
+    }
+
+    if (message.type === "chat_message") {
+      const chatMessage = normalizeHumanChatMessage(message);
+      if (chatMessage) {
+        setHumanChatMessages((value) => appendHumanChatMessage(value, chatMessage));
       }
       return;
     }
@@ -742,6 +772,15 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     });
   }
 
+  function sendHumanChatMessage() {
+    const socket = socketRef.current;
+    const text = humanChatDraft.replace(/\s+/g, " ").trim();
+    if (!text || !isSocketOpen(socket)) return;
+
+    sendSocketMessage(socket, { type: "chat_message", text });
+    setHumanChatDraft("");
+  }
+
   function flushBufferedHumanMessages() {
     const currentGame = gameRef.current;
     const round = currentGame.round.round;
@@ -851,6 +890,11 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
           message={humanMessage}
           playerName={humanDisplayName}
           onlineCount={humanOnlineCount}
+          sessionId={humanSessionId}
+          chatMessages={humanChatMessages}
+          chatDraft={humanChatDraft}
+          onChatDraftChange={setHumanChatDraft}
+          onSendChatMessage={sendHumanChatMessage}
           onOpenCollection={onOpenCollection}
           onRetryMatch={restartHumanQueue}
         />
@@ -1128,11 +1172,42 @@ function normalizeOnlineCount(value: unknown) {
   return Math.floor(value);
 }
 
+function normalizeHumanChatHistory(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map(normalizeHumanChatMessage).filter((message): message is HumanChatMessage => Boolean(message)).slice(-200);
+}
+
+function normalizeHumanChatMessage(value: unknown): HumanChatMessage | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.id !== "string" || !record.id) return null;
+  if (typeof record.authorId !== "string" || !record.authorId) return null;
+  if (typeof record.text !== "string" || !record.text.trim()) return null;
+
+  return {
+    id: record.id,
+    authorId: record.authorId,
+    authorName: typeof record.authorName === "string" && record.authorName.trim() ? record.authorName.trim().slice(0, 80) : "Гравець",
+    text: record.text.trim().slice(0, 240),
+    createdAt: typeof record.createdAt === "number" && Number.isFinite(record.createdAt) ? record.createdAt : Date.now(),
+  };
+}
+
+function appendHumanChatMessage(messages: HumanChatMessage[], message: HumanChatMessage) {
+  const withoutDuplicate = messages.filter((item) => item.id !== message.id);
+  return [...withoutDuplicate, message].slice(-200);
+}
+
 function HumanMatchOverlay({
   status,
   message,
   playerName,
   onlineCount,
+  sessionId,
+  chatMessages,
+  chatDraft,
+  onChatDraftChange,
+  onSendChatMessage,
   onOpenCollection,
   onRetryMatch,
 }: {
@@ -1140,6 +1215,11 @@ function HumanMatchOverlay({
   message: string;
   playerName: string;
   onlineCount: number | null;
+  sessionId: string;
+  chatMessages: HumanChatMessage[];
+  chatDraft: string;
+  onChatDraftChange: (value: string) => void;
+  onSendChatMessage: () => void;
   onOpenCollection?: () => void;
   onRetryMatch?: () => void;
 }) {
@@ -1149,7 +1229,7 @@ function HumanMatchOverlay({
   const displayName = playerName || "Гравець";
 
   return (
-    <section className="fixed inset-0 z-40 grid place-items-center bg-[#05080b]/78 p-3 backdrop-blur-[4px]" data-testid="human-match-overlay">
+    <section className="fixed inset-0 z-40 grid place-items-center overflow-y-auto bg-[#05080b]/78 p-3 py-4 backdrop-blur-[4px]" data-testid="human-match-overlay">
       <div className="grid w-[min(560px,94vw)] gap-4 rounded-md border-2 border-[#65d7e9]/55 bg-[linear-gradient(180deg,rgba(17,24,28,0.98),rgba(5,7,10,0.98))] p-5 text-center shadow-[0_24px_70px_rgba(0,0,0,0.72),inset_0_0_80px_rgba(101,215,233,0.08)]">
         <div className="grid justify-items-center gap-3">
           {active ? (
@@ -1183,6 +1263,13 @@ function HumanMatchOverlay({
             )}
           </div>
         </div>
+        <HumanMatchChat
+          sessionId={sessionId}
+          messages={chatMessages}
+          draft={chatDraft}
+          onDraftChange={onChatDraftChange}
+          onSend={onSendChatMessage}
+        />
         {onRetryMatch && ["opponent_left", "forfeit", "error", "closed"].includes(status) ? (
           <button
             className="mx-auto min-h-[42px] rounded-md border-2 border-[#65d7e9]/60 bg-[linear-gradient(180deg,#68e5f5,#218aa3_56%,#0d4151)] px-4 text-xs font-black uppercase text-[#061116] transition hover:brightness-110"
@@ -1203,6 +1290,94 @@ function HumanMatchOverlay({
           </button>
         ) : null}
       </div>
+    </section>
+  );
+}
+
+function HumanMatchChat({
+  sessionId,
+  messages,
+  draft,
+  onDraftChange,
+  onSend,
+}: {
+  sessionId: string;
+  messages: HumanChatMessage[];
+  draft: string;
+  onDraftChange: (value: string) => void;
+  onSend: () => void;
+}) {
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const canSend = draft.trim().length > 0;
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    list.scrollTop = list.scrollHeight;
+  }, [messages.length]);
+
+  return (
+    <section
+      className="grid gap-2 rounded-md border border-[#65d7e9]/24 bg-[#071016]/82 p-3 text-left shadow-[inset_0_0_34px_rgba(101,215,233,0.06)]"
+      data-testid="human-match-chat"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#8db6bf]">Чат арени</span>
+        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[#5f7f86]">{messages.length}/200</span>
+      </div>
+      <div
+        ref={listRef}
+        className="grid max-h-[150px] min-h-[92px] content-start gap-1 overflow-y-auto pr-1 [scrollbar-color:#65d7e9_#071016] [scrollbar-width:thin]"
+        data-testid="human-match-chat-list"
+      >
+        {messages.length === 0 ? (
+          <span className="self-center text-center text-xs font-bold text-[#6f7f82]">Повідомлень ще немає.</span>
+        ) : (
+          messages.map((chatMessage) => {
+            const own = chatMessage.authorId === sessionId;
+            return (
+              <article
+                key={chatMessage.id}
+                className={cn(
+                  "max-w-[92%] rounded-md border px-2 py-1",
+                  own
+                    ? "justify-self-end border-[#ffe08a]/24 bg-[#201807]/86 text-right"
+                    : "justify-self-start border-white/10 bg-white/[0.055]",
+                )}
+              >
+                <b className={cn("block truncate text-[10px] font-black uppercase tracking-[0.08em]", own ? "text-[#fff0ad]" : "text-[#d9fbff]")}>
+                  {chatMessage.authorName}
+                </b>
+                <span className="block break-words text-xs font-bold leading-snug text-[#efe3c5]">{chatMessage.text}</span>
+              </article>
+            );
+          })
+        )}
+      </div>
+      <form
+        className="grid grid-cols-[1fr_auto] gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSend();
+        }}
+      >
+        <input
+          className="min-h-[38px] rounded-md border border-white/10 bg-black/28 px-3 text-sm font-bold text-[#f8eed8] outline-none transition placeholder:text-[#6f7f82] focus:border-[#65d7e9]/70"
+          value={draft}
+          maxLength={240}
+          onChange={(event) => onDraftChange(event.target.value)}
+          placeholder="Написати..."
+          data-testid="human-match-chat-input"
+        />
+        <button
+          className="min-h-[38px] rounded-md border border-[#65d7e9]/45 bg-[#65d7e9]/14 px-3 text-xs font-black uppercase text-[#d9fbff] transition enabled:hover:bg-[#65d7e9]/24 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.04] disabled:text-[#647276]"
+          type="submit"
+          disabled={!canSend}
+          data-testid="human-match-chat-send"
+        >
+          OK
+        </button>
+      </form>
     </section>
   );
 }
