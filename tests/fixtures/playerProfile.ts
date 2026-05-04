@@ -127,6 +127,7 @@ export async function fulfillBoosterCatalog(route: Route, profile: TestPlayerPro
       boosters: getBoosterCatalogForPlayer({
         openedBoosterIds: profile.openedBoosterIds ?? [],
         starterFreeBoostersRemaining: profile.starterFreeBoostersRemaining,
+        crystals: profile.crystals ?? 0,
       }),
       player: createPlayerProfileBody(profile),
     }),

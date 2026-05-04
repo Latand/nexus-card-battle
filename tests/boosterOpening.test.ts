@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { cards } from "../src/features/battle/model/cards";
 import type { Card, Rarity } from "../src/features/battle/model/types";
-import { handleBoosterCatalogGet, handleBoosterCatalogPost, handleStarterBoosterOpenPost } from "../src/features/boosters/api";
+import { handleBoosterCatalogGet, handleBoosterCatalogPost, handleBoosterOpenPost, handleStarterBoosterOpenPost } from "../src/features/boosters/api";
 import { getBoosterById } from "../src/features/boosters/catalog";
 import { BoosterOpeningError, chooseStarterWeightedRarity, prepareStarterBoosterOpening, type RandomSource } from "../src/features/boosters/opening";
 import type { BoosterCatalogItem, BoosterOpeningRecord, BoosterOpeningStore, StoredBoosterOpeningRecord } from "../src/features/boosters/types";
@@ -57,10 +57,32 @@ describe("booster catalog", () => {
       canOpen: false,
       disabledReason: "already_opened",
     });
+    expect(opened?.paid).toEqual({
+      crystalCost: 100,
+      canOpen: false,
+      disabledReason: "insufficient_crystals",
+    });
     expect(next?.starter).toEqual({
       opened: false,
       canOpen: true,
     });
+  });
+
+  test("marks every booster as paid-openable when the player has enough crystals", async () => {
+    const store = new MemoryBoosterOpeningStore();
+    store.seedProfile(guestIdentity, {
+      crystals: 100,
+      starterFreeBoostersRemaining: 0,
+      openedBoosterIds: ["neon-breach"],
+    });
+
+    const response = await postCatalog(store, guestIdentity);
+    const body = (await response.json()) as { boosters: BoosterCatalogItem[]; player: PlayerProfile };
+
+    expect(response.status).toBe(200);
+    expect(body.player.crystals).toBe(100);
+    expect(body.boosters.every((booster) => booster.paid.canOpen)).toBe(true);
+    expect(body.boosters.every((booster) => booster.paid.crystalCost === 100)).toBe(true);
   });
 });
 
@@ -290,6 +312,67 @@ describe("starter booster opening", () => {
   });
 });
 
+describe("paid booster opening", () => {
+  test("charges 100 crystals, allows reopening the same booster, and only increments inventory", async () => {
+    const store = new MemoryBoosterOpeningStore();
+    store.seedProfile(guestIdentity, {
+      crystals: 250,
+      starterFreeBoostersRemaining: 0,
+      openedBoosterIds: ["neon-breach"],
+      deckIds: ["saved-card"],
+    });
+
+    const first = await openPaidBooster(store, "neon-breach");
+    const firstBody = (await first.json()) as OpenBoosterResponse;
+    const second = await openPaidBooster(store, "neon-breach");
+    const secondBody = (await second.json()) as OpenBoosterResponse;
+    const firstDrawnIds = firstBody.cards.map((card) => card.id);
+    const secondDrawnIds = secondBody.cards.map((card) => card.id);
+    const firstRarities = firstBody.cards.map((card) => card.rarity);
+    const secondRarities = secondBody.cards.map((card) => card.rarity);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(firstBody.cards).toHaveLength(5);
+    expect(secondBody.cards).toHaveLength(5);
+    expect(firstRarities).toContain("Unique");
+    expect(secondRarities).toContain("Unique");
+    expect(firstRarities).not.toContain("Legend");
+    expect(secondRarities).not.toContain("Legend");
+    expect(firstBody.opening.source).toBe("paid_crystals");
+    expect(secondBody.opening.source).toBe("paid_crystals");
+    expect(firstBody.player.crystals).toBe(150);
+    expect(secondBody.player.crystals).toBe(50);
+    expect(secondBody.player.openedBoosterIds).toEqual(["neon-breach"]);
+    expect(secondBody.player.starterFreeBoostersRemaining).toBe(0);
+    expect(secondBody.player.deckIds).toEqual(["saved-card"]);
+    expect(store.openings).toHaveLength(2);
+
+    for (const cardId of firstDrawnIds) {
+      const expectedCount = firstDrawnIds.filter((id) => id === cardId).length + secondDrawnIds.filter((id) => id === cardId).length;
+      expect(getOwnedCount(secondBody.player.ownedCards, cardId)).toBe(expectedCount);
+    }
+  });
+
+  test("rejects paid opening below 100 crystals without writing history", async () => {
+    const store = new MemoryBoosterOpeningStore();
+    store.seedProfile(guestIdentity, {
+      crystals: 99,
+      starterFreeBoostersRemaining: 0,
+    });
+
+    const response = await openPaidBooster(store, "neon-breach");
+    const body = (await response.json()) as { error: string };
+    const profile = await store.findOrCreateByIdentity(guestIdentity);
+
+    expect(response.status).toBe(409);
+    expect(body.error).toBe("insufficient_crystals");
+    expect(profile.crystals).toBe(99);
+    expect(profile.ownedCards).toEqual([]);
+    expect(store.openings).toHaveLength(0);
+  });
+});
+
 class MemoryBoosterOpeningStore implements BoosterOpeningStore {
   private readonly profiles: StoredPlayerProfile[] = [];
   readonly openings: StoredBoosterOpeningRecord[] = [];
@@ -373,6 +456,51 @@ class MemoryBoosterOpeningStore implements BoosterOpeningStore {
     };
   }
 
+  async savePaidBoosterOpening(input: {
+    identity: PlayerIdentity;
+    playerId: string;
+    boosterId: string;
+    cardIds: string[];
+    openedAt: Date;
+    crystalCost: number;
+  }) {
+    const profileIndex = this.profiles.findIndex((profile) => isSamePlayerIdentity(profile.identity, input.identity));
+    const profile = this.profiles[profileIndex];
+
+    if (!profile || profile.crystals < input.crystalCost) {
+      throw new BoosterOpeningError("insufficient_crystals", "Not enough crystals to open this booster.", 409);
+    }
+
+    if (this.failNextHistoryInsert) {
+      this.failNextHistoryInsert = false;
+      throw new Error("Simulated boosterOpening insert failure.");
+    }
+
+    const opening: StoredBoosterOpeningRecord = {
+      id: `opening-${this.nextOpeningId}`,
+      playerId: input.playerId,
+      boosterId: input.boosterId,
+      source: "paid_crystals",
+      cardIds: input.cardIds,
+      openedAt: input.openedAt,
+    };
+    this.nextOpeningId += 1;
+    this.openings.push(opening);
+
+    const updatedProfile: StoredPlayerProfile = {
+      ...profile,
+      ownedCards: opening.cardIds.reduce((acc, cardId) => addToInventory(acc, cardId, 1), profile.ownedCards),
+      crystals: profile.crystals - input.crystalCost,
+    };
+
+    this.profiles[profileIndex] = updatedProfile;
+
+    return {
+      player: updatedProfile,
+      opening,
+    };
+  }
+
   seedProfile(identity: PlayerIdentity, profile: Partial<StoredPlayerProfile>) {
     const stored = {
       ...createNewStoredPlayerProfile(`player-${this.nextProfileId}`, identity),
@@ -411,6 +539,21 @@ function openBooster(store: BoosterOpeningStore, boosterId: string) {
     postRequest("http://localhost/api/player/open-booster", {
       identity: guestIdentity,
       boosterId,
+    }),
+    store,
+    {
+      rng: sequenceRng(Array.from({ length: 16 }, () => 0)),
+      now: () => new Date("2026-05-02T12:00:00.000Z"),
+    },
+  );
+}
+
+function openPaidBooster(store: BoosterOpeningStore, boosterId: string) {
+  return handleBoosterOpenPost(
+    postRequest("http://localhost/api/player/open-booster", {
+      identity: guestIdentity,
+      boosterId,
+      source: "paid_crystals",
     }),
     store,
     {

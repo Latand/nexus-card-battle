@@ -1,5 +1,5 @@
 import { clans } from "@/features/battle/model/clans";
-import type { Booster, BoosterCatalogItem, BoosterResponse, PlayerBoosterCatalogProfile } from "./types";
+import { PAID_BOOSTER_CRYSTAL_COST, type Booster, type BoosterCatalogItem, type BoosterResponse, type PlayerBoosterCatalogProfile } from "./types";
 
 export const boosterCatalog = [
   { id: "neon-breach", name: "Neon Breach", clans: ["[Da:Hack]", "Aliens"] },
@@ -38,6 +38,7 @@ export function getBoosterCatalogForPlayer(profile: PlayerBoosterCatalogProfile)
   return boosterCatalog.map((booster) => {
     const opened = openedBoosterIds.has(booster.id);
     const canOpen = profile.starterFreeBoostersRemaining > 0 && !opened;
+    const canOpenPaid = profile.crystals >= PAID_BOOSTER_CRYSTAL_COST;
 
     return {
       ...serializeBooster(booster),
@@ -45,6 +46,11 @@ export function getBoosterCatalogForPlayer(profile: PlayerBoosterCatalogProfile)
         opened,
         canOpen,
         disabledReason: canOpen ? undefined : opened ? "already_opened" : "no_starter_boosters_remaining",
+      },
+      paid: {
+        crystalCost: PAID_BOOSTER_CRYSTAL_COST,
+        canOpen: canOpenPaid,
+        disabledReason: canOpenPaid ? undefined : "insufficient_crystals",
       },
     };
   });

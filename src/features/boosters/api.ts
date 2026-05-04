@@ -2,7 +2,7 @@ import { cards as activeCards } from "@/features/battle/model/cards";
 import type { Card } from "@/features/battle/model/types";
 import { PlayerIdentityValidationError, parsePlayerIdentity, toPlayerProfile } from "@/features/player/profile/types";
 import { getBoosterCatalogForPlayer, getBoosterCatalogResponse, validateBoosterCatalog } from "./catalog";
-import { BoosterOpeningError, prepareStarterBoosterOpening, type RandomSource } from "./opening";
+import { BoosterOpeningError, preparePaidBoosterOpening, prepareStarterBoosterOpening, type RandomSource } from "./opening";
 import type { BoosterOpeningRecord, BoosterOpeningStore, StoredBoosterOpeningRecord } from "./types";
 
 export async function handleBoosterCatalogGet() {
@@ -41,32 +41,101 @@ export async function handleStarterBoosterOpenPost(
   try {
     validateBoosterCatalog();
     const body = await readJsonObject(request);
-    const identity = parsePlayerIdentity(body.identity);
-    const boosterId = parseBoosterId(body.boosterId);
-    const profile = toPlayerProfile(await store.findOrCreateByIdentity(identity));
-    const prepared = prepareStarterBoosterOpening({
-      boosterId,
-      player: profile,
-      rng: options.rng,
-    });
-    const openedAt = options.now?.() ?? new Date();
-    const persisted = await store.saveStarterBoosterOpening({
-      identity,
-      playerId: profile.id,
-      boosterId,
-      cardIds: prepared.cardIds,
-      openedAt,
-    });
-
-    return noStoreJson({
-      booster: prepared.booster,
-      cards: getPersistedOpeningCards(persisted.opening.cardIds),
-      opening: serializeOpeningRecord(persisted.opening),
-      player: toPlayerProfile(persisted.player),
-    });
+    return await openStarterBooster(body, store, options);
   } catch (error) {
     return boosterApiErrorResponse(error);
   }
+}
+
+export async function handleBoosterOpenPost(
+  request: Request,
+  store: BoosterOpeningStore,
+  options: {
+    rng?: RandomSource;
+    now?: () => Date;
+  } = {},
+) {
+  try {
+    validateBoosterCatalog();
+    const body = await readJsonObject(request);
+    const source = parseOpeningSource(body.source ?? body.purchaseMode);
+
+    if (source === "paid_crystals") {
+      return await openPaidBooster(body, store, options);
+    }
+
+    return await openStarterBooster(body, store, options);
+  } catch (error) {
+    return boosterApiErrorResponse(error);
+  }
+}
+
+async function openStarterBooster(
+  body: Record<string, unknown>,
+  store: BoosterOpeningStore,
+  options: {
+    rng?: RandomSource;
+    now?: () => Date;
+  },
+) {
+  const identity = parsePlayerIdentity(body.identity);
+  const boosterId = parseBoosterId(body.boosterId);
+  const profile = toPlayerProfile(await store.findOrCreateByIdentity(identity));
+  const prepared = prepareStarterBoosterOpening({
+    boosterId,
+    player: profile,
+    rng: options.rng,
+  });
+  const openedAt = options.now?.() ?? new Date();
+  const persisted = await store.saveStarterBoosterOpening({
+    identity,
+    playerId: profile.id,
+    boosterId,
+    cardIds: prepared.cardIds,
+    openedAt,
+  });
+
+  return noStoreJson({
+    booster: prepared.booster,
+    cards: getPersistedOpeningCards(persisted.opening.cardIds),
+    opening: serializeOpeningRecord(persisted.opening),
+    player: toPlayerProfile(persisted.player),
+  });
+}
+
+async function openPaidBooster(
+  body: Record<string, unknown>,
+  store: BoosterOpeningStore,
+  options: {
+    rng?: RandomSource;
+    now?: () => Date;
+  },
+) {
+  const identity = parsePlayerIdentity(body.identity);
+  const boosterId = parseBoosterId(body.boosterId);
+  const profile = toPlayerProfile(await store.findOrCreateByIdentity(identity));
+  const prepared = preparePaidBoosterOpening({
+    boosterId,
+    player: profile,
+    rng: options.rng,
+  });
+  const openedAt = options.now?.() ?? new Date();
+  const persisted = await store.savePaidBoosterOpening({
+    identity,
+    playerId: profile.id,
+    boosterId,
+    cardIds: prepared.cardIds,
+    openedAt,
+    crystalCost: prepared.crystalCost,
+  });
+
+  return noStoreJson({
+    booster: prepared.booster,
+    cards: getPersistedOpeningCards(persisted.opening.cardIds),
+    opening: serializeOpeningRecord(persisted.opening),
+    player: toPlayerProfile(persisted.player),
+    crystalCost: prepared.crystalCost,
+  });
 }
 
 function getPersistedOpeningCards(cardIds: string[]): Card[] {
@@ -92,6 +161,18 @@ function parseBoosterId(value: unknown) {
   }
 
   return boosterId;
+}
+
+function parseOpeningSource(value: unknown) {
+  if (value === undefined || value === "starter" || value === "starter_free") {
+    return "starter_free";
+  }
+
+  if (value === "paid" || value === "paid_crystals") {
+    return "paid_crystals";
+  }
+
+  throw new SyntaxError("source must be starter_free or paid_crystals.");
 }
 
 function serializeOpeningRecord(opening: StoredBoosterOpeningRecord): BoosterOpeningRecord {

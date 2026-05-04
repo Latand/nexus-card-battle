@@ -95,7 +95,7 @@ test("Collection card detail sells a duplicate card, decrements badge, and credi
   await page.getByTestId("collection-sell-1").click();
 
   // Owned-count badge decrements from 2 to 1.
-  await expect(page.getByTestId(`collection-owned-count-${sellableCard.id}`)).toHaveText("Ви маєте: 1");
+  await expect(page.getByTestId(`collection-owned-count-${sellableCard.id}`)).toHaveText("×1");
 
   // HUD crystals incremented by the card's rarity sell price. data-profile-crystals
   // is emitted by player-hud-sidebar (visible on the desktop chromium project)
@@ -170,7 +170,7 @@ test("Collection sell-all duplicates keeps one copy in the collection", async ({
   await page.getByTestId("collection-sell-all").click();
 
   expect(lastSellCount).toBe(2);
-  await expect(page.getByTestId(`collection-owned-count-${sellableCard.id}`)).toHaveText("Ви маєте: 1");
+  await expect(page.getByTestId(`collection-owned-count-${sellableCard.id}`)).toHaveText("×1");
 });
 
 test("Collection card detail disables sell when the card is in any saved deck", async ({ page }) => {

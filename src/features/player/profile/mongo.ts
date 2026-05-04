@@ -1,6 +1,6 @@
 import { MongoClient, MongoServerError, ObjectId, type Collection, type Filter, type WithId } from "mongodb";
 import { BoosterOpeningError } from "@/features/boosters/opening";
-import type { BoosterOpeningSource, PersistStarterBoosterOpeningInput, PersistedStarterBoosterOpening, StoredBoosterOpeningRecord } from "@/features/boosters/types";
+import type { BoosterOpeningSource, PersistPaidBoosterOpeningInput, PersistStarterBoosterOpeningInput, PersistedPaidBoosterOpening, PersistedStarterBoosterOpening, StoredBoosterOpeningRecord } from "@/features/boosters/types";
 import { cards } from "@/features/battle/model/cards";
 import { getOwnedCount, getSellableCount, type OwnedCardEntry } from "@/features/inventory/inventoryOps";
 import { computeSellRevenue } from "@/features/economy/sellPricing";
@@ -242,6 +242,23 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
     }
   }
 
+  async savePaidBoosterOpening(input: PersistPaidBoosterOpeningInput): Promise<PersistedPaidBoosterOpening> {
+    const players = await this.getPlayersCollection();
+    const openings = await this.getBoosterOpeningsCollection();
+    const now = new Date();
+    const { opening, insertedOpeningId } = await createPaidOpening(openings, input, now);
+
+    try {
+      return {
+        player: fromMongoDocument(await applyPaidOpeningToPlayer(players, input.identity, opening.cardIds, input.crystalCost, now)),
+        opening: fromMongoOpeningDocument(opening),
+      };
+    } catch (error) {
+      await openings.deleteOne({ _id: insertedOpeningId }).catch(() => undefined);
+      throw error;
+    }
+  }
+
   async setAvatarUrl(identity: PlayerIdentity, avatarUrl: string): Promise<StoredPlayerProfile> {
     const players = await this.getPlayersCollection();
     const sanitized = normalizeAvatarUrl(avatarUrl);
@@ -372,20 +389,31 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
   }
 
   private ensureBoosterOpeningIndexes(collection: Collection<MongoBoosterOpeningDocument>) {
-    this.boosterOpeningIndexesReady ??= Promise.all([
-      collection.createIndex(
-        { playerId: 1, boosterId: 1, source: 1 },
-        {
-          name: "uniq_starter_booster_opening",
-          unique: true,
-        },
-      ),
-      collection.createIndex({ playerId: 1, openedAt: -1 }, { name: "idx_booster_openings_player_opened_at" }),
-      collection.createIndex({ boosterId: 1, openedAt: -1 }, { name: "idx_booster_openings_booster_opened_at" }),
-    ]).then(() => undefined);
+    this.boosterOpeningIndexesReady ??= ensureBoosterOpeningIndexes(collection);
 
     return this.boosterOpeningIndexesReady;
   }
+}
+
+async function ensureBoosterOpeningIndexes(collection: Collection<MongoBoosterOpeningDocument>) {
+  const indexes = await collection.indexes();
+  const starterUniqueIndex = indexes.find((index) => index.name === "uniq_starter_booster_opening");
+  if (starterUniqueIndex && !starterUniqueIndex.partialFilterExpression) {
+    await collection.dropIndex("uniq_starter_booster_opening");
+  }
+
+  await Promise.all([
+    collection.createIndex(
+      { playerId: 1, boosterId: 1, source: 1 },
+      {
+        name: "uniq_starter_booster_opening",
+        unique: true,
+        partialFilterExpression: { source: "starter_free" },
+      },
+    ),
+    collection.createIndex({ playerId: 1, openedAt: -1 }, { name: "idx_booster_openings_player_opened_at" }),
+    collection.createIndex({ boosterId: 1, openedAt: -1 }, { name: "idx_booster_openings_booster_opened_at" }),
+  ]);
 }
 
 async function applyStarterOpeningToPlayer(
@@ -438,6 +466,44 @@ async function applyStarterOpeningToPlayer(
   }
 
   throw new BoosterOpeningError("starter_booster_unavailable", "Starter booster opening could not be saved for the current player state.", 409);
+}
+
+async function applyPaidOpeningToPlayer(
+  players: Collection<MongoPlayerDocument>,
+  identity: PlayerIdentity,
+  cardIds: string[],
+  crystalCost: number,
+  now: Date,
+) {
+  const updatedPlayer = await players.findOneAndUpdate(
+    {
+      ...identityFilter(identity),
+      crystals: { $gte: crystalCost },
+    },
+    [
+      {
+        $set: {
+          ownedCards: buildOwnedCardsIncrementPipeline(cardIds),
+          crystals: { $subtract: [{ $ifNull: ["$crystals", 0] }, crystalCost] },
+          updatedAt: now,
+        },
+      },
+    ],
+    {
+      returnDocument: "after",
+    },
+  );
+
+  if (updatedPlayer) {
+    return updatedPlayer;
+  }
+
+  const currentPlayer = await players.findOne(identityFilter(identity));
+  if (!currentPlayer || numberOrZero(currentPlayer.crystals) < crystalCost) {
+    throw new BoosterOpeningError("insufficient_crystals", "Not enough crystals to open this booster.", 409);
+  }
+
+  throw new BoosterOpeningError("invalid_booster_opening", "Paid booster opening could not be saved for the current player state.", 409);
 }
 
 async function applySellCardsToPlayer(
@@ -590,6 +656,30 @@ async function createOrLoadStarterOpening(
 
   return {
     opening: existingOpening,
+  };
+}
+
+async function createPaidOpening(
+  openings: Collection<MongoBoosterOpeningDocument>,
+  input: PersistPaidBoosterOpeningInput,
+  now: Date,
+): Promise<{ opening: WithId<MongoBoosterOpeningDocument>; insertedOpeningId: ObjectId }> {
+  const openingId = new ObjectId();
+  const openingDocument: WithId<MongoBoosterOpeningDocument> = {
+    _id: openingId,
+    playerId: input.playerId,
+    identity: input.identity,
+    boosterId: input.boosterId,
+    source: "paid_crystals",
+    cardIds: input.cardIds,
+    openedAt: input.openedAt,
+    createdAt: now,
+  };
+
+  await openings.insertOne(openingDocument);
+  return {
+    opening: openingDocument,
+    insertedOpeningId: openingId,
   };
 }
 

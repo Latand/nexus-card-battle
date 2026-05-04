@@ -3,6 +3,7 @@ import type { PlayerProfile, StoredPlayerProfile } from "@/features/player/profi
 
 export const STARTER_BOOSTER_CARD_COUNT = 5;
 export const STARTER_BOOSTER_WEIGHTED_CARD_COUNT = 3;
+export const PAID_BOOSTER_CRYSTAL_COST = 100;
 
 export type Booster = {
   id: string;
@@ -22,9 +23,14 @@ export type BoosterCatalogItem = BoosterResponse & {
     canOpen: boolean;
     disabledReason?: "already_opened" | "no_starter_boosters_remaining";
   };
+  paid: {
+    crystalCost: number;
+    canOpen: boolean;
+    disabledReason?: "insufficient_crystals";
+  };
 };
 
-export type BoosterOpeningSource = "starter_free";
+export type BoosterOpeningSource = "starter_free" | "paid_crystals";
 
 export type StoredBoosterOpeningRecord = {
   id: string;
@@ -43,7 +49,15 @@ export type PreparedStarterBoosterOpening = {
   booster: BoosterResponse;
   cards: Card[];
   cardIds: string[];
-  source: BoosterOpeningSource;
+  source: "starter_free";
+};
+
+export type PreparedPaidBoosterOpening = {
+  booster: BoosterResponse;
+  cards: Card[];
+  cardIds: string[];
+  source: "paid_crystals";
+  crystalCost: number;
 };
 
 export type PersistStarterBoosterOpeningInput = {
@@ -59,9 +73,24 @@ export type PersistedStarterBoosterOpening = {
   opening: StoredBoosterOpeningRecord;
 };
 
+export type PersistPaidBoosterOpeningInput = {
+  identity: StoredPlayerProfile["identity"];
+  playerId: string;
+  boosterId: string;
+  cardIds: string[];
+  openedAt: Date;
+  crystalCost: number;
+};
+
+export type PersistedPaidBoosterOpening = {
+  player: StoredPlayerProfile;
+  opening: StoredBoosterOpeningRecord;
+};
+
 export type BoosterOpeningStore = {
   findOrCreateByIdentity(identity: StoredPlayerProfile["identity"]): Promise<StoredPlayerProfile>;
   saveStarterBoosterOpening(input: PersistStarterBoosterOpeningInput): Promise<PersistedStarterBoosterOpening>;
+  savePaidBoosterOpening(input: PersistPaidBoosterOpeningInput): Promise<PersistedPaidBoosterOpening>;
 };
 
-export type PlayerBoosterCatalogProfile = Pick<PlayerProfile, "openedBoosterIds" | "starterFreeBoostersRemaining">;
+export type PlayerBoosterCatalogProfile = Pick<PlayerProfile, "openedBoosterIds" | "starterFreeBoostersRemaining" | "crystals">;

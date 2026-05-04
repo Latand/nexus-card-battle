@@ -380,6 +380,7 @@ export function GameRoot() {
         profileIdentityMode={playerIdentity?.mode}
         profileOwnedCardCount={ownedCardIds.length}
         profileDeckCount={playerProfile?.deckIds.length ?? 0}
+        profileCrystals={playerProfile?.crystals ?? 0}
         deckSource={deckSource}
         deckSaveStatus={deckSaveStatus}
         deckReadyToPlay={deckReadyToPlay}

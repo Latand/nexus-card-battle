@@ -1,11 +1,13 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { cards } from "@/features/battle/model/cards";
 import { clanList } from "@/features/battle/model/clans";
 import type { Card, Rarity } from "@/features/battle/model/types";
 import { BattleCard } from "@/features/battle/ui/components/BattleCard";
+import { fetchBoosterCatalog, openPaidBooster } from "@/features/boosters/client";
+import { PAID_BOOSTER_CRYSTAL_COST, type BoosterResponse } from "@/features/boosters/types";
 import { SELL_PRICES_BY_RARITY } from "@/features/economy/sellPricing";
 import { getOwnedCount, getSellableCount, type OwnedCardEntry } from "@/features/inventory/inventoryOps";
 import { sellPlayerCards } from "@/features/player/profile/client";
@@ -21,6 +23,7 @@ type Props = {
   profileIdentityMode?: "telegram" | "guest";
   profileOwnedCardCount: number;
   profileDeckCount: number;
+  profileCrystals: number;
   deckSource: "profile" | "starter-fallback";
   deckSaveStatus: "idle" | "saving" | "saved" | "error";
   deckReadyToPlay: boolean;
@@ -39,6 +42,15 @@ type SellStatus =
 type CollectionMode = "owned" | "base";
 type RarityFilter = Rarity | "all";
 type SortMode = "rarity" | "power" | "damage" | "name";
+type BoosterShopStatus =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "opening"; boosterId: string }
+  | { kind: "error"; message: string };
+type BoosterReveal = {
+  booster: BoosterResponse;
+  cards: Card[];
+};
 
 const GAME_TITLE = "Нексус";
 const GRID_LIMIT = 240;
@@ -80,6 +92,7 @@ export function CollectionDeckScreen({
   profileIdentityMode,
   profileOwnedCardCount,
   profileDeckCount,
+  profileCrystals,
   deckSource,
   deckSaveStatus,
   deckReadyToPlay,
@@ -105,6 +118,35 @@ export function CollectionDeckScreen({
   const [sortMode, setSortMode] = useState<SortMode>("rarity");
   const [visiblePage, setVisiblePage] = useState({ key: "", limit: GRID_LIMIT });
   const [sellStatus, setSellStatus] = useState<SellStatus>({ kind: "idle" });
+  const [boosterCatalog, setBoosterCatalog] = useState<BoosterResponse[]>([]);
+  const [boosterShopStatus, setBoosterShopStatus] = useState<BoosterShopStatus>({ kind: "idle" });
+  const [boosterReveal, setBoosterReveal] = useState<BoosterReveal | null>(null);
+  const identityKey = playerIdentity ? `${playerIdentity.mode}:${playerIdentity.mode === "telegram" ? playerIdentity.telegramId : playerIdentity.guestId}` : "none";
+
+  useEffect(() => {
+    if (!playerIdentity || profileStatus !== "ready") {
+      return;
+    }
+
+    let cancelled = false;
+    fetchBoosterCatalog()
+      .then((catalog) => {
+        if (cancelled) return;
+        setBoosterCatalog(catalog.boosters);
+        setBoosterShopStatus({ kind: "idle" });
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setBoosterShopStatus({
+          kind: "error",
+          message: error instanceof Error ? error.message : "Не вдалося завантажити бустери",
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [identityKey, playerIdentity, profileStatus]);
 
   const handleSellCard = useCallback(
     async (card: Card, count: number) => {
@@ -138,6 +180,29 @@ export function CollectionDeckScreen({
     [onPlayerUpdated, ownedCards, playerIdentity],
   );
 
+  const handleOpenPaidBooster = useCallback(
+    async (boosterId: string) => {
+      if (!playerIdentity || !onPlayerUpdated) return;
+
+      setBoosterShopStatus({ kind: "opening", boosterId });
+      try {
+        const result = await openPaidBooster(playerIdentity, boosterId);
+        onPlayerUpdated(result.player);
+        setBoosterReveal({
+          booster: result.booster,
+          cards: result.cards,
+        });
+        setBoosterShopStatus({ kind: "idle" });
+      } catch (error) {
+        setBoosterShopStatus({
+          kind: "error",
+          message: error instanceof Error ? boosterOpenErrorMessage(error.message) : "Не вдалося відкрити бустер",
+        });
+      }
+    },
+    [onPlayerUpdated, playerIdentity],
+  );
+
   const deckCards = useMemo(() => deckIds.map((cardId) => cards.find((card) => card.id === cardId)).filter(Boolean) as Card[], [deckIds]);
   const browsingCardIds = useMemo(() => new Set(browsingCards.map((card) => card.id)), [browsingCards]);
   const activeSelectedId = selectedId && browsingCardIds.has(selectedId) ? selectedId : deckIds[0] ?? browsingCards[0]?.id;
@@ -161,6 +226,7 @@ export function CollectionDeckScreen({
   const visibleCards = filteredCards.slice(0, visibleLimit);
   const canLoadMoreCards = visibleCards.length < filteredCards.length;
   const canPlay = deckIds.length >= PLAYER_DECK_SIZE && deckReadyToPlay;
+  const visibleBoosterCatalog = profileStatus === "ready" && playerIdentity ? boosterCatalog : [];
   const canRemoveCard = canEditDeck && deckIds.length > PLAYER_DECK_SIZE;
   const deckStats = getDeckStats(deckCards);
   const activeLinks = getActiveLinks(deckCards);
@@ -276,6 +342,16 @@ export function CollectionDeckScreen({
             onAutofill={autofillDeck}
             canEdit={canEditDeck}
             deckSaveStatus={deckSaveStatus}
+          />
+
+          <BoosterShop
+            boosters={visibleBoosterCatalog}
+            profileCrystals={profileCrystals}
+            profileReady={profileStatus === "ready" && Boolean(playerIdentity && onPlayerUpdated)}
+            status={boosterShopStatus}
+            reveal={boosterReveal}
+            onOpen={(boosterId) => void handleOpenPaidBooster(boosterId)}
+            onDismissReveal={() => setBoosterReveal(null)}
           />
 
           <div className="grid grid-cols-1 gap-3 min-[1121px]:grid-cols-[220px_minmax(0,1fr)_312px]">
@@ -482,10 +558,11 @@ function CollectionCardTile({
 
       {ownedCount > 0 ? (
         <b
-          className="pointer-events-none absolute bottom-2 left-2 z-[3] rounded bg-black/70 px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-[#ffe08a]"
+          className="pointer-events-none absolute right-1.5 top-1/2 z-[3] grid h-6 min-w-6 -translate-y-1/2 place-items-center rounded-full border border-[#ffe08a]/30 bg-black/65 px-1 text-[10px] font-black leading-none text-[#ffe08a] shadow-[0_6px_16px_rgba(0,0,0,0.4)] max-[420px]:right-1 max-[420px]:h-5 max-[420px]:min-w-5 max-[420px]:text-[9px]"
           data-testid={`collection-owned-count-${card.id}`}
+          aria-label={`Копій: ${ownedCount}`}
         >
-          Ви маєте: {ownedCount}
+          ×{ownedCount}
         </b>
       ) : null}
 
@@ -519,6 +596,105 @@ function CollectionCardTile({
         </div>
       )}
     </article>
+  );
+}
+
+function BoosterShop({
+  boosters,
+  profileCrystals,
+  profileReady,
+  status,
+  reveal,
+  onOpen,
+  onDismissReveal,
+}: {
+  boosters: BoosterResponse[];
+  profileCrystals: number;
+  profileReady: boolean;
+  status: BoosterShopStatus;
+  reveal: BoosterReveal | null;
+  onOpen: (boosterId: string) => void;
+  onDismissReveal: () => void;
+}) {
+  const loading = status.kind === "loading";
+
+  return (
+    <section className="relative z-10 grid gap-2 rounded-md bg-[linear-gradient(180deg,rgba(17,21,24,0.88),rgba(7,9,12,0.94))] p-3 shadow-[0_14px_34px_rgba(0,0,0,0.34)] max-[420px]:p-2" data-testid="paid-booster-shop">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="grid gap-0.5">
+          <strong className="text-base font-black uppercase leading-none text-[#fff0ad]">Бустери</strong>
+          <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#91866f]">
+            Повторне відкриття · унікальна гарантована
+          </span>
+        </div>
+        <div className="rounded bg-black/40 px-3 py-2 text-right">
+          <b className="block text-lg font-black leading-none text-[#ffe08a]" data-testid="paid-booster-crystals">{profileCrystals}</b>
+          <span className="block text-[10px] font-black uppercase tracking-[0.1em] text-[#7e7567]">Кристалів</span>
+        </div>
+      </div>
+
+      {reveal ? (
+        <div className="grid gap-2 rounded-md border border-[#65d7e9]/18 bg-[#65d7e9]/8 p-2" data-testid="paid-booster-reveal">
+          <div className="flex items-center justify-between gap-2">
+            <strong className="min-w-0 truncate text-xs font-black uppercase tracking-[0.1em] text-[#c7f5ff]">
+              {reveal.booster.name}
+            </strong>
+            <button className={utilityButtonClass()} type="button" onClick={onDismissReveal}>
+              Закрити
+            </button>
+          </div>
+          <div className="grid grid-flow-col auto-cols-[82px] gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-[420px]:auto-cols-[72px]">
+            {reveal.cards.map((card) => (
+              <div key={card.id} className="grid h-[118px] w-[82px] place-items-center rounded bg-black/22 p-1 max-[420px]:h-[106px] max-[420px]:w-[72px]">
+                <MiniBattleCard card={card} size="dock" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="grid grid-flow-col auto-cols-[176px] gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-[420px]:auto-cols-[154px]" data-testid="paid-booster-list">
+        {boosters.length > 0 ? boosters.map((booster) => {
+          const opening = status.kind === "opening" && status.boosterId === booster.id;
+          const disabled = !profileReady || opening || profileCrystals < PAID_BOOSTER_CRYSTAL_COST;
+
+          return (
+            <article key={booster.id} className="grid min-h-[122px] content-between rounded-md border border-white/10 bg-black/28 p-2">
+              <div className="min-w-0">
+                <strong className="block truncate text-sm font-black uppercase text-[#fff0ad]">{booster.name}</strong>
+                <span className="mt-1 block truncate text-[11px] font-bold text-[#9ed6e4]">
+                  {booster.clans.join(" + ")}
+                </span>
+              </div>
+              <button
+                className={cn(
+                  "mt-3 min-h-[34px] rounded-md px-3 text-[11px] font-black uppercase transition",
+                  disabled
+                    ? "cursor-not-allowed bg-white/5 text-[#7e7668]"
+                    : "bg-[linear-gradient(180deg,#fff26d,#e3b51e_54%,#a66d12)] text-[#1a1408] hover:brightness-110",
+                )}
+                type="button"
+                disabled={disabled}
+                onClick={() => onOpen(booster.id)}
+                data-testid={`paid-booster-open-${booster.id}`}
+              >
+                {opening ? "Відкриття" : `${PAID_BOOSTER_CRYSTAL_COST} 💎`}
+              </button>
+            </article>
+          );
+        }) : (
+          <div className="grid min-h-[94px] place-items-center rounded-md bg-black/24 px-3 text-center text-xs font-black uppercase text-[#91866f]">
+            {loading ? "Завантаження" : "Бустери недоступні"}
+          </div>
+        )}
+      </div>
+
+      {status.kind === "error" ? (
+        <p className="text-[10px] font-black uppercase tracking-[0.08em] text-[#ffb39d]" data-testid="paid-booster-error">
+          {status.message}
+        </p>
+      ) : null}
+    </section>
   );
 }
 
@@ -994,6 +1170,11 @@ function factionButtonClass(active: boolean) {
 
 function utilityButtonClass() {
   return "rounded bg-white/[0.06] px-3 py-2 text-xs font-black uppercase text-[#efe3c5] transition hover:bg-[#ffe08a]/14 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-white/[0.06]";
+}
+
+function boosterOpenErrorMessage(message: string) {
+  if (message.toLowerCase().includes("crystal")) return "Недостатньо кристалів";
+  return message || "Не вдалося відкрити бустер";
 }
 
 function sellButtonClass() {

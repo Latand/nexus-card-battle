@@ -111,6 +111,79 @@ test("loads the full active card base beyond the first grid page", async ({ page
   await expect(page.getByTestId("collection-load-more")).toHaveCount(0);
 });
 
+test("opens an already known booster again for 100 crystals from the collection screen", async ({ page }) => {
+  const identity: PlayerIdentity = { mode: "guest", guestId: "guest-paid-booster-e2e" };
+  const drawnCards = cards.filter((card) => !PROFILE_OWNED_CARD_IDS.includes(card.id)).slice(0, 5);
+  let requestedSource: unknown;
+
+  await mockDeckReadyProfile(page, {
+    identity,
+    crystals: 100,
+    openedBoosterIds: ["neon-breach", "factory-shift"],
+    starterFreeBoostersRemaining: 0,
+  });
+
+  await page.route("**/api/player/open-booster", async (route) => {
+    const body = route.request().postDataJSON() as { source?: unknown; boosterId: string };
+    requestedSource = body.source;
+    const ownedCards = [
+      ...PROFILE_OWNED_CARD_IDS.map((cardId) => ({ cardId, count: 1 })),
+      ...drawnCards.map((card) => ({ cardId: card.id, count: 1 })),
+    ];
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        booster: {
+          id: body.boosterId,
+          name: "Neon Breach",
+          clans: ["[Da:Hack]", "Aliens"],
+        },
+        cards: drawnCards,
+        opening: {
+          id: "paid-opening-e2e",
+          playerId: "player-paid-booster-e2e",
+          boosterId: body.boosterId,
+          source: "paid_crystals",
+          cardIds: drawnCards.map((card) => card.id),
+          openedAt: "2026-05-02T12:00:00.000Z",
+        },
+        player: {
+          id: "player-paid-booster-e2e",
+          identity,
+          ownedCards,
+          deckIds: PROFILE_DECK_IDS,
+          starterFreeBoostersRemaining: 0,
+          openedBoosterIds: ["neon-breach", "factory-shift"],
+          crystals: 0,
+          totalXp: 0,
+          level: 1,
+          wins: 0,
+          losses: 0,
+          draws: 0,
+          eloRating: 1000,
+          onboarding: {
+            starterBoostersAvailable: false,
+            collectionReady: true,
+            deckReady: true,
+            completed: true,
+          },
+        },
+        crystalCost: 100,
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByTestId("paid-booster-open-neon-breach").click();
+
+  expect(requestedSource).toBe("paid_crystals");
+  await expect(page.getByTestId("paid-booster-reveal")).toBeVisible();
+  await expect(page.getByTestId("player-hud-sidebar")).toHaveAttribute("data-profile-crystals", "0");
+  await expect(page.getByTestId("paid-booster-open-neon-breach")).toBeDisabled();
+});
+
 test("blocks overlapping deck edits and rolls a failed save back to the confirmed profile deck", async ({ page }) => {
   if (!extraOwnedCardId || !secondExtraOwnedCardId) throw new Error("Fixture must include two owned cards outside the deck.");
 
