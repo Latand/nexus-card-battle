@@ -1,5 +1,5 @@
 import { MAX_ENERGY, MAX_HEALTH } from "../constants";
-import type { Fighter } from "../types";
+import type { Fighter, FighterAiProfile } from "../types";
 import { createBattleHand, createCardCollection, createDeck } from "./decks";
 
 export function makeFighter(
@@ -8,6 +8,7 @@ export function makeFighter(
   title: string,
   collectionIds: string[],
   deckIds: string[],
+  options: { avatarUrl?: string; aiProfile?: FighterAiProfile } = {},
 ): Fighter {
   const collection = createCardCollection(id, collectionIds);
   const deck = createDeck(id, collection, deckIds);
@@ -16,7 +17,8 @@ export function makeFighter(
     id,
     name,
     title,
-    avatarUrl: id === "player" ? "/nexus-assets/characters/cyber-brawler-thumb.png" : "/nexus-assets/characters/portrait-slot-silhouette.png",
+    avatarUrl: options.avatarUrl ?? (id === "player" ? "/nexus-assets/characters/cyber-brawler-thumb.png" : "/nexus-assets/characters/portrait-slot-silhouette.png"),
+    aiProfile: options.aiProfile,
     hp: MAX_HEALTH,
     energy: MAX_ENERGY,
     statuses: [],

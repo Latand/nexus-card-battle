@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "bun server.js",
     "lint": "eslint",
-    "test": "bun test tests/playerProfile.test.ts tests/boosterOpening.test.ts tests/playerProgression.test.ts tests/roundResolverPvp.test.ts tests/elo.test.ts tests/matchmakingQueue.test.ts tests/rewardOverlayPresenter.test.ts tests/playerAvatar.test.ts tests/onlinePresence.test.ts tests/inventoryOps.test.ts tests/sellPricing.test.ts tests/milestones.test.ts",
+    "test": "bun test tests/playerProfile.test.ts tests/boosterOpening.test.ts tests/playerProgression.test.ts tests/roundResolverPvp.test.ts tests/opponentStrategy.test.ts tests/elo.test.ts tests/matchmakingQueue.test.ts tests/rewardOverlayPresenter.test.ts tests/playerAvatar.test.ts tests/onlinePresence.test.ts tests/inventoryOps.test.ts tests/sellPricing.test.ts tests/milestones.test.ts",
     "test:profile": "bun test tests/playerProfile.test.ts",
     "test:e2e": "playwright test"
   },

@@ -1,5 +1,5 @@
 import { MAX_ROUNDS } from "../constants";
-import { enemyCollectionIds, enemyDeckIds, playerCollectionIds, playerDeckIds } from "../loadouts";
+import { enemyCollectionIds, enemyDeckIds, playerCollectionIds, playerDeckIds, selectAiOpponent, toFighterAiProfile } from "../loadouts";
 import type { Fighter, GameState, MatchResult, Outcome, RewardSummary, Side } from "../types";
 import { findCard } from "./decks";
 import { getUsedIds, makeFighter } from "./fighters";
@@ -9,20 +9,29 @@ export type CreateInitialGameOptions = {
   playerDeckIds?: string[];
   enemyCollectionIds?: string[];
   enemyDeckIds?: string[];
+  enemyOpponentId?: string;
   playerName?: string;
 };
 
 export function createInitialGame(options: CreateInitialGameOptions = {}): GameState {
   const nextPlayerCollectionIds = options.playerCollectionIds ?? playerCollectionIds;
   const nextPlayerDeckIds = options.playerDeckIds ?? playerDeckIds;
-  const nextEnemyCollectionIds = options.enemyCollectionIds ?? enemyCollectionIds;
-  const nextEnemyDeckIds = options.enemyDeckIds ?? enemyDeckIds;
+  const opponent = options.enemyOpponentId || (!options.enemyCollectionIds && !options.enemyDeckIds) ? selectAiOpponent(options.enemyOpponentId) : null;
+  const nextEnemyCollectionIds = options.enemyCollectionIds ?? opponent?.collectionIds ?? enemyCollectionIds;
+  const nextEnemyDeckIds = options.enemyDeckIds ?? opponent?.deckIds ?? enemyDeckIds;
   const playerName = options.playerName?.trim() || "Гравець";
 
   return {
     phase: "match_intro",
     player: makeFighter("player", playerName, "Лідер вулиці", nextPlayerCollectionIds, nextPlayerDeckIds),
-    enemy: makeFighter("enemy", "Суперник", "Гість арени", nextEnemyCollectionIds, nextEnemyDeckIds),
+    enemy: makeFighter(
+      "enemy",
+      opponent?.name ?? "Суперник",
+      opponent?.title ?? "Гість арени",
+      nextEnemyCollectionIds,
+      nextEnemyDeckIds,
+      opponent ? { aiProfile: toFighterAiProfile(opponent) } : {},
+    ),
     round: createRound(1),
     first: "player",
   };
