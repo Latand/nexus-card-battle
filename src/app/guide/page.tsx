@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { GuidePage } from "@/features/guide/ui/GuidePage";
+import { GuidePage } from "@/features/guide/ui/v2/GuidePage";
 
 export const metadata: Metadata = {
   title: "Як грати — Нексус",

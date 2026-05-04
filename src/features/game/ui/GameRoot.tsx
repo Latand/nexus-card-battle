@@ -1,30 +1,30 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cards } from "@/features/battle/model/cards";
 import { BattleGame } from "@/features/battle/ui/BattleGame";
 import { RealtimeBattleGame } from "@/features/battle/ui/RealtimeBattleGame";
 import { STARTER_BOOSTER_CARD_COUNT } from "@/features/boosters/types";
 import { getOwnedCardIds } from "@/features/inventory/inventoryOps";
-import { readTelegramPhotoUrl, useTelegramAvatar } from "@/features/player/profile/avatar";
+import { DEFAULT_PLAYER_AVATAR_URL, readTelegramPhotoUrl, resolveAvatarUrl, useTelegramAvatar } from "@/features/player/profile/avatar";
 import { fetchPlayerProfile, resolveClientPlayerIdentity, savePlayerAvatar, savePlayerDeck } from "@/features/player/profile/client";
 import { STARTER_FREE_BOOSTERS, type PlayerIdentity, type PlayerProfile } from "@/features/player/profile/types";
-import { PlayerHud } from "@/features/player/ui/PlayerHud";
-import { cn } from "@/shared/lib/cn";
+import { useOnlineCount } from "@/features/presence/client";
+import { ProfileModal } from "@/features/player/ui/v2/ProfileModal";
+import { AtmosphericBackground } from "@/shared/ui/v2/AtmosphericBackground";
+import { LobbyBubble } from "@/shared/ui/v2/LobbyBubble";
+import { LobbyChatDrawer } from "@/shared/ui/v2/LobbyChatDrawer";
+import { TopBar } from "@/shared/ui/v2/TopBar";
 import type { TelegramPlayer } from "@/shared/lib/telegram";
 import { PLAYER_DECK_SIZE } from "../model/randomDeck";
-import { CollectionDeckScreen } from "./collection/CollectionDeckScreen";
-import { StarterBoosterOnboarding } from "./onboarding/StarterBoosterOnboarding";
+import { CollectionDeckScreen } from "./v2/collection/CollectionDeckScreen";
+import { StarterBoosterOnboarding } from "./v2/onboarding/StarterBoosterOnboarding";
 
 type BattleMode = "ai" | "human";
 type ProfileStatus = "loading" | "ready" | "unavailable";
 type DeckSource = "profile" | "starter-fallback";
 type DeckSaveStatus = "idle" | "saving" | "saved" | "error";
-const HUD_SIDEBAR_WIDTH_DEFAULT = 220;
-const HUD_SIDEBAR_WIDTH_MIN = 212;
-const HUD_SIDEBAR_WIDTH_MAX = 380;
-const HUD_MAIN_MIN_WIDTH = 620;
 const STARTER_KIT_CARD_COUNT = STARTER_FREE_BOOSTERS * STARTER_BOOSTER_CARD_COUNT;
 type TelegramWindow = Window & {
   Telegram?: {
@@ -310,7 +310,6 @@ export function GameRoot() {
             playerDeckIds={deckIds}
             playerIdentity={playerIdentity ?? undefined}
             playerName={playerName}
-            playerEloRating={playerProfile?.eloRating}
             avatarUrl={persistedAvatarUrl}
             onOpenCollection={() => setScreen("collection")}
             onSwitchMode={(nextMode) => setBattleMode(nextMode)}
@@ -380,7 +379,6 @@ export function GameRoot() {
         profileIdentityMode={playerIdentity?.mode}
         profileOwnedCardCount={ownedCardIds.length}
         profileDeckCount={playerProfile?.deckIds.length ?? 0}
-        profileCrystals={playerProfile?.crystals ?? 0}
         deckSource={deckSource}
         deckSaveStatus={deckSaveStatus}
         deckReadyToPlay={deckReadyToPlay}
@@ -410,102 +408,55 @@ function HudShell({
   onPlay: () => void;
   children: React.ReactNode;
 }) {
-  const [sidebarWidth, setSidebarWidth] = useState(HUD_SIDEBAR_WIDTH_DEFAULT);
-  const [isResizing, setIsResizing] = useState(false);
-  const shellRef = useRef<HTMLDivElement | null>(null);
-
-  const resolveSidebarWidth = useCallback((clientX: number) => {
-    const shell = shellRef.current;
-    const shellBounds = shell?.getBoundingClientRect();
-    const shellLeft = shellBounds?.left ?? 0;
-    const shellWidth = shellBounds?.width ?? window.innerWidth;
-    const responsiveMax = Math.max(HUD_SIDEBAR_WIDTH_MIN, Math.min(HUD_SIDEBAR_WIDTH_MAX, shellWidth - HUD_MAIN_MIN_WIDTH));
-
-    return clampNumber(Math.round(clientX - shellLeft), HUD_SIDEBAR_WIDTH_MIN, responsiveMax);
-  }, []);
-
-  const resizeSidebar = useCallback(
-    (clientX: number) => {
-      setSidebarWidth(resolveSidebarWidth(clientX));
-    },
-    [resolveSidebarWidth],
-  );
-
-  const stopResize = useCallback(() => {
-    setIsResizing(false);
-  }, []);
+  const router = useRouter();
+  const onlineCount = useOnlineCount();
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [lobbyOpen, setLobbyOpen] = useState(false);
 
   if (!profile) {
-    return <>{children}</>;
+    return <AtmosphericBackground>{children}</AtmosphericBackground>;
   }
 
+  const avatarUrl = resolveAvatarUrl({
+    storedAvatarUrl: profile.avatarUrl,
+    liveAvatarUrl: liveTelegramAvatarUrl,
+  });
+  const displayName = (playerName?.trim() || "Гравець").slice(0, 32);
+
   return (
-    <div
-      ref={shellRef}
-      className={cn(
-        "min-[1121px]:grid min-[1121px]:min-h-screen min-[1121px]:grid-cols-[var(--hud-sidebar-width)_8px_minmax(0,1fr)] min-[1121px]:items-stretch",
-        isResizing && "min-[1121px]:cursor-col-resize min-[1121px]:select-none",
-      )}
-      style={{ "--hud-sidebar-width": `${sidebarWidth}px` } as CSSProperties & Record<"--hud-sidebar-width", string>}
-      data-testid="hud-shell"
-    >
-      <PlayerHud
+    <AtmosphericBackground>
+      <div className="flex min-h-screen flex-col">
+        <TopBar
+          avatarUrl={avatarUrl || DEFAULT_PLAYER_AVATAR_URL}
+          name={displayName}
+          level={profile.level}
+          crystals={profile.crystals}
+          trophies={profile.eloRating}
+          canPlay={canPlay}
+          onPlay={onPlay}
+          onAvatarClick={() => setProfileOpen(true)}
+          onlineCount={onlineCount}
+        />
+        <div className="min-w-0 flex-1">{children}</div>
+      </div>
+      <LobbyBubble count={onlineCount ?? 0} onClick={() => setLobbyOpen(true)} />
+      <ProfileModal
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
         profile={profile}
         playerName={playerName}
         liveAvatarUrl={liveTelegramAvatarUrl}
-        canPlay={canPlay}
-        onPlay={onPlay}
+        onOpenGuide={() => {
+          setProfileOpen(false);
+          router.push("/guide");
+        }}
       />
-      <div
-        className="hidden touch-none bg-[linear-gradient(180deg,rgba(212,176,106,0.2),rgba(101,215,233,0.18))] min-[1121px]:grid min-[1121px]:cursor-col-resize min-[1121px]:place-items-center min-[1121px]:border-x min-[1121px]:border-black/40 min-[1121px]:transition-colors min-[1121px]:hover:bg-[linear-gradient(180deg,rgba(255,224,138,0.34),rgba(101,215,233,0.3))]"
-        data-testid="hud-resize-handle"
-        role="separator"
-        aria-orientation="vertical"
-        aria-valuemin={HUD_SIDEBAR_WIDTH_MIN}
-        aria-valuemax={HUD_SIDEBAR_WIDTH_MAX}
-        aria-valuenow={sidebarWidth}
-        tabIndex={0}
-        onPointerDown={(event) => {
-          if (event.button !== 0) return;
-          event.currentTarget.setPointerCapture(event.pointerId);
-          setIsResizing(true);
-          resizeSidebar(event.clientX);
-        }}
-        onPointerMove={(event) => {
-          if (!isResizing) return;
-          resizeSidebar(event.clientX);
-        }}
-        onPointerUp={(event) => {
-          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-            event.currentTarget.releasePointerCapture(event.pointerId);
-          }
-          stopResize();
-        }}
-        onPointerCancel={stopResize}
-        onLostPointerCapture={stopResize}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowLeft") {
-            event.preventDefault();
-            setSidebarWidth((current) => clampNumber(current - 16, HUD_SIDEBAR_WIDTH_MIN, HUD_SIDEBAR_WIDTH_MAX));
-          }
-          if (event.key === "ArrowRight") {
-            event.preventDefault();
-            setSidebarWidth((current) => clampNumber(current + 16, HUD_SIDEBAR_WIDTH_MIN, HUD_SIDEBAR_WIDTH_MAX));
-          }
-          if (event.key === "Home") {
-            event.preventDefault();
-            setSidebarWidth(HUD_SIDEBAR_WIDTH_MIN);
-          }
-          if (event.key === "End") {
-            event.preventDefault();
-            setSidebarWidth(HUD_SIDEBAR_WIDTH_MAX);
-          }
-        }}
-      >
-        <span className="h-12 w-1 rounded-full bg-[#ffe08a]/48 shadow-[0_0_16px_rgba(101,215,233,0.38)]" aria-hidden="true" />
-      </div>
-      <div className="min-[1121px]:min-w-0">{children}</div>
-    </div>
+      <LobbyChatDrawer
+        open={lobbyOpen}
+        onClose={() => setLobbyOpen(false)}
+        userName={playerName?.trim()}
+      />
+    </AtmosphericBackground>
   );
 }
 
@@ -549,10 +500,6 @@ function ProfileUnavailableScreen({
       </section>
     </main>
   );
-}
-
-function clampNumber(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
 }
 
 function ProfileLoadingScreen() {
