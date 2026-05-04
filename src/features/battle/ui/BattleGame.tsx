@@ -1279,6 +1279,7 @@ function HumanMatchOverlay({
         </div>
         <HumanMatchChat
           sessionId={sessionId}
+          playerName={displayName}
           messages={chatMessages}
           draft={chatDraft}
           onDraftChange={onChatDraftChange}
@@ -1310,12 +1311,14 @@ function HumanMatchOverlay({
 
 function HumanMatchChat({
   sessionId,
+  playerName,
   messages,
   draft,
   onDraftChange,
   onSend,
 }: {
   sessionId: string;
+  playerName: string;
   messages: HumanChatMessage[];
   draft: string;
   onDraftChange: (value: string) => void;
@@ -1348,7 +1351,7 @@ function HumanMatchChat({
           <span className="self-center text-center text-xs font-bold text-[#6f7f82]">Повідомлень ще немає.</span>
         ) : (
           messages.map((chatMessage) => {
-            const own = chatMessage.authorId === sessionId;
+            const own = isOwnHumanChatMessage(chatMessage.authorId, chatMessage.authorName, sessionId, playerName);
             return (
               <article
                 key={chatMessage.id}
@@ -1394,6 +1397,17 @@ function HumanMatchChat({
       </form>
     </section>
   );
+}
+
+function isOwnHumanChatMessage(authorId: string, authorName: string, sessionId: string, playerName: string) {
+  if (authorId && authorId === sessionId) return true;
+  const normalizedAuthor = normalizeHumanChatName(authorName);
+  const normalizedPlayer = normalizeHumanChatName(playerName);
+  return Boolean(normalizedAuthor && normalizedPlayer && normalizedAuthor === normalizedPlayer);
+}
+
+function normalizeHumanChatName(value: string) {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function getHumanOverlayTitle(status: HumanMatchStatus) {

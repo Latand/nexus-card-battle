@@ -270,7 +270,7 @@ function LobbyChatPanel({
   className?: string;
   userName?: string;
 }) {
-  const { sessionId, chatMessages, sendMessage } = useLobbyChat(userName);
+  const { sessionId, playerName, chatMessages, sendMessage } = useLobbyChat(userName);
   const [draft, setDraft] = useState("");
   const listRef = useRef<HTMLDivElement | null>(null);
   const canSend = draft.trim().length > 0;
@@ -309,9 +309,7 @@ function LobbyChatPanel({
         {chatMessages.length === 0 ? (
           <span className="self-center text-center text-[11px] font-bold text-[#6f7f82]">Повідомлень ще немає.</span>
         ) : (
-          chatMessages.map((message) => (
-            <LobbyChatBubble key={message.id} message={message} own={message.authorId === sessionId} />
-          ))
+          chatMessages.map((message) => <LobbyChatBubble key={message.id} message={message} own={isOwnChatMessage(message.authorId, message.authorName, sessionId, playerName)} />)
         )}
       </div>
       <form
@@ -358,6 +356,17 @@ function LobbyChatBubble({ message, own }: { message: LobbyChatMessage; own: boo
       <span className="block break-words text-[11px] font-bold leading-snug text-[#efe3c5]">{message.text}</span>
     </article>
   );
+}
+
+function isOwnChatMessage(authorId: string, authorName: string, sessionId: string, playerName: string) {
+  if (authorId && authorId === sessionId) return true;
+  const normalizedAuthor = normalizeChatName(authorName);
+  const normalizedPlayer = normalizeChatName(playerName);
+  return Boolean(normalizedAuthor && normalizedPlayer && normalizedAuthor === normalizedPlayer);
+}
+
+function normalizeChatName(value: string) {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function HudAvatar({ src, size, testId }: { src: string; size: number; testId: string }) {
