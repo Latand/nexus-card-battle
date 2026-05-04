@@ -36,8 +36,8 @@ export function Hand({
         owner === "enemy" ? "battle-hand--enemy" : "battle-hand--player",
         "relative z-[6] mx-auto grid grid-cols-4 items-start justify-center gap-2 rounded-md py-2 transition-[box-shadow,filter,transform] duration-500 max-[760px]:gap-1.5",
         owner === "enemy"
-          ? "mt-2 w-[min(760px,92vw)] px-3 [article]:min-h-[132px] max-[960px]:w-[min(640px,94vw)] max-[760px]:w-full max-[760px]:px-1 max-[760px]:[article]:min-h-[110px]"
-          : "mt-2 w-[min(790px,94vw)] px-3 [article]:min-h-[152px] max-[960px]:w-[min(700px,96vw)] max-[760px]:w-full max-[760px]:px-1 max-[760px]:[article]:min-h-[118px]",
+          ? "mt-2 w-[min(760px,92vw)] px-3 max-[960px]:w-[min(640px,94vw)] max-[760px]:w-full max-[760px]:px-1"
+          : "mt-2 w-[min(790px,94vw)] px-3 max-[960px]:w-[min(700px,96vw)] max-[760px]:w-full max-[760px]:px-1",
         hasPlayedEnemyCard && "pb-8 max-[760px]:pb-6",
         active
           ? owner === "player"

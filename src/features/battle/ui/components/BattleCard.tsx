@@ -51,8 +51,12 @@ export function BattleCard({
     <article
       className={cn(
         "battle-card-face",
-        "relative aspect-[2/3] min-h-[292px] overflow-hidden rounded-[10px] text-left",
-        compact && "compact battle-card-face--compact w-[min(216px,24vw)] min-h-[298px]",
+        // aspect-[2/3] only stays intact when no min-height is set: any min-h
+        // larger than width × 1.5 forces the browser to widen the card to
+        // satisfy aspect-ratio, causing it to overflow its container. Parents
+        // size the card via width (or container width) only.
+        "relative aspect-[2/3] w-full overflow-hidden rounded-[10px] text-left",
+        compact && "compact battle-card-face--compact w-[min(216px,24vw)]",
         className,
       )}
       style={style}
@@ -161,7 +165,7 @@ function TraitSlot({
       data-card-ability={eyebrow === "Уміння" ? "true" : undefined}
       data-card-bonus={eyebrow === "Бонус" ? "true" : undefined}
       className={cn(
-        "battle-card-trait absolute left-[8.5%] z-[3] h-[5.9%] w-[83%]",
+        "battle-card-trait absolute left-[8.5%] z-[3] h-[6.4%] w-[83%]",
         disabled
           ? "text-[#736c5e]"
           : active
@@ -171,7 +175,7 @@ function TraitSlot({
       style={{ top }}
     >
       <CardTooltip className="block h-full w-full min-w-0" eyebrow={eyebrow} title={title} description={description}>
-        <span className="grid h-full w-full min-w-0 place-items-center overflow-hidden px-[2.1%] text-center text-[clamp(3.5px,3.35cqw,9px)] leading-none">
+        <span className="grid h-full w-full min-w-0 place-items-center overflow-hidden px-[2.1%] text-center text-[clamp(5px,4.4cqw,11px)] leading-none">
           <span className="battle-card-trait-text block w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-center font-black uppercase tracking-[0.01em] [text-shadow:0_1px_0_rgba(0,0,0,0.95),0_0_6px_rgba(0,0,0,0.7)]">{title}</span>
         </span>
       </CardTooltip>
