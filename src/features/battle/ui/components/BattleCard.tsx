@@ -77,7 +77,7 @@ export function BattleCard({
         aria-label={card.clan}
         title={card.clan}
       >
-        <ClanGlyph clan={card.clan} className="h-full w-full" strokeBoost />
+        <ClanGlyph clan={card.clan} className="h-[78%] w-[78%]" strokeBoost />
       </span>
 
       <div
@@ -97,15 +97,18 @@ export function BattleCard({
         <span className="block w-full overflow-hidden text-ellipsis whitespace-nowrap text-center">{card.name}</span>
       </div>
 
-      <StatSocket centerX="20.7%" centerY="67.4%" tone="power" value={card.power} />
-      <StatSocket centerX="79.3%" centerY="67.4%" tone="damage" value={card.damage} />
+      <StatSocket centerX="20%" centerY="67%" tone="power" value={card.power} />
+      <StatSocket centerX="80%" centerY="67%" tone="damage" value={card.damage} />
 
+      {/* Painted ability/bonus bars in the frame artwork are centered around
+          y=79.88% and y=88.45% with ~7.7% interior height. Slot height of 6.8%
+          + slot top so that slot center == painted center → top=76.5/85.0%. */}
       <TraitSlot
         active={abilityActive !== false}
         description={abilityDescription}
         eyebrow="Уміння"
         title={abilityName}
-        top="75.8%"
+        top="76.5%"
       />
       <TraitSlot
         active={bonusVisible && clanBonusActive !== false}
@@ -113,7 +116,7 @@ export function BattleCard({
         disabled={!bonusVisible}
         eyebrow="Бонус"
         title={bonusName}
-        top="84.9%"
+        top="85%"
       />
     </article>
   );
@@ -165,7 +168,7 @@ function TraitSlot({
       data-card-ability={eyebrow === "Уміння" ? "true" : undefined}
       data-card-bonus={eyebrow === "Бонус" ? "true" : undefined}
       className={cn(
-        "battle-card-trait absolute left-[8.5%] z-[3] h-[6.4%] w-[83%]",
+        "battle-card-trait absolute left-[8.5%] z-[3] h-[6.8%] w-[83%]",
         disabled
           ? "text-[#736c5e]"
           : active
@@ -175,7 +178,7 @@ function TraitSlot({
       style={{ top }}
     >
       <CardTooltip className="block h-full w-full min-w-0" eyebrow={eyebrow} title={title} description={description}>
-        <span className="grid h-full w-full min-w-0 place-items-center overflow-hidden px-[2.1%] text-center text-[clamp(5px,4.4cqw,11px)] leading-none">
+        <span className="grid h-full w-full min-w-0 place-items-center overflow-hidden px-[2.1%] text-center text-[clamp(5.5px,4.9cqw,12px)] leading-none">
           <span className="battle-card-trait-text block w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-center font-black uppercase tracking-[0.01em] [text-shadow:0_1px_0_rgba(0,0,0,0.95),0_0_6px_rgba(0,0,0,0.7)]">{title}</span>
         </span>
       </CardTooltip>
