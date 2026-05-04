@@ -167,11 +167,11 @@ function handleLobbySocketMessage(raw: unknown) {
     if (typeof message.clientId === "string") lobbyState.sessionId = message.clientId;
     if (typeof message.playerName === "string") {
       const playerName = message.playerName.trim().slice(0, 80);
-      lobbyState.playerName = playerName;
       if (!pendingUserName) {
         const stableName = rememberStableSessionName(playerName);
         if (stableName) pendingUserName = stableName;
       }
+      lobbyState.playerName = pendingUserName || playerName;
     }
     notifyLobbySubscribers();
     return;

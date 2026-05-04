@@ -538,8 +538,9 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
         if (!stableHumanNameRef.current) {
           stableHumanNameRef.current = rememberStableSessionName(nextSessionName);
         }
-        humanSessionNameRef.current = nextSessionName;
-        setHumanSessionName(nextSessionName);
+        const displaySessionName = stableHumanNameRef.current || nextSessionName;
+        humanSessionNameRef.current = displaySessionName;
+        setHumanSessionName(displaySessionName);
       }
       return;
     }
