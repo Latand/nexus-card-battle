@@ -63,13 +63,13 @@ export function Hand({
           isSelected && owner === "player" && "-translate-y-2 drop-shadow-[0_0_18px_rgba(255,210,58,0.86)]",
           isSelected && owner === "enemy" && "drop-shadow-[0_0_18px_rgba(255,91,84,0.76)]",
           isPlayed && owner === "enemy" && "z-[3] translate-y-6 scale-[1.045] drop-shadow-[0_18px_24px_rgba(255,74,66,0.58)] max-[760px]:translate-y-5",
-          card.used && "cursor-not-allowed",
+          card.used && "cursor-not-allowed opacity-35 grayscale",
           !card.used && "cursor-pointer hover:-translate-y-1 hover:drop-shadow-[0_0_12px_rgba(255,220,91,0.5)]",
         );
-        const cardFaceClass = cn("battle-card-face--hand", card.used && "opacity-35 grayscale");
+        const cardFaceClass = "battle-card-face--hand";
 
         const cardDisabled = Boolean(disabled || card.used);
-        const medal = isRoundWinner ? <RoundWinnerMedal owner={owner} /> : null;
+        const medal = isRoundWinner ? <RoundWinnerMedal /> : null;
 
         return owner === "player" ? (
           <div
@@ -108,7 +108,7 @@ export function Hand({
   );
 }
 
-function RoundWinnerMedal({ owner: _owner }: { owner: Side }) {
+function RoundWinnerMedal() {
   return (
     <span
       className="pointer-events-none absolute right-[-6px] top-[-6px] z-[8] grid aspect-square w-[clamp(20px,3.4vw,32px)] place-items-center rounded-full border-2 border-[#fff1a6] bg-[radial-gradient(circle_at_36%_28%,#fff8bd_0_24%,#ffd64e_25%_58%,#9e6312_59%_100%)] text-[clamp(11px,1.8vw,18px)] font-black leading-none text-[#2a1705] shadow-[0_0_0_2px_rgba(0,0,0,0.72),0_0_14px_rgba(255,216,82,0.7),0_4px_10px_rgba(0,0,0,0.45)] [text-shadow:0_1px_0_rgba(255,255,255,0.55)]"

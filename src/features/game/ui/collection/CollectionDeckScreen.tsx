@@ -122,7 +122,11 @@ export function CollectionDeckScreen({
       }
 
       setSellStatus({ kind: "selling" });
-      const result = await sellPlayerCards(playerIdentity, card.id, count);
+      const result = await sellPlayerCards(playerIdentity, card.id, count).catch((error: unknown) => ({
+        ok: false as const,
+        error: "unknown" as const,
+        message: error instanceof Error ? error.message : undefined,
+      }));
       if (result.ok) {
         onPlayerUpdated(result.player);
         setSellStatus({ kind: "idle" });
@@ -274,8 +278,8 @@ export function CollectionDeckScreen({
             deckSaveStatus={deckSaveStatus}
           />
 
-          <div className="grid grid-cols-[220px_minmax(0,1fr)_312px] gap-3 max-[1120px]:grid-cols-[180px_minmax(0,1fr)] max-[720px]:grid-cols-1">
-            <aside className="grid content-start gap-2 rounded-md bg-black/30 p-2 max-[1120px]:order-1 max-[1120px]:col-span-1 max-[720px]:order-2 max-[720px]:col-span-1 max-[720px]:bg-transparent max-[720px]:p-0">
+          <div className="grid grid-cols-1 gap-3 min-[1121px]:grid-cols-[220px_minmax(0,1fr)_312px]">
+            <aside className="order-2 grid content-start gap-2 rounded-md bg-black/30 p-2 min-[1121px]:order-none max-[720px]:bg-transparent max-[720px]:p-0">
               <div className="flex items-center justify-between gap-2 px-2 py-1 max-[720px]:hidden">
                 <strong className="text-xs font-black uppercase tracking-[0.14em] text-[#d4b06a]">Фракції</strong>
                 <button
@@ -322,7 +326,7 @@ export function CollectionDeckScreen({
               </div>
             </aside>
 
-            <section className="grid min-h-[560px] content-start gap-3 rounded-md bg-[rgba(6,8,11,0.55)] p-3 max-[1120px]:order-2 max-[1120px]:col-span-1 max-[720px]:order-3 max-[720px]:col-span-1 max-[420px]:p-2">
+            <section className="order-3 grid min-h-[560px] content-start gap-3 rounded-md bg-[rgba(6,8,11,0.55)] p-3 min-[1121px]:order-none max-[420px]:p-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="grid gap-1">
                   <strong className="text-xl font-black uppercase leading-none text-[#fff0ad]">Колекція</strong>
@@ -402,7 +406,7 @@ export function CollectionDeckScreen({
               ) : null}
             </section>
 
-            <aside className="grid content-start gap-3 self-start max-[1120px]:order-3 max-[1120px]:col-span-2 max-[720px]:order-4 max-[720px]:col-span-1">
+            <aside className="order-1 grid content-start gap-3 self-start min-[1121px]:order-none">
               {selectedCard ? (
                 <CardDetails
                   card={selectedCard}
@@ -749,6 +753,7 @@ function CardDetails({
   const reserveCount = Math.max(0, ownedCount - inDeckCount);
   const sellPrice = SELL_PRICES_BY_RARITY[card.rarity];
   const isSelling = sellStatus.kind === "selling";
+  const duplicateSellCount = cardInDeck ? 0 : Math.max(0, ownedCount - 1);
 
   return (
     <section className="card-details rounded-md bg-black/40 p-3 max-[860px]:grid max-[860px]:grid-cols-[minmax(190px,216px)_minmax(0,1fr)] max-[860px]:gap-3 max-[560px]:grid-cols-[minmax(112px,132px)_minmax(0,1fr)] max-[420px]:p-2">
@@ -839,8 +844,8 @@ function CardDetails({
               <button
                 className={sellButtonClass()}
                 type="button"
-                disabled={cardInDeck || sellableCount < 2 || isSelling}
-                onClick={() => onSell(sellableCount)}
+                disabled={duplicateSellCount < 1 || isSelling}
+                onClick={() => onSell(duplicateSellCount)}
                 data-testid="collection-sell-all"
               >
                 Продати всі дублікати

@@ -61,7 +61,7 @@ function SidebarHud({
 }) {
   return (
     <aside
-      className="hidden md:flex md:flex-col md:gap-3 md:sticky md:top-0 md:z-40 md:h-screen md:w-[220px] md:shrink-0 md:border-r md:border-[#d4b06a]/25 md:bg-[linear-gradient(180deg,rgba(20,25,28,0.96),rgba(8,10,13,0.98))] md:px-3 md:py-4 md:shadow-[0_18px_44px_rgba(0,0,0,0.42)]"
+      className="hidden min-[1121px]:flex min-[1121px]:flex-col min-[1121px]:gap-3 min-[1121px]:sticky min-[1121px]:top-0 min-[1121px]:z-40 min-[1121px]:h-screen min-[1121px]:w-[220px] min-[1121px]:shrink-0 min-[1121px]:border-r min-[1121px]:border-[#d4b06a]/25 min-[1121px]:bg-[linear-gradient(180deg,rgba(20,25,28,0.96),rgba(8,10,13,0.98))] min-[1121px]:px-3 min-[1121px]:py-4 min-[1121px]:shadow-[0_18px_44px_rgba(0,0,0,0.42)]"
       data-testid="player-hud-sidebar"
       data-profile-crystals={profile.crystals}
       data-profile-level={profile.level}
@@ -171,7 +171,7 @@ function MobileHud({
 }) {
   return (
     <header
-      className="md:hidden sticky top-0 z-40 flex items-center gap-2 border-b border-[#d4b06a]/25 bg-[linear-gradient(180deg,rgba(18,22,25,0.94),rgba(8,10,13,0.96))] px-2 py-1.5 shadow-[0_8px_22px_rgba(0,0,0,0.45)]"
+      className="sticky top-0 z-40 flex items-center gap-2 border-b border-[#d4b06a]/25 bg-[linear-gradient(180deg,rgba(18,22,25,0.94),rgba(8,10,13,0.96))] px-2 py-1.5 shadow-[0_8px_22px_rgba(0,0,0,0.45)] min-[1121px]:hidden"
       data-testid="player-hud-mobile"
       data-profile-crystals={profile.crystals}
       data-profile-level={profile.level}

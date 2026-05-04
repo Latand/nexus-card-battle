@@ -21,7 +21,6 @@ import { addToInventory, getOwnedCount, getSellableCount, removeFromInventory } 
 import { computeLevelFromXp, createNewStoredPlayerProfile, isSamePlayerIdentity, type PlayerIdentity, type PlayerProfile, type StoredPlayerProfile } from "../src/features/player/profile/types";
 import { computeLevelUpBonusForRange } from "../src/features/player/profile/progression";
 import { getMilestonesCrossed, pickMilestoneRewards } from "../src/features/economy/milestones";
-import { addToInventory } from "../src/features/inventory/inventoryOps";
 import type { Card, RewardSummary, Rarity } from "../src/features/battle/model/types";
 
 const ownedDeckIdentity: PlayerIdentity = {

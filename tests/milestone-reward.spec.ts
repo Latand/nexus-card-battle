@@ -34,7 +34,7 @@ test("PvE reward overlay renders the milestone-card tile when milestoneCardRewar
         player: {
           id: "player-deck-ready-e2e",
           identity: body.identity,
-          ownedCardIds: [],
+          ownedCards: [],
           deckIds: [],
           starterFreeBoostersRemaining: 0,
           openedBoosterIds: ["neon-breach", "factory-shift"],
@@ -44,6 +44,7 @@ test("PvE reward overlay renders the milestone-card tile when milestoneCardRewar
           wins: 1,
           losses: 0,
           draws: 0,
+          eloRating: 1000,
           onboarding: {
             starterBoostersAvailable: false,
             collectionReady: true,

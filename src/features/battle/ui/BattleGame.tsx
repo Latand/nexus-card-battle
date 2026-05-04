@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { postMatchFinished } from "@/features/player/profile/client";
-import type { PlayerIdentity } from "@/features/player/profile/types";
+import type { PlayerIdentity, PlayerProfile } from "@/features/player/profile/types";
 import { computeLevelFromXp } from "@/features/player/profile/types";
 import { cn } from "@/shared/lib/cn";
 import type { TelegramPlayer } from "@/shared/lib/telegram";
@@ -45,6 +45,7 @@ type BattleGameProps = {
   avatarUrl?: string;
   onOpenCollection?: () => void;
   onSwitchMode?: (mode: "ai" | "human") => void;
+  onPlayerUpdated?: (profile: PlayerProfile) => void;
 };
 
 type HumanMatchStatus = "idle" | "connecting" | "queued" | "matched" | "opponent_left" | "forfeit" | "error" | "closed";
@@ -122,7 +123,7 @@ type HumanRewardSummaryMessage = HumanSocketMessage & {
   payload: RewardSummary;
 };
 
-export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity, playerName, telegramPlayer, mode = "ai", avatarUrl, onOpenCollection, onSwitchMode }: BattleGameProps = {}) {
+export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity, playerName, telegramPlayer, mode = "ai", avatarUrl, onOpenCollection, onSwitchMode, onPlayerUpdated }: BattleGameProps = {}) {
   const isHumanMatch = mode === "human";
   const initialGame = useMemo(
     () => createInitialGame({ playerCollectionIds, playerDeckIds, playerName }),
@@ -374,6 +375,9 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     postMatchFinished({ identity: playerIdentity, mode: "pve", result })
       .then((response) => {
         if (cancelled) return;
+        if (Array.isArray(response.player.ownedCards)) {
+          onPlayerUpdated?.(response.player);
+        }
         setPersistedRewards(response.rewards);
         setPersistedRewardsError(null);
       })
@@ -386,7 +390,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     return () => {
       cancelled = true;
     };
-  }, [game.matchResult, game.phase, isHumanMatch, playerIdentity]);
+  }, [game.matchResult, game.phase, isHumanMatch, onPlayerUpdated, playerIdentity]);
 
   useEffect(() => {
     let startedAt = 0;

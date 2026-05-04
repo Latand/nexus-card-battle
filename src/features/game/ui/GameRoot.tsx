@@ -230,6 +230,13 @@ export function GameRoot() {
     },
     [deckReadyToPlay, ownedCardIds, profileDeckIds],
   );
+  const handleBattlePlayerUpdated = useCallback((nextProfile: PlayerProfile) => {
+    const nextOwnedCardIds = getOwnedCardIdsForProfile(nextProfile, allCardIds);
+    if (!deckIds.every((cardId) => nextOwnedCardIds.includes(cardId))) return;
+
+    lastConfirmedDeckIdsRef.current = getConfirmedDeckIds(nextProfile, allCardIds);
+    setPlayerProfile(nextProfile);
+  }, [allCardIds, deckIds]);
   const retryProfileLoad = useCallback(() => {
     deckTouchedRef.current = false;
     setStarterDeckReadyVisible(false);
@@ -289,6 +296,7 @@ export function GameRoot() {
             avatarUrl={persistedAvatarUrl}
             onOpenCollection={() => setScreen("collection")}
             onSwitchMode={(nextMode) => setBattleMode(nextMode)}
+            onPlayerUpdated={handleBattlePlayerUpdated}
           />
         ) : (
           <BattleGame
@@ -299,6 +307,7 @@ export function GameRoot() {
             avatarUrl={persistedAvatarUrl}
             onOpenCollection={() => setScreen("collection")}
             onSwitchMode={(nextMode) => setBattleMode(nextMode)}
+            onPlayerUpdated={handleBattlePlayerUpdated}
           />
         )}
         <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
@@ -398,7 +407,7 @@ function HudShell({
   }
 
   return (
-    <div className="md:flex md:min-h-screen md:items-stretch">
+    <div className="min-[1121px]:flex min-[1121px]:min-h-screen min-[1121px]:items-stretch">
       <PlayerHud
         profile={profile}
         playerName={playerName}
@@ -406,7 +415,7 @@ function HudShell({
         canPlay={canPlay}
         onPlay={onPlay}
       />
-      <div className="md:min-w-0 md:flex-1">{children}</div>
+      <div className="min-[1121px]:min-w-0 min-[1121px]:flex-1">{children}</div>
     </div>
   );
 }

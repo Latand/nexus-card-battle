@@ -226,6 +226,7 @@ test("a stale avatar-save response does not roll back deck mutations made while 
     id: "player-hud-stale-race",
     identity,
     ownedCardIds: PROFILE_OWNED_CARD_IDS,
+    ownedCards: PROFILE_OWNED_CARD_IDS.map((cardId) => ({ cardId, count: 1 })),
     deckIds: PROFILE_DECK_IDS,
     starterFreeBoostersRemaining: 0,
     openedBoosterIds: ["neon-breach", "factory-shift"],
