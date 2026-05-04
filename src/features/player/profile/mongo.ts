@@ -595,7 +595,7 @@ function buildOwnedCardsIncrementPipeline(cardIds: readonly string[]) {
   return {
     $reduce: {
       input: cardIds,
-      initialValue: { $ifNull: ["$ownedCards", []] },
+      initialValue: buildOwnedCardsReadBasePipeline(),
       in: {
         $cond: [
           { $in: ["$$this", { $ifNull: ["$$value.cardId", []] }] },
@@ -612,6 +612,22 @@ function buildOwnedCardsIncrementPipeline(cardIds: readonly string[]) {
               },
             },
           },
+          { $concatArrays: ["$$value", [{ cardId: "$$this", count: 1 }]] },
+        ],
+      },
+    },
+  };
+}
+
+function buildOwnedCardsReadBasePipeline() {
+  return {
+    $reduce: {
+      input: { $ifNull: ["$ownedCardIds", []] },
+      initialValue: { $ifNull: ["$ownedCards", []] },
+      in: {
+        $cond: [
+          { $in: ["$$this", { $ifNull: ["$$value.cardId", []] }] },
+          "$$value",
           { $concatArrays: ["$$value", [{ cardId: "$$this", count: 1 }]] },
         ],
       },
@@ -697,26 +713,42 @@ function hasAppliedStarterOpening(player: MongoPlayerDocument, boosterId: string
 
 function readOwnedCards(player: WithId<MongoPlayerDocument> | MongoPlayerDocument): OwnedCardEntry[] {
   const playerId = "_id" in player ? player._id.toHexString() : "<unsaved>";
+  return mergeOwnedCardsWithLegacyIds({
+    ownedCards: player.ownedCards,
+    ownedCardIds: player.ownedCardIds,
+    playerId,
+  });
+}
 
-  if (Array.isArray(player.ownedCards) && player.ownedCards.length > 0) {
-    const valid: OwnedCardEntry[] = [];
-    for (const entry of player.ownedCards) {
+export function mergeOwnedCardsWithLegacyIds(input: {
+  ownedCards?: unknown;
+  ownedCardIds?: unknown;
+  playerId?: string;
+}): OwnedCardEntry[] {
+  const playerId = input.playerId ?? "<unsaved>";
+  const valid: OwnedCardEntry[] = [];
+  const seenCardIds = new Set<string>();
+
+  if (Array.isArray(input.ownedCards) && input.ownedCards.length > 0) {
+    for (const entry of input.ownedCards) {
       if (entry && typeof entry.cardId === "string" && entry.cardId.length > 0 && Number.isInteger(entry.count) && entry.count > 0) {
         valid.push({ cardId: entry.cardId, count: entry.count });
+        seenCardIds.add(entry.cardId);
       } else {
         console.warn("MongoPlayerProfileStore: dropping malformed ownedCards entry.", { playerId, entry });
       }
     }
-    return valid;
   }
 
-  if (Array.isArray(player.ownedCardIds)) {
-    return player.ownedCardIds
-      .filter((cardId): cardId is string => typeof cardId === "string" && cardId.length > 0)
-      .map((cardId) => ({ cardId, count: 1 }));
+  if (Array.isArray(input.ownedCardIds)) {
+    for (const cardId of input.ownedCardIds) {
+      if (typeof cardId !== "string" || cardId.length === 0 || seenCardIds.has(cardId)) continue;
+      valid.push({ cardId, count: 1 });
+      seenCardIds.add(cardId);
+    }
   }
 
-  return [];
+  return valid;
 }
 
 function starterOpeningFilter(playerId: string, boosterId: string): Filter<MongoBoosterOpeningDocument> {

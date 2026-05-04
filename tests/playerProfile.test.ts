@@ -20,6 +20,7 @@ import { computeSellRevenue } from "../src/features/economy/sellPricing";
 import { addToInventory, getOwnedCount, getSellableCount, removeFromInventory } from "../src/features/inventory/inventoryOps";
 import { computeLevelFromXp, createNewStoredPlayerProfile, isSamePlayerIdentity, type PlayerIdentity, type PlayerProfile, type StoredPlayerProfile } from "../src/features/player/profile/types";
 import { computeLevelUpBonusForRange } from "../src/features/player/profile/progression";
+import { mergeOwnedCardsWithLegacyIds } from "../src/features/player/profile/mongo";
 import { getMilestonesCrossed, pickMilestoneRewards } from "../src/features/economy/milestones";
 import type { Card, RewardSummary, Rarity } from "../src/features/battle/model/types";
 
@@ -172,6 +173,20 @@ describe("player profile API", () => {
       { cardId: "b", count: 1 },
     ]);
     expect(body.player.onboarding.collectionReady).toBe(true);
+  });
+
+  test("merges legacy ownedCardIds with newer ownedCards instead of hiding the old collection", () => {
+    const merged = mergeOwnedCardsWithLegacyIds({
+      ownedCardIds: ["legacy-a", "legacy-b", "new-card"],
+      ownedCards: [{ cardId: "new-card", count: 1 }],
+      playerId: "player-mixed-legacy",
+    });
+
+    expect(merged).toEqual([
+      { cardId: "new-card", count: 1 },
+      { cardId: "legacy-a", count: 1 },
+      { cardId: "legacy-b", count: 1 },
+    ]);
   });
 
   test("rejects duplicate, unknown, and non-owned deck cards", async () => {
