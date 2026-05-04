@@ -1,5 +1,139 @@
 @import "tailwindcss";
 
+@theme {
+  --color-bg: #0d0e10;
+  --color-surface: #16181b;
+  --color-surface-raised: #1e2125;
+  --color-ink: #f1ebd9;
+  --color-ink-mute: #8a8276;
+  --color-accent: #f0c668;
+  --color-accent-quiet: #6b5a31;
+  --color-cool: #65d7e9;
+  --color-danger: #d97056;
+}
+
+/* ─── Atmospheric layered background ─────────────────────────────────
+   Used by <AtmosphericBackground> wrapper. Three stacked fixed layers:
+   solid bg → blurred arena image at 14% → optional warm-dust particles.
+   ────────────────────────────────────────────────────────────────── */
+.atmos-root {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background-color: #0d0e10;
+}
+
+.atmos-image {
+  position: absolute;
+  inset: -24px; /* extra bleed so 12px blur never shows hard edge */
+  background-image: url("/nexus-assets/backgrounds/arena-bar-1024x576.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.14;
+  filter: blur(12px);
+}
+
+.atmos-content {
+  position: relative;
+  z-index: 1;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── Warm-dust particles (very subtle) ──────────────────────────── */
+@keyframes bg-dust-drift {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.55;
+  }
+  82% {
+    opacity: 0.45;
+  }
+  100% {
+    transform: translate3d(-22px, -120vh, 0);
+    opacity: 0;
+  }
+}
+
+.bg-particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  /* Six tiny glowing dots painted as radial gradients on this single
+     element. Background-size is large so each dot is sparse. */
+  background-image:
+    radial-gradient(circle, rgba(240, 198, 104, 0.42) 0.7px, transparent 1.6px),
+    radial-gradient(circle, rgba(240, 198, 104, 0.32) 0.6px, transparent 1.4px),
+    radial-gradient(circle, rgba(240, 198, 104, 0.36) 0.8px, transparent 1.6px);
+  background-size: 380px 540px, 520px 720px, 440px 640px;
+  background-position: 12% 18%, 64% 42%, 38% 78%;
+  background-repeat: repeat;
+  animation: bg-dust-drift 38s linear infinite;
+}
+
+.bg-particles::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle, rgba(240, 198, 104, 0.28) 0.7px, transparent 1.6px),
+    radial-gradient(circle, rgba(240, 198, 104, 0.34) 0.6px, transparent 1.4px);
+  background-size: 460px 660px, 540px 780px;
+  background-position: 80% 22%, 24% 58%;
+  background-repeat: repeat;
+  animation: bg-dust-drift 54s linear infinite;
+  animation-delay: -12s;
+  opacity: 0.85;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bg-particles,
+  .bg-particles::after {
+    animation: none;
+    opacity: 0.18;
+  }
+}
+
+/* ─── Modal v2 entry transitions ─────────────────────────────────── */
+@keyframes modal-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes modal-drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  dialog [class*="animate-[modal-sheet-up"],
+  dialog [class*="animate-[modal-drawer-in"] {
+    animation: none !important;
+  }
+}
+
+body:has(dialog[open]) [data-lobby-bubble] {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease-out;
+}
+
 html {
   height: 100%;
 }
