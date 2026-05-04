@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { postMatchFinished } from "@/features/player/profile/client";
+import { readStableSessionName, rememberStableSessionName } from "@/features/presence/sessionName";
 import type { PlayerIdentity, PlayerProfile } from "@/features/player/profile/types";
 import { computeLevelFromXp } from "@/features/player/profile/types";
 import { cn } from "@/shared/lib/cn";
@@ -171,6 +172,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const resolvingHumanRoundRef = useRef<number | null>(null);
   const humanMessageHandlerRef = useRef<(message: HumanSocketMessage) => void>(() => {});
   const humanSessionNameRef = useRef("");
+  const stableHumanNameRef = useRef("");
 
   useEffect(() => {
     gameRef.current = game;
@@ -206,7 +208,9 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     }, 0);
     socketRef.current = socket;
     remoteFirstMoveRef.current = null;
-    humanSessionNameRef.current = "";
+    const stableHumanName = playerName?.trim() || readStableSessionName();
+    stableHumanNameRef.current = stableHumanName;
+    humanSessionNameRef.current = stableHumanName;
 
     socket.addEventListener("open", () => {
       sendSocketMessage(socket, {
@@ -214,7 +218,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
         deckIds: playerDeckIds,
         collectionIds: playerCollectionIds,
         identity: playerIdentity,
-        user: telegramPlayer,
+        user: getHumanSocketUser(telegramPlayer, stableHumanName),
       });
     });
 
@@ -251,7 +255,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       socket.close();
       if (socketRef.current === socket) socketRef.current = null;
     };
-  }, [isHumanMatch, playerCollectionIds, playerDeckIds, playerIdentity, telegramPlayer]);
+  }, [isHumanMatch, playerCollectionIds, playerDeckIds, playerIdentity, playerName, telegramPlayer]);
 
   const selected = getSelectedCard(game.player, selectedId) ?? game.player.hand[0];
   const boostCost = damageBoost ? DAMAGE_BOOST_COST : 0;
@@ -531,6 +535,9 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       }
       const nextSessionName = sanitizeHumanSessionName(message.playerName);
       if (nextSessionName) {
+        if (!stableHumanNameRef.current) {
+          stableHumanNameRef.current = rememberStableSessionName(nextSessionName);
+        }
         humanSessionNameRef.current = nextSessionName;
         setHumanSessionName(nextSessionName);
       }
@@ -769,7 +776,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       deckIds: playerDeckIds,
       collectionIds: playerCollectionIds,
       identity: playerIdentity,
-      user: telegramPlayer,
+      user: getHumanSocketUser(telegramPlayer, stableHumanNameRef.current),
     });
   }
 
@@ -1152,6 +1159,11 @@ function getHumanSocketUrl() {
 function sendSocketMessage(socket: WebSocket, message: unknown) {
   if (!isSocketOpen(socket)) return;
   socket.send(JSON.stringify(message));
+}
+
+function getHumanSocketUser(telegramPlayer: TelegramPlayer | undefined, stableName: string) {
+  if (telegramPlayer?.telegramId || telegramPlayer?.name || telegramPlayer?.username) return telegramPlayer;
+  return stableName ? { name: stableName } : telegramPlayer;
 }
 
 function isSocketOpen(socket: WebSocket | null): socket is WebSocket {

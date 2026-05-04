@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { readStableSessionName, rememberStableSessionName, resolveStableUserName } from "./sessionName";
 
 export type LobbyChatMessage = {
   id: string;
@@ -112,6 +113,7 @@ function ensureLobbySocket() {
   lobbySocket = socket;
 
   socket.addEventListener("open", () => {
+    if (!pendingUserName) pendingUserName = readStableSessionName();
     sendLobbyUserName();
   });
 
@@ -163,7 +165,14 @@ function handleLobbySocketMessage(raw: unknown) {
 
   if (message.type === "session") {
     if (typeof message.clientId === "string") lobbyState.sessionId = message.clientId;
-    if (typeof message.playerName === "string") lobbyState.playerName = message.playerName.trim().slice(0, 80);
+    if (typeof message.playerName === "string") {
+      const playerName = message.playerName.trim().slice(0, 80);
+      lobbyState.playerName = playerName;
+      if (!pendingUserName) {
+        const stableName = rememberStableSessionName(playerName);
+        if (stableName) pendingUserName = stableName;
+      }
+    }
     notifyLobbySubscribers();
     return;
   }
@@ -183,7 +192,7 @@ function handleLobbySocketMessage(raw: unknown) {
 }
 
 function setLobbyUserName(userName: string | undefined) {
-  const next = normalizeUserName(userName);
+  const next = resolveStableUserName(userName);
   if (pendingUserName === next) return;
   pendingUserName = next;
   sendLobbyUserName();
@@ -225,11 +234,6 @@ function normalizeLobbyChatMessage(value: unknown): LobbyChatMessage | null {
 function appendLobbyChatMessage(messages: LobbyChatMessage[], message: LobbyChatMessage) {
   const withoutDuplicate = messages.filter((item) => item.id !== message.id);
   return [...withoutDuplicate, message].slice(-CHAT_LIMIT);
-}
-
-function normalizeUserName(userName: string | undefined) {
-  const trimmed = userName?.trim().slice(0, 80) ?? "";
-  return trimmed && trimmed !== NAME_FALLBACK ? trimmed : "";
 }
 
 function notifyLobbySubscribers() {
