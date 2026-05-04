@@ -94,7 +94,7 @@ export function BattleOverlay({
         <div className="duel-grid absolute inset-[100px_26px_82px] z-[2] grid grid-cols-[minmax(150px,220px)_minmax(220px,1fr)_minmax(150px,220px)] items-end gap-[18px] max-[960px]:inset-[102px_18px_82px] max-[960px]:grid-cols-[minmax(132px,190px)_minmax(180px,1fr)_minmax(132px,190px)] max-[760px]:inset-[112px_10px_78px] max-[760px]:grid-cols-[minmax(96px,140px)_minmax(110px,1fr)_minmax(96px,140px)] max-[760px]:gap-2 max-[620px]:grid-cols-[92px_minmax(86px,1fr)_92px]">
           <div
             className={cn(
-              "grid origin-bottom justify-items-center self-end justify-self-start animate-[nexus-duel-enter-left_320ms_ease_both] [&_.compact]:min-h-[292px] [&_.compact]:w-[min(214px,22vw)] max-[960px]:[&_.compact]:min-h-[270px] max-[960px]:[&_.compact]:w-[min(184px,21vw)] max-[760px]:[&_.compact]:min-h-[230px] max-[760px]:[&_.compact]:w-[min(136px,27vw)] max-[620px]:[&_.compact]:min-h-[184px] max-[620px]:[&_.compact]:w-[92px]",
+              "grid origin-bottom justify-items-center self-end justify-self-start animate-[nexus-duel-enter-left_320ms_ease_both] [&_.compact]:w-[min(214px,22vw)] max-[960px]:[&_.compact]:w-[min(184px,21vw)] max-[760px]:[&_.compact]:w-[min(136px,27vw)] max-[620px]:[&_.compact]:w-[92px]",
               loser === "player" && isDamage && "animate-[nexus-taking-hit_620ms_ease_both]",
             )}
           >
@@ -116,7 +116,7 @@ export function BattleOverlay({
 
           <div
             className={cn(
-              "grid origin-bottom justify-items-center self-end justify-self-end animate-[nexus-duel-enter-right_320ms_ease_both] [&_.compact]:min-h-[292px] [&_.compact]:w-[min(214px,22vw)] max-[960px]:[&_.compact]:min-h-[270px] max-[960px]:[&_.compact]:w-[min(184px,21vw)] max-[760px]:[&_.compact]:min-h-[230px] max-[760px]:[&_.compact]:w-[min(136px,27vw)] max-[620px]:[&_.compact]:min-h-[184px] max-[620px]:[&_.compact]:w-[92px]",
+              "grid origin-bottom justify-items-center self-end justify-self-end animate-[nexus-duel-enter-right_320ms_ease_both] [&_.compact]:w-[min(214px,22vw)] max-[960px]:[&_.compact]:w-[min(184px,21vw)] max-[760px]:[&_.compact]:w-[min(136px,27vw)] max-[620px]:[&_.compact]:w-[92px]",
               loser === "enemy" && isDamage && "animate-[nexus-taking-hit_620ms_ease_both]",
             )}
           >

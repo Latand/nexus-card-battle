@@ -81,7 +81,7 @@ export function SelectionOverlay({
           ×
         </button>
 
-        <div className="selection-card grid justify-items-center [&_.compact]:min-h-[328px] [&_.compact]:w-[min(236px,31vw)] max-[620px]:[&_.compact]:min-h-[296px] max-[620px]:[&_.compact]:w-[min(220px,68vw)]">
+        <div className="selection-card grid justify-items-center [&_.compact]:w-[min(236px,31vw)] max-[620px]:[&_.compact]:w-[min(220px,68vw)]">
           <BattleCard
             card={selected}
             compact
@@ -171,7 +171,7 @@ export function SelectionOverlay({
 
         {knownEnemyCard ? (
           <div
-            className="selection-enemy grid translate-y-3.5 rotate-1 justify-items-center gap-2 brightness-[1.06] max-[760px]:col-span-full max-[760px]:translate-y-0 max-[760px]:[&_.compact]:min-h-[238px] max-[760px]:[&_.compact]:w-[min(170px,42vw)] [&_.compact]:min-h-[258px] [&_.compact]:w-[min(178px,22vw)]"
+            className="selection-enemy grid translate-y-3.5 rotate-1 justify-items-center gap-2 brightness-[1.06] max-[760px]:col-span-full max-[760px]:translate-y-0 max-[760px]:[&_.compact]:w-[min(170px,42vw)] [&_.compact]:w-[min(178px,22vw)]"
             data-testid="known-enemy-card"
           >
             <BattleCard

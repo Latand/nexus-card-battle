@@ -630,7 +630,7 @@ function StarterReveal({
           data-testid="starter-reveal-active-card"
           data-card-id={activeCard.id}
         >
-          <BattleCard card={activeCard} className="w-[min(260px,66vw)] !min-h-[352px] max-[430px]:w-[min(218px,70vw)] max-[430px]:!min-h-[302px]" />
+          <BattleCard card={activeCard} className="w-[min(260px,66vw)] max-[430px]:w-[min(218px,70vw)]" />
         </div>
 
         <aside className="grid min-w-0 gap-3">
