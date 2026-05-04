@@ -32,6 +32,11 @@ test("desktop sidebar HUD shows persisted crystals, level, and ELO on the Collec
 
   await expect(page.getByTestId("player-hud-mobile")).toBeHidden();
   await expect(page.getByTestId("player-hud-online-slot")).toBeVisible();
+  const sidebarChat = sidebar.getByTestId("lobby-chat");
+  await expect(sidebarChat).toBeVisible();
+  await sidebarChat.getByTestId("lobby-chat-input").fill("Привіт з лобі");
+  await sidebarChat.getByTestId("lobby-chat-send").click();
+  await expect(sidebarChat.getByTestId("lobby-chat-list")).toContainText("Привіт з лобі", { timeout: 10_000 });
 
   // Desktop sidebar PLAY button starts a match through the existing entry point.
   const playButton = page.getByTestId("player-hud-play");

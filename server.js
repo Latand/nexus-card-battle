@@ -192,6 +192,12 @@ function handleSocketMessage(session, message) {
     return;
   }
 
+  if (message.type === "set_user") {
+    session.user = sanitizeUser(message.user);
+    send(session, { type: "session", clientId: session.id, playerName: getSessionDisplayName(session) });
+    return;
+  }
+
   if (message.type === "submit_move") {
     submitMove(session, message);
     return;
