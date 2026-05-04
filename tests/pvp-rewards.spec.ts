@@ -61,9 +61,9 @@ test("PvP reward overlay renders the crystal tile after a server-pushed forfeit 
     const losingPage = winnerTileCount === 1 ? loserPage : winnerPage;
 
     const crystalsTile = winningPage.getByTestId("reward-crystals-tile");
-    await expect(crystalsTile).toHaveAttribute("data-delta-crystals", "50");
-    await expect(crystalsTile).toHaveAttribute("data-new-crystals", "50");
-    await expect(winningPage.getByTestId("reward-crystals-line")).toContainText("всього 50");
+    await expect(crystalsTile).toHaveAttribute("data-delta-crystals", "10");
+    await expect(crystalsTile).toHaveAttribute("data-new-crystals", "10");
+    await expect(winningPage.getByTestId("reward-crystals-line")).toContainText("всього 10");
 
     // Match-result title is color-coded per outcome (victory / defeat tone).
     await expect(winningPage.getByTestId("reward-title")).toHaveText("ПЕРЕМОГА");
@@ -197,6 +197,7 @@ test("ignores reward_summary payloads that arrive for a different matchId", asyn
         matchXp: 999,
         levelProgress: 100,
         cardRewards: [],
+        milestoneCardRewards: [],
         deltaXp: 999,
         deltaCrystals: 999,
         leveledUp: true,

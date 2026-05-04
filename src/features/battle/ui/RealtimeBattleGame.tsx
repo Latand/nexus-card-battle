@@ -1,7 +1,7 @@
 "use client";
 
 import type { TelegramPlayer } from "@/shared/lib/telegram";
-import type { PlayerIdentity } from "@/features/player/profile/types";
+import type { PlayerIdentity, PlayerProfile } from "@/features/player/profile/types";
 import { BattleGame } from "./BattleGame";
 
 type RealtimeBattleGameProps = {
@@ -13,6 +13,7 @@ type RealtimeBattleGameProps = {
   avatarUrl?: string;
   onOpenCollection: () => void;
   onSwitchMode?: (mode: "ai" | "human") => void;
+  onPlayerUpdated?: (profile: PlayerProfile) => void;
 };
 
 export function RealtimeBattleGame({
@@ -24,6 +25,7 @@ export function RealtimeBattleGame({
   avatarUrl,
   onOpenCollection,
   onSwitchMode,
+  onPlayerUpdated,
 }: RealtimeBattleGameProps) {
   return (
     <BattleGame
@@ -36,6 +38,7 @@ export function RealtimeBattleGame({
       mode="human"
       onOpenCollection={onOpenCollection}
       onSwitchMode={onSwitchMode}
+      onPlayerUpdated={onPlayerUpdated}
     />
   );
 }

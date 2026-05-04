@@ -1,6 +1,9 @@
 import { MongoClient, MongoServerError, ObjectId, type Collection, type Filter, type WithId } from "mongodb";
 import { BoosterOpeningError } from "@/features/boosters/opening";
 import type { BoosterOpeningSource, PersistStarterBoosterOpeningInput, PersistedStarterBoosterOpening, StoredBoosterOpeningRecord } from "@/features/boosters/types";
+import { cards } from "@/features/battle/model/cards";
+import { getOwnedCount, getSellableCount, type OwnedCardEntry } from "@/features/inventory/inventoryOps";
+import { computeSellRevenue } from "@/features/economy/sellPricing";
 import {
   DEFAULT_PLAYER_CRYSTALS,
   DEFAULT_PLAYER_DRAWS,
@@ -15,7 +18,9 @@ import {
   type StoredPlayerProfile,
 } from "./types";
 import { computeLevelUpBonusForRange } from "./progression";
-import type { ApplyMatchRewardsInput, PlayerAvatarStore, PlayerDeckStore, PlayerMatchRewardsStore } from "./api";
+import { SellError, type ApplyMatchRewardsInput, type ApplyMatchRewardsOutput, type PlayerAvatarStore, type PlayerDeckStore, type PlayerMatchRewardsStore, type PlayerSellStore } from "./api";
+import { getMilestonesCrossed, pickMilestoneRewards, type MilestoneCardReward } from "@/features/economy/milestones";
+import { cards as activeCards } from "@/features/battle/model/cards";
 
 const DEFAULT_MONGODB_URI = "mongodb://127.0.0.1:27017/nexus-card-battle";
 const DEFAULT_MONGODB_DB = "nexus-card-battle";
@@ -26,9 +31,14 @@ const BOOSTER_OPENINGS_COLLECTION = "boosterOpenings";
 // Progression fields are optional so pre-existing documents read cleanly.
 // `level` is intentionally absent — it is derived from totalXp on read,
 // because storing an absolute level would race against $inc(totalXp).
-type MongoPlayerDocument = Omit<StoredPlayerProfile, "id" | "crystals" | "totalXp" | "wins" | "losses" | "draws" | "eloRating" | "avatarUrl"> & {
+// `ownedCardIds` is the legacy on-disk field; `ownedCards` is the multiset.
+// Documents written before slice 1 have only `ownedCardIds`; new writes use
+// `ownedCards` while leaving the legacy field untouched (lazy migration).
+type MongoPlayerDocument = Omit<StoredPlayerProfile, "id" | "ownedCards" | "crystals" | "totalXp" | "wins" | "losses" | "draws" | "eloRating" | "avatarUrl"> & {
   createdAt: Date;
   updatedAt: Date;
+  ownedCards?: OwnedCardEntry[];
+  ownedCardIds?: string[];
   crystals?: number;
   totalXp?: number;
   wins?: number;
@@ -63,7 +73,7 @@ export function getMongoPlayerProfileStore() {
   return new MongoPlayerProfileStore(clientPromise, dbName);
 }
 
-export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewardsStore, PlayerAvatarStore {
+export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewardsStore, PlayerAvatarStore, PlayerSellStore {
   private indexesReady?: Promise<void>;
   private boosterOpeningIndexesReady?: Promise<void>;
 
@@ -82,7 +92,7 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
       {
         $setOnInsert: {
           identity: insertedProfile.identity,
-          ownedCardIds: insertedProfile.ownedCardIds,
+          ownedCards: insertedProfile.ownedCards,
           deckIds: insertedProfile.deckIds,
           starterFreeBoostersRemaining: insertedProfile.starterFreeBoostersRemaining,
           openedBoosterIds: insertedProfile.openedBoosterIds,
@@ -109,7 +119,7 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
     return fromMongoDocument(document);
   }
 
-  async applyMatchRewards(identity: PlayerIdentity, rewards: ApplyMatchRewardsInput): Promise<StoredPlayerProfile> {
+  async applyMatchRewards(identity: PlayerIdentity, rewards: ApplyMatchRewardsInput): Promise<ApplyMatchRewardsOutput> {
     const players = await this.getPlayersCollection();
     const now = new Date();
     const resultCounterField =
@@ -150,24 +160,66 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
     const newLevel = computeLevelFromXp(authoritativeTotalXp).level;
 
     if (newLevel <= oldLevel) {
-      return fromMongoDocument(afterIncrement);
+      return { profile: fromMongoDocument(afterIncrement), milestoneCardRewards: [] };
     }
 
+    let latest: WithId<MongoPlayerDocument> = afterIncrement;
     const bonus = computeLevelUpBonusForRange(oldLevel, newLevel);
-    if (bonus <= 0) {
-      return fromMongoDocument(afterIncrement);
+    if (bonus > 0) {
+      const afterBonus = await players.findOneAndUpdate(
+        identityFilter(identity),
+        {
+          $inc: { crystals: bonus },
+          $set: { updatedAt: new Date() },
+        },
+        { returnDocument: "after" },
+      );
+      if (afterBonus) latest = afterBonus;
     }
 
-    const afterBonus = await players.findOneAndUpdate(
-      identityFilter(identity),
-      {
-        $inc: { crystals: bonus },
-        $set: { updatedAt: new Date() },
-      },
-      { returnDocument: "after" },
-    );
+    // Op C — milestone-card grant. The same oldLevel/newLevel computed above
+    // drives this so concurrent matches that racy-cross a milestone level
+    // each pick up exactly the milestones THEY crossed (Op-A's authoritative
+    // $inc fans out the totalXp deterministically per call).
+    const milestonesCrossed = getMilestonesCrossed(oldLevel, newLevel);
+    if (milestonesCrossed.length === 0) {
+      return { profile: fromMongoDocument(latest), milestoneCardRewards: [] };
+    }
 
-    return fromMongoDocument(afterBonus ?? afterIncrement);
+    const rng = rewards.rng ?? Math.random;
+    let granted: MilestoneCardReward[];
+    try {
+      granted = pickMilestoneRewards(milestonesCrossed, activeCards, rng);
+    } catch (error) {
+      // Card-pool / rarity configuration bug — log and skip Op-C without
+      // rolling back the level-up bonus the player already earned.
+      console.error("Milestone card pick failed; skipping milestone grant.", { error, oldLevel, newLevel });
+      return { profile: fromMongoDocument(latest), milestoneCardRewards: [] };
+    }
+
+    try {
+      const grantedIds = granted.map((entry) => entry.cardId);
+      const afterMilestones = await players.findOneAndUpdate(
+        identityFilter(identity),
+        [
+          {
+            $set: {
+              ownedCards: buildOwnedCardsIncrementPipeline(grantedIds),
+              updatedAt: new Date(),
+            },
+          },
+        ],
+        { returnDocument: "after" },
+      );
+      if (afterMilestones) latest = afterMilestones;
+    } catch (error) {
+      // If Op-C fails after Op-A and Op-B succeeded, do NOT roll back; the
+      // player keeps the XP/crystals/level-up bonus they earned.
+      console.error("Milestone card grant write failed; profile retains Op-A/Op-B but no cards.", { error });
+      return { profile: fromMongoDocument(latest), milestoneCardRewards: [] };
+    }
+
+    return { profile: fromMongoDocument(latest), milestoneCardRewards: granted };
   }
 
   async saveStarterBoosterOpening(input: PersistStarterBoosterOpeningInput): Promise<PersistedStarterBoosterOpening> {
@@ -217,10 +269,15 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
 
   async saveDeck(identity: PlayerIdentity, deckIds: string[]): Promise<StoredPlayerProfile> {
     const players = await this.getPlayersCollection();
+    // Atomic precondition on the multiset: every deck card must already exist
+    // in `ownedCards.cardId`. Closing the TOCTOU window here matters once
+    // slice 2's sell flow can drop counts to zero between read and write.
+    // Legacy documents that only carry `ownedCardIds` still satisfy the
+    // post-write fallback below via `readOwnedCards`.
     const updatedPlayer = await players.findOneAndUpdate(
       {
         ...identityFilter(identity),
-        ownedCardIds: { $all: deckIds },
+        "ownedCards.cardId": { $all: deckIds },
       },
       {
         $set: {
@@ -242,13 +299,39 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
       throw new Error("Player profile did not exist for deck save.");
     }
 
-    const ownedCardIds = new Set(currentPlayer.ownedCardIds);
-    const missingOwnedIds = deckIds.filter((cardId) => !ownedCardIds.has(cardId));
+    const ownedCards = readOwnedCards(currentPlayer);
+    const missingOwnedIds = deckIds.filter((cardId) => getOwnedCount(ownedCards, cardId) < 1);
     if (missingOwnedIds.length > 0) {
       throw new Error(`Deck contains non-owned card ids: ${missingOwnedIds.join(", ")}`);
     }
 
+    // Legacy doc without `ownedCards` but with `ownedCardIds` covering the
+    // deck — atomic precondition rejected it because `ownedCards.cardId` is
+    // empty. Fall back to a non-precondition write so the migration window
+    // does not block deck saves.
+    const fallbackUpdate = await players.findOneAndUpdate(
+      identityFilter(identity),
+      {
+        $set: {
+          deckIds,
+          updatedAt: new Date(),
+        },
+      },
+      {
+        returnDocument: "after",
+      },
+    );
+
+    if (fallbackUpdate) {
+      return fromMongoDocument(fallbackUpdate);
+    }
+
     throw new Error("Player deck could not be saved.");
+  }
+
+  async applySellCards(identity: PlayerIdentity, cardId: string, count: number): Promise<StoredPlayerProfile> {
+    const players = await this.getPlayersCollection();
+    return applySellCardsToPlayer(players, identity, cardId, count);
   }
 
   private async getPlayersCollection() {
@@ -312,26 +395,30 @@ async function applyStarterOpeningToPlayer(
   cardIds: string[],
   now: Date,
 ) {
+  // Pipeline-update so the multiset increment runs server-side against the
+  // post-write document state. Two concurrent opens for the same player (with
+  // different boosterIds — legitimate, since STARTER_FREE_BOOSTERS = 2) can
+  // otherwise interleave a JS-side read between each other and clobber each
+  // other's `ownedCards` array. Aggregation pipelines can't be combined with
+  // $inc/$addToSet, so deck/openedBoosters/starter fields are expressed as
+  // pipeline equivalents below.
   const updatedPlayer = await players.findOneAndUpdate(
     {
       ...identityFilter(identity),
       starterFreeBoostersRemaining: { $gt: 0 },
       openedBoosterIds: { $ne: boosterId },
-      ownedCardIds: { $nin: cardIds },
     },
-    {
-      $addToSet: {
-        ownedCardIds: { $each: cardIds },
-        deckIds: { $each: cardIds },
-        openedBoosterIds: boosterId,
+    [
+      {
+        $set: {
+          ownedCards: buildOwnedCardsIncrementPipeline(cardIds),
+          deckIds: { $setUnion: [{ $ifNull: ["$deckIds", []] }, cardIds] },
+          openedBoosterIds: { $setUnion: [{ $ifNull: ["$openedBoosterIds", []] }, [boosterId]] },
+          starterFreeBoostersRemaining: { $subtract: [{ $ifNull: ["$starterFreeBoostersRemaining", 0] }, 1] },
+          updatedAt: now,
+        },
       },
-      $inc: {
-        starterFreeBoostersRemaining: -1,
-      },
-      $set: {
-        updatedAt: now,
-      },
-    },
+    ],
     {
       returnDocument: "after",
     },
@@ -341,12 +428,129 @@ async function applyStarterOpeningToPlayer(
     return updatedPlayer;
   }
 
+  // No match → either the player doc is missing, or this booster was already
+  // applied (`openedBoosterIds: { $ne: boosterId }` rejected the filter). The
+  // recovery branch surfaces the latter as success so duplicate-call replays
+  // (network retry, server restart) stay idempotent.
   const currentPlayer = await players.findOne(identityFilter(identity));
   if (currentPlayer && hasAppliedStarterOpening(currentPlayer, boosterId, cardIds)) {
     return currentPlayer;
   }
 
   throw new BoosterOpeningError("starter_booster_unavailable", "Starter booster opening could not be saved for the current player state.", 409);
+}
+
+async function applySellCardsToPlayer(
+  players: Collection<MongoPlayerDocument>,
+  identity: PlayerIdentity,
+  cardId: string,
+  count: number,
+): Promise<StoredPlayerProfile> {
+  if (!Number.isInteger(count) || count <= 0) {
+    throw new SellError("invalid_sell_count", "count must be a positive integer.", 400);
+  }
+
+  const card = cards.find((entry) => entry.id === cardId);
+  if (!card) {
+    throw new SellError("invalid_card_id", `Unknown card id: ${cardId}`, 400);
+  }
+
+  const revenue = computeSellRevenue(card, count);
+  const now = new Date();
+
+  // Pipeline-update so the multiset decrement runs server-side: two concurrent
+  // sells of the same cardId compose against the post-write document state and
+  // can't drive the count negative or skip a debit. The filter pre-checks both
+  // "enough sellable stock" and "card not in any saved deck" so a no-op match
+  // is always due to one of those server-authoritative invariants.
+  const updated = await players.findOneAndUpdate(
+    {
+      ...identityFilter(identity),
+      ownedCards: { $elemMatch: { cardId, count: { $gte: count } } },
+      deckIds: { $ne: cardId },
+    },
+    [
+      {
+        $set: {
+          ownedCards: {
+            $filter: {
+              input: {
+                $map: {
+                  input: { $ifNull: ["$ownedCards", []] },
+                  as: "entry",
+                  in: {
+                    $cond: [
+                      { $eq: ["$$entry.cardId", cardId] },
+                      { cardId: "$$entry.cardId", count: { $subtract: ["$$entry.count", count] } },
+                      "$$entry",
+                    ],
+                  },
+                },
+              },
+              as: "entry",
+              cond: { $gt: ["$$entry.count", 0] },
+            },
+          },
+          crystals: { $add: [{ $ifNull: ["$crystals", 0] }, revenue] },
+          updatedAt: now,
+        },
+      },
+    ],
+    { returnDocument: "after" },
+  );
+
+  if (updated) {
+    return fromMongoDocument(updated);
+  }
+
+  // Filter rejected the update — disambiguate the failure cause for the API
+  // surface so a UI can render a precise error.
+  const current = await players.findOne(identityFilter(identity));
+  if (!current) {
+    throw new SellError("insufficient_stock", "Player profile did not exist for sell apply.", 409);
+  }
+
+  const ownedCards = readOwnedCards(current);
+  const deckIds = Array.isArray(current.deckIds) ? current.deckIds : [];
+  if (deckIds.includes(cardId)) {
+    throw new SellError("card_in_deck", "Cannot sell a card that is in a saved deck.", 409);
+  }
+
+  if (count > getSellableCount(ownedCards, deckIds, cardId)) {
+    throw new SellError("insufficient_stock", "Not enough sellable copies for this sell.", 409);
+  }
+
+  // Filter rejected, but post-read invariants now satisfy the precondition —
+  // most likely a concurrent write briefly raced us. Surface as conflict.
+  throw new SellError("insufficient_stock", "Sell could not be applied due to a concurrent write.", 409);
+}
+
+function buildOwnedCardsIncrementPipeline(cardIds: readonly string[]) {
+  return {
+    $reduce: {
+      input: cardIds,
+      initialValue: { $ifNull: ["$ownedCards", []] },
+      in: {
+        $cond: [
+          { $in: ["$$this", { $ifNull: ["$$value.cardId", []] }] },
+          {
+            $map: {
+              input: "$$value",
+              as: "entry",
+              in: {
+                $cond: [
+                  { $eq: ["$$entry.cardId", "$$this"] },
+                  { cardId: "$$entry.cardId", count: { $add: ["$$entry.count", 1] } },
+                  "$$entry",
+                ],
+              },
+            },
+          },
+          { $concatArrays: ["$$value", [{ cardId: "$$this", count: 1 }]] },
+        ],
+      },
+    },
+  };
 }
 
 async function createOrLoadStarterOpening(
@@ -389,10 +593,40 @@ async function createOrLoadStarterOpening(
   };
 }
 
+// Verified safe in slice 2: openedBoosterIds.includes(boosterId) is the
+// short-circuit left-hand of the AND, so recovery only consults deck/owned
+// state when the booster was already recorded as opened. Subsequent /sell
+// calls cannot strip openedBoosterIds, and applyStarterOpeningToPlayer's
+// duplicate-call branch returns the prior write directly rather than
+// re-running this predicate, so post-open sells do not break recovery.
 function hasAppliedStarterOpening(player: MongoPlayerDocument, boosterId: string, cardIds: string[]) {
-  const ownedCardIds = new Set(player.ownedCardIds);
+  const ownedCards = readOwnedCards(player);
   const deckIds = new Set(player.deckIds);
-  return player.openedBoosterIds.includes(boosterId) && cardIds.every((cardId) => ownedCardIds.has(cardId) && deckIds.has(cardId));
+  return player.openedBoosterIds.includes(boosterId) && cardIds.every((cardId) => getOwnedCount(ownedCards, cardId) >= 1 && deckIds.has(cardId));
+}
+
+function readOwnedCards(player: WithId<MongoPlayerDocument> | MongoPlayerDocument): OwnedCardEntry[] {
+  const playerId = "_id" in player ? player._id.toHexString() : "<unsaved>";
+
+  if (Array.isArray(player.ownedCards) && player.ownedCards.length > 0) {
+    const valid: OwnedCardEntry[] = [];
+    for (const entry of player.ownedCards) {
+      if (entry && typeof entry.cardId === "string" && entry.cardId.length > 0 && Number.isInteger(entry.count) && entry.count > 0) {
+        valid.push({ cardId: entry.cardId, count: entry.count });
+      } else {
+        console.warn("MongoPlayerProfileStore: dropping malformed ownedCards entry.", { playerId, entry });
+      }
+    }
+    return valid;
+  }
+
+  if (Array.isArray(player.ownedCardIds)) {
+    return player.ownedCardIds
+      .filter((cardId): cardId is string => typeof cardId === "string" && cardId.length > 0)
+      .map((cardId) => ({ cardId, count: 1 }));
+  }
+
+  return [];
 }
 
 function starterOpeningFilter(playerId: string, boosterId: string): Filter<MongoBoosterOpeningDocument> {
@@ -470,7 +704,7 @@ function fromMongoDocument(document: WithId<MongoPlayerDocument>): StoredPlayerP
   return {
     id: document._id.toHexString(),
     identity: document.identity,
-    ownedCardIds: document.ownedCardIds,
+    ownedCards: readOwnedCards(document),
     deckIds: document.deckIds,
     starterFreeBoostersRemaining: document.starterFreeBoostersRemaining,
     openedBoosterIds: document.openedBoosterIds,

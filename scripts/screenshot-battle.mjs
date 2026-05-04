@@ -22,6 +22,7 @@ const playerBody = {
     id: "screenshot-battle",
     identity: { mode: "guest", guestId: "screenshot-battle" },
     ownedCardIds,
+    ownedCards: ownedCardIds.map((cardId) => ({ cardId, count: 1 })),
     deckIds,
     starterFreeBoostersRemaining: 0,
     openedBoosterIds: ["neon-breach", "factory-shift"],

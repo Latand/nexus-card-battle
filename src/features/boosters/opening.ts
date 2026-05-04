@@ -34,7 +34,7 @@ export class BoosterOpeningError extends Error {
 
 export function prepareStarterBoosterOpening(input: {
   boosterId: string;
-  player: Pick<PlayerProfile, "ownedCardIds" | "openedBoosterIds" | "starterFreeBoostersRemaining">;
+  player: Pick<PlayerProfile, "ownedCards" | "openedBoosterIds" | "starterFreeBoostersRemaining">;
   rng?: RandomSource;
   cardPool?: readonly Card[];
 }): PreparedStarterBoosterOpening {
@@ -53,9 +53,10 @@ export function prepareStarterBoosterOpening(input: {
     throw new BoosterOpeningError("starter_booster_already_opened", "Starter boosters must be different.", 409);
   }
 
-  const ownedCardIds = new Set(input.player.ownedCardIds);
+  // Within-pull duplicate prevention only — cross-pull duplicates are allowed
+  // and increment the multiset count instead.
   const openedCards: Card[] = [];
-  const candidatePool = createBoosterCardPool(booster.clans, input.cardPool ?? activeCards, ownedCardIds);
+  const candidatePool = createBoosterCardPool(booster.clans, input.cardPool ?? activeCards);
 
   for (const rarity of REQUIRED_STARTER_RARITIES) {
     openedCards.push(pickRequiredRarityCard(candidatePool, rarity, openedCards, rng));
@@ -65,7 +66,7 @@ export function prepareStarterBoosterOpening(input: {
     openedCards.push(pickWeightedRarityCard(candidatePool, chooseStarterWeightedRarity(rng), openedCards, rng));
   }
 
-  validateOpeningCards(openedCards, booster.clans, input.cardPool ?? activeCards, ownedCardIds);
+  validateOpeningCards(openedCards, booster.clans, input.cardPool ?? activeCards);
 
   return {
     booster: serializeBooster(booster),
@@ -87,14 +88,14 @@ export function chooseStarterWeightedRarity(rng: RandomSource): Rarity {
   return "Legend";
 }
 
-function createBoosterCardPool(clans: readonly [string, string], cardPool: readonly Card[], ownedCardIds: Set<string>) {
+function createBoosterCardPool(clans: readonly [string, string], cardPool: readonly Card[]) {
   const clanSet = new Set<string>(clans);
   const seen = new Set<string>();
 
   return cardPool.filter((card) => {
     if (!clanSet.has(card.clan)) return false;
     if (card.clan === "C.O.R.R." || card.id.startsWith("corr-")) return false;
-    if (ownedCardIds.has(card.id) || seen.has(card.id)) return false;
+    if (seen.has(card.id)) return false;
     seen.add(card.id);
     return true;
   });
@@ -145,7 +146,7 @@ function normalizeRandom(value: number) {
   return value;
 }
 
-function validateOpeningCards(openedCards: readonly Card[], clans: readonly [string, string], cardPool: readonly Card[], ownedCardIds: Set<string>) {
+function validateOpeningCards(openedCards: readonly Card[], clans: readonly [string, string], cardPool: readonly Card[]) {
   if (openedCards.length !== STARTER_BOOSTER_CARD_COUNT) {
     throw new BoosterOpeningError("invalid_booster_opening", "Starter booster opening must contain five cards.", 500);
   }
@@ -157,7 +158,7 @@ function validateOpeningCards(openedCards: readonly Card[], clans: readonly [str
   let hasUnique = false;
 
   for (const card of openedCards) {
-    if (openedCardIds.has(card.id) || ownedCardIds.has(card.id)) {
+    if (openedCardIds.has(card.id)) {
       throw new BoosterOpeningError("invalid_booster_opening", "Booster opening contains a duplicate card.", 500);
     }
 

@@ -9,9 +9,20 @@ import {
 } from "./types";
 import { cards } from "@/features/battle/model/cards";
 import { MIN_DECK_SIZE } from "@/features/battle/model/constants";
+import { getOwnedCardIds } from "@/features/inventory/inventoryOps";
 import { computeMatchRewards, type MatchResultBucket } from "./progression";
 import { computeLevelFromXp } from "./types";
-import type { RewardSummary } from "@/features/battle/model/types";
+import type { MilestoneCardReward, RewardSummary } from "@/features/battle/model/types";
+import type { RandomSource } from "@/features/economy/milestones";
+
+export type SellErrorCode = "invalid_card_id" | "invalid_sell_count" | "insufficient_stock" | "card_in_deck";
+
+export class SellError extends Error {
+  constructor(public readonly code: SellErrorCode, message: string, public readonly status: number) {
+    super(message);
+    this.name = "SellError";
+  }
+}
 
 export type PlayerProfileStore = {
   findOrCreateByIdentity(identity: PlayerIdentity): Promise<StoredPlayerProfile>;
@@ -30,14 +41,29 @@ export type ApplyMatchRewardsInput = {
   // Absolute post-match ELO. PvE callers omit this; PvP callers pass the
   // value computed against an authoritative pre-match opponent snapshot.
   eloRating?: number;
+  // Test-mode hook: deterministic RNG for the milestone card pick. Production
+  // omits it and the store falls back to Math.random.
+  rng?: RandomSource;
+};
+
+export type ApplyMatchRewardsOutput = {
+  profile: StoredPlayerProfile;
+  // Cards granted by Op-C (milestone-card grants). Empty when no milestone
+  // crossed or when Op-C failed/skipped — Op-A and Op-B still succeed in
+  // either case.
+  milestoneCardRewards: MilestoneCardReward[];
 };
 
 export type PlayerMatchRewardsStore = PlayerProfileStore & {
-  applyMatchRewards(identity: PlayerIdentity, rewards: ApplyMatchRewardsInput): Promise<StoredPlayerProfile>;
+  applyMatchRewards(identity: PlayerIdentity, rewards: ApplyMatchRewardsInput): Promise<ApplyMatchRewardsOutput>;
 };
 
 export type PlayerAvatarStore = PlayerProfileStore & {
   setAvatarUrl(identity: PlayerIdentity, avatarUrl: string): Promise<StoredPlayerProfile>;
+};
+
+export type PlayerSellStore = PlayerProfileStore & {
+  applySellCards(identity: PlayerIdentity, cardId: string, count: number): Promise<StoredPlayerProfile>;
 };
 
 export async function handlePlayerProfilePost(request: Request, store: PlayerProfileStore) {
@@ -82,6 +108,42 @@ export async function handlePlayerAvatarPost(request: Request, store: PlayerAvat
   } catch (error) {
     return playerProfileErrorResponse(error);
   }
+}
+
+export async function handlePlayerSellPost(request: Request, store: PlayerSellStore) {
+  try {
+    const body = await readJsonObject(request);
+    const identity = parsePlayerIdentity(body.identity);
+    const cardId = parseSellCardId(body.cardId);
+    const count = parseSellCount(body.count);
+
+    const stored = await store.applySellCards(identity, cardId, count);
+
+    return Response.json(
+      { player: toPlayerProfile(stored) },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    return playerProfileErrorResponse(error);
+  }
+}
+
+function parseSellCardId(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new SellError("invalid_card_id", "cardId must be a string.", 400);
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new SellError("invalid_card_id", "cardId must not be empty.", 400);
+  }
+  return trimmed;
+}
+
+function parseSellCount(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    throw new SellError("invalid_sell_count", "count must be a positive integer.", 400);
+  }
+  return value;
 }
 
 export async function handlePlayerMatchFinishedPost(request: Request, store: PlayerMatchRewardsStore) {
@@ -136,14 +198,13 @@ export async function applyAndSummarizeMatchRewards(
     matchInfo,
   );
 
-  const persisted = toPlayerProfile(
-    await store.applyMatchRewards(identity, {
-      result: matchInfo.result,
-      deltaXp: rewards.deltaXp,
-      matchCrystals: rewards.matchCrystals,
-      ...(rewards.newTotals.eloRating !== undefined ? { eloRating: rewards.newTotals.eloRating } : {}),
-    }),
-  );
+  const applyOutput = await store.applyMatchRewards(identity, {
+    result: matchInfo.result,
+    deltaXp: rewards.deltaXp,
+    matchCrystals: rewards.matchCrystals,
+    ...(rewards.newTotals.eloRating !== undefined ? { eloRating: rewards.newTotals.eloRating } : {}),
+  });
+  const persisted = toPlayerProfile(applyOutput.profile);
 
   const persistedLevelInfo = computeLevelFromXp(persisted.totalXp);
 
@@ -151,6 +212,7 @@ export async function applyAndSummarizeMatchRewards(
     matchXp: rewards.deltaXp,
     levelProgress: levelProgressPercent(persistedLevelInfo),
     cardRewards: [],
+    milestoneCardRewards: applyOutput.milestoneCardRewards,
     deltaXp: rewards.deltaXp,
     deltaCrystals: rewards.deltaCrystals,
     ...(rewards.deltaElo !== undefined ? { deltaElo: rewards.deltaElo } : {}),
@@ -245,7 +307,7 @@ export async function handlePlayerDeckSavePost(request: Request, store: PlayerDe
     const deckIds = parseDeckIds(body.deckIds);
     const profile = await store.findOrCreateByIdentity(identity);
 
-    validateDeckSave(deckIds, profile.ownedCardIds);
+    validateDeckSave(deckIds, getOwnedCardIds(profile.ownedCards));
 
     const savedProfile = await store.saveDeck(identity, deckIds);
     return playerProfileResponse(toPlayerProfile(savedProfile));
@@ -266,6 +328,16 @@ function playerProfileResponse(player: PlayerProfile) {
 }
 
 function playerProfileErrorResponse(error: unknown) {
+  if (error instanceof SellError) {
+    return Response.json(
+      {
+        error: error.code,
+        message: error.message,
+      },
+      { status: error.status },
+    );
+  }
+
   if (error instanceof PlayerDeckValidationError) {
     return Response.json(
       {

@@ -23,8 +23,8 @@ export const PVP_XP_REWARDS = {
 } as const;
 
 export const PVP_CRYSTAL_REWARDS = {
-  win: 50,
-  draw: 20,
+  win: 10,
+  draw: 3,
   loss: 0,
 } as const;
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { postMatchFinished } from "@/features/player/profile/client";
-import type { PlayerIdentity } from "@/features/player/profile/types";
+import type { PlayerIdentity, PlayerProfile } from "@/features/player/profile/types";
 import { computeLevelFromXp } from "@/features/player/profile/types";
 import { cn } from "@/shared/lib/cn";
 import type { TelegramPlayer } from "@/shared/lib/telegram";
@@ -20,7 +20,7 @@ import {
   startNextRound,
 } from "../model/game";
 import type { EnemyMove } from "../model/game";
-import type { Card, Clash, GameState, MatchResult, Outcome, Phase, RewardSummary, Side } from "../model/types";
+import type { Card, Clash, GameState, MatchResult, Outcome, Phase, Rarity, RewardSummary, Side } from "../model/types";
 import { BattleOverlay } from "./components/BattleOverlay";
 import { Hand } from "./components/Hand";
 import { NamePlate } from "./components/ResourceCounter";
@@ -45,6 +45,7 @@ type BattleGameProps = {
   avatarUrl?: string;
   onOpenCollection?: () => void;
   onSwitchMode?: (mode: "ai" | "human") => void;
+  onPlayerUpdated?: (profile: PlayerProfile) => void;
 };
 
 type HumanMatchStatus = "idle" | "connecting" | "queued" | "matched" | "opponent_left" | "forfeit" | "error" | "closed";
@@ -122,7 +123,7 @@ type HumanRewardSummaryMessage = HumanSocketMessage & {
   payload: RewardSummary;
 };
 
-export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity, playerName, telegramPlayer, mode = "ai", avatarUrl, onOpenCollection, onSwitchMode }: BattleGameProps = {}) {
+export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity, playerName, telegramPlayer, mode = "ai", avatarUrl, onOpenCollection, onSwitchMode, onPlayerUpdated }: BattleGameProps = {}) {
   const isHumanMatch = mode === "human";
   const initialGame = useMemo(
     () => createInitialGame({ playerCollectionIds, playerDeckIds, playerName }),
@@ -374,6 +375,9 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     postMatchFinished({ identity: playerIdentity, mode: "pve", result })
       .then((response) => {
         if (cancelled) return;
+        if (Array.isArray(response.player.ownedCards)) {
+          onPlayerUpdated?.(response.player);
+        }
         setPersistedRewards(response.rewards);
         setPersistedRewardsError(null);
       })
@@ -386,7 +390,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     return () => {
       cancelled = true;
     };
-  }, [game.matchResult, game.phase, isHumanMatch, playerIdentity]);
+  }, [game.matchResult, game.phase, isHumanMatch, onPlayerUpdated, playerIdentity]);
 
   useEffect(() => {
     let startedAt = 0;
@@ -1331,6 +1335,28 @@ function RewardOverlay({
               detailTestId="reward-level-up-headline"
             />
           ) : null}
+
+          {visibleTiles.showMilestone
+            ? rewards?.milestoneCardRewards.map((milestone, index) => (
+                // Order is deterministic from milestone-table sort; cardId can
+                // repeat in one match when a small rarity bucket gets picked
+                // twice, so the index disambiguates the React key.
+                <RewardStatTile
+                  key={`${index}-${milestone.cardId}`}
+                  testId="reward-milestone-tile"
+                  icon="🃏"
+                  label="Карта-бонус"
+                  deltaText={milestone.cardName}
+                  detailText={milestoneRarityLabel(milestone.rarity)}
+                  tone="levelUp"
+                  dataAttrs={{
+                    "data-card-id": milestone.cardId,
+                    "data-rarity": milestone.rarity,
+                  }}
+                  detailTestId="reward-milestone-detail"
+                />
+              ))
+            : null}
         </div>
 
         {persistedRewardsError ? (
@@ -1549,6 +1575,13 @@ function statTileDeltaColorClass(tone: "crystal" | "elo" | "loss" | "levelUp") {
   if (tone === "crystal") return "text-[#65d7e9]";
   if (tone === "loss") return "text-[#ff8a7c]";
   return "text-[#ffe08a]";
+}
+
+function milestoneRarityLabel(rarity: Rarity) {
+  if (rarity === "Legend") return "Легенда";
+  if (rarity === "Unique") return "Унікальна";
+  if (rarity === "Rare") return "Рідкісна";
+  return "Звичайна";
 }
 
 function OpponentThinkingIndicator() {

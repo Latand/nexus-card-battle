@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+// bun runtime resolves .ts requires natively via the bun server.js start
+// command (see package.json `start`/`dev`); do not switch to plain node here.
 const { createServer } = require("node:http");
 const crypto = require("node:crypto");
 const next = require("next");
@@ -12,6 +14,7 @@ const {
   parsePlayerIdentity,
   toPlayerProfile,
 } = require("./src/features/player/profile/types.ts");
+const { getOwnedCardIds, addToInventory } = require("./src/features/inventory/inventoryOps.ts");
 const { computeLevelUpBonusForRange } = require("./src/features/player/profile/progression.ts");
 const { applyAndSummarizeMatchRewards, applyPvpMatchRewardsForBothSides } = require("./src/features/player/profile/api.ts");
 const { makeFighter } = require("./src/features/battle/model/domain/fighters.ts");
@@ -790,7 +793,7 @@ function parseSocketPlayerIdentity(value) {
 
 function validateProfileBattleLoadout(profile) {
   const deckIds = getProfileCardIds(profile.deckIds);
-  const rawOwnedCardIds = getProfileCardIds(profile.ownedCardIds);
+  const rawOwnedCardIds = getOwnedCardIdsFromProfile(profile);
   const collectionIds = unique(rawOwnedCardIds.filter((cardId) => activeCardIds.has(cardId)));
   const duplicateDeckIds = duplicateValues(deckIds);
 
@@ -822,6 +825,32 @@ function isOpen(ws) {
 function getProfileCardIds(value) {
   if (!Array.isArray(value)) return [];
   return value.filter((item) => typeof item === "string" && item.length > 0);
+}
+
+function getOwnedCardIdsFromProfile(profile) {
+  if (Array.isArray(profile?.ownedCards) && profile.ownedCards.length > 0) {
+    return getOwnedCardIds(profile.ownedCards);
+  }
+  return getProfileCardIds(profile?.ownedCardIds);
+}
+
+function parseOwnedCardsInput(ownedCards, legacyOwnedCardIds) {
+  if (Array.isArray(ownedCards)) {
+    let result = [];
+    for (const entry of ownedCards) {
+      if (!entry || typeof entry.cardId !== "string" || !entry.cardId
+        || !Number.isInteger(entry.count) || entry.count <= 0) {
+        // Test seed endpoint — log loudly so a malformed fixture surfaces in
+        // CI rather than silently producing an empty inventory.
+        console.warn("/__test/player-profile: dropping malformed ownedCards entry.", { entry });
+        continue;
+      }
+      result = addToInventory(result, entry.cardId, entry.count);
+    }
+    return result;
+  }
+
+  return getProfileCardIds(legacyOwnedCardIds).map((cardId) => ({ cardId, count: 1 }));
 }
 
 function sanitizeStringArray(value) {
@@ -987,7 +1016,7 @@ function handleTestProfileRequest(request, response) {
       const seededProfile = testPlayerProfileStore.seedProfile({
         id: sanitizeShortString(body.id, 128) || createId("test_player"),
         identity,
-        ownedCardIds: getProfileCardIds(body.ownedCardIds),
+        ownedCards: parseOwnedCardsInput(body.ownedCards, body.ownedCardIds),
         deckIds: getProfileCardIds(body.deckIds),
         starterFreeBoostersRemaining: Number.isInteger(body.starterFreeBoostersRemaining)
           ? Math.max(0, body.starterFreeBoostersRemaining)
@@ -1099,14 +1128,21 @@ function createMemoryPlayerProfileStore() {
       const xpBeforeMatch = Math.max(0, afterIncrement.totalXp - rewards.deltaXp);
       const oldLevel = computeLevelFromXp(xpBeforeMatch).level;
       const newLevel = computeLevelFromXp(afterIncrement.totalXp).level;
-      if (newLevel <= oldLevel) return afterIncrement;
+      if (newLevel <= oldLevel) return { profile: afterIncrement, milestoneCardRewards: [] };
 
       const bonus = computeLevelUpBonusForRange(oldLevel, newLevel);
-      if (bonus <= 0) return afterIncrement;
+      let latest = afterIncrement;
+      if (bonus > 0) {
+        latest = { ...afterIncrement, crystals: afterIncrement.crystals + bonus };
+        profiles[index] = latest;
+      }
 
-      const afterBonus = { ...afterIncrement, crystals: afterIncrement.crystals + bonus };
-      profiles[index] = afterBonus;
-      return afterBonus;
+      // Op-C — milestone-card grant. Test-mode store does NOT need to import
+      // the full milestones module; the milestone cards are computed inside
+      // the Mongo store path. The server-test memory store keeps Op-C empty
+      // (the e2e Playwright tests that depend on milestone tiles inject a
+      // mocked /api/player/match-finished response anyway).
+      return { profile: latest, milestoneCardRewards: [] };
     },
   };
 }

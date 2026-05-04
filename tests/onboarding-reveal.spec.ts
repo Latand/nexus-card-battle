@@ -304,6 +304,14 @@ async function fulfillOpenBooster(route: Route, boosterId: string, openingCards:
       },
       player: {
         ...player,
+        ownedCards: player.ownedCardIds.map((cardId) => ({ cardId, count: 1 })),
+        crystals: player.crystals ?? 0,
+        totalXp: player.totalXp ?? 0,
+        level: player.level ?? 1,
+        wins: player.wins ?? 0,
+        losses: player.losses ?? 0,
+        draws: player.draws ?? 0,
+        eloRating: player.eloRating ?? 1000,
         onboarding: {
           starterBoostersAvailable: player.starterFreeBoostersRemaining > 0,
           collectionReady: player.ownedCardIds.length > 0,

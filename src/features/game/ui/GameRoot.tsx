@@ -5,6 +5,7 @@ import { cards } from "@/features/battle/model/cards";
 import { BattleGame } from "@/features/battle/ui/BattleGame";
 import { RealtimeBattleGame } from "@/features/battle/ui/RealtimeBattleGame";
 import { STARTER_BOOSTER_CARD_COUNT } from "@/features/boosters/types";
+import { getOwnedCardIds } from "@/features/inventory/inventoryOps";
 import { readTelegramPhotoUrl, useTelegramAvatar } from "@/features/player/profile/avatar";
 import { fetchPlayerProfile, resolveClientPlayerIdentity, savePlayerAvatar, savePlayerDeck } from "@/features/player/profile/client";
 import { STARTER_FREE_BOOSTERS, type PlayerIdentity, type PlayerProfile } from "@/features/player/profile/types";
@@ -229,6 +230,13 @@ export function GameRoot() {
     },
     [deckReadyToPlay, ownedCardIds, profileDeckIds],
   );
+  const handleBattlePlayerUpdated = useCallback((nextProfile: PlayerProfile) => {
+    const nextOwnedCardIds = getOwnedCardIdsForProfile(nextProfile, allCardIds);
+    if (!deckIds.every((cardId) => nextOwnedCardIds.includes(cardId))) return;
+
+    lastConfirmedDeckIdsRef.current = getConfirmedDeckIds(nextProfile, allCardIds);
+    setPlayerProfile(nextProfile);
+  }, [allCardIds, deckIds]);
   const retryProfileLoad = useCallback(() => {
     deckTouchedRef.current = false;
     setStarterDeckReadyVisible(false);
@@ -288,6 +296,7 @@ export function GameRoot() {
             avatarUrl={persistedAvatarUrl}
             onOpenCollection={() => setScreen("collection")}
             onSwitchMode={(nextMode) => setBattleMode(nextMode)}
+            onPlayerUpdated={handleBattlePlayerUpdated}
           />
         ) : (
           <BattleGame
@@ -298,6 +307,7 @@ export function GameRoot() {
             avatarUrl={persistedAvatarUrl}
             onOpenCollection={() => setScreen("collection")}
             onSwitchMode={(nextMode) => setBattleMode(nextMode)}
+            onPlayerUpdated={handleBattlePlayerUpdated}
           />
         )}
         <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
@@ -357,15 +367,18 @@ export function GameRoot() {
     >
       <CollectionDeckScreen
         collectionIds={ownedCardIds}
+        ownedCards={playerProfile?.ownedCards ?? []}
         deckIds={deckIds}
         profileStatus={profileStatus}
         profileIdentityMode={playerIdentity?.mode}
-        profileOwnedCardCount={playerProfile?.ownedCardIds.length ?? 0}
+        profileOwnedCardCount={ownedCardIds.length}
         profileDeckCount={playerProfile?.deckIds.length ?? 0}
         deckSource={deckSource}
         deckSaveStatus={deckSaveStatus}
         deckReadyToPlay={deckReadyToPlay}
         starterFreeBoostersRemaining={starterFreeBoostersRemaining}
+        playerIdentity={playerIdentity}
+        onPlayerUpdated={setPlayerProfile}
         onDeckChange={handleDeckChange}
         onPlay={handleSavedDeckPlay}
       />
@@ -394,7 +407,7 @@ function HudShell({
   }
 
   return (
-    <div className="md:flex md:min-h-screen md:items-stretch">
+    <div className="min-[1121px]:flex min-[1121px]:min-h-screen min-[1121px]:items-stretch">
       <PlayerHud
         profile={profile}
         playerName={playerName}
@@ -402,7 +415,7 @@ function HudShell({
         canPlay={canPlay}
         onPlay={onPlay}
       />
-      <div className="md:min-w-0 md:flex-1">{children}</div>
+      <div className="min-[1121px]:min-w-0 min-[1121px]:flex-1">{children}</div>
     </div>
   );
 }
@@ -563,12 +576,12 @@ function TelegramLandscapeOverlay({ active }: { active: boolean }) {
 }
 
 function getOwnedCardIdsForProfile(profile: PlayerProfile | null, allCardIds: string[]) {
-  if (!profile || profile.ownedCardIds.length === 0) return [];
+  if (!profile) return [];
+  const profileOwnedCardIds = getOwnedCardIds(profile.ownedCards);
+  if (profileOwnedCardIds.length === 0) return [];
 
   const knownCards = new Set(allCardIds);
-  const ownedCardIds = unique(profile.ownedCardIds).filter((cardId) => knownCards.has(cardId));
-
-  return ownedCardIds;
+  return unique(profileOwnedCardIds).filter((cardId) => knownCards.has(cardId));
 }
 
 function getDeckIdsForProfile(profile: PlayerProfile | null, collectionIds: string[]) {
