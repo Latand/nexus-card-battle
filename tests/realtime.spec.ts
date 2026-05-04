@@ -71,6 +71,34 @@ test("matches direct PvP clients with saved profile decks", async ({ baseURL, re
   second.close();
 });
 
+test("assigns generated names to anonymous PvP sessions and keeps Telegram names authoritative", async ({ baseURL, request }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const anonymousIdentity = testIdentity("generated-name-anonymous");
+  const telegramIdentity = testIdentity("generated-name-telegram");
+  const anonymousProfile = await seedRealtimeProfile(request, anonymousIdentity);
+  const telegramProfile = await seedRealtimeProfile(request, telegramIdentity);
+  const anonymous = await connectRealtimeClient(wsUrl, "ignored", anonymousProfile.deckIds, {
+    identity: anonymousIdentity,
+    user: null,
+  });
+  const telegram = await connectRealtimeClient(wsUrl, "ignored", telegramProfile.deckIds, {
+    identity: telegramIdentity,
+    user: { telegramId: "445566", name: "@telegram_duelist" },
+  });
+
+  const anonymousSession = await anonymous.waitFor("session") as unknown as { playerName?: string };
+  const anonymousReady = await anonymous.waitFor("match_ready") as unknown as { playerId: string; players: Record<string, { name?: string }> };
+  const telegramReady = await telegram.waitFor("match_ready") as unknown as { playerId: string; players: Record<string, { name?: string }> };
+
+  expect(anonymousSession.playerName).toMatch(/^\S+ \S+$/);
+  expect(anonymousSession.playerName).not.toBe("Гравець");
+  expect(anonymousReady.players[anonymousReady.playerId]?.name).toBe(anonymousSession.playerName);
+  expect(telegramReady.players[telegramReady.playerId]?.name).toBe("@telegram_duelist");
+
+  anonymous.close();
+  telegram.close();
+});
+
 test("matches valid saved decks while filtering stale owned cards out of PvP collection", async ({ baseURL, request }) => {
   const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
   const staleOwnedIdentity = testIdentity("stale-owned-valid-deck");
@@ -722,7 +750,11 @@ async function connectRealtimeClient(
   url: string,
   name: string,
   deckIds: string[] | undefined,
-  options: { collectionIds?: string[]; identity?: PlayerIdentity } = {},
+  options: {
+    collectionIds?: string[];
+    identity?: PlayerIdentity;
+    user?: { telegramId?: string; name?: string; username?: string } | null;
+  } = {},
 ) {
   const socket = new WebSocket(url);
   const messages: RealtimeMessage[] = [];
@@ -747,7 +779,7 @@ async function connectRealtimeClient(
       ...(deckIds ? { deckIds } : {}),
       ...(options.collectionIds ? { collectionIds: options.collectionIds } : deckIds ? { collectionIds: deckIds } : {}),
       identity: options.identity,
-      user: { name },
+      ...(options.user === null ? {} : { user: options.user ?? { name } }),
     }),
   );
 

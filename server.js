@@ -49,6 +49,34 @@ const TURN_SECONDS = Number.parseInt(process.env.PVP_TURN_SECONDS || "75", 10);
 const TURN_TIMEOUT_GRACE_SECONDS = Number.parseInt(process.env.PVP_TURN_TIMEOUT_GRACE_SECONDS || "10", 10);
 const MATCHMAKING_TICK_MS = Number.parseInt(process.env.PVP_MATCHMAKING_TICK_MS || "5000", 10);
 const activeCardIds = new Set(cards.map((card) => card.id));
+const GUEST_NAME_ADJECTIVES = [
+  "Веселий",
+  "Сміливий",
+  "Хитрий",
+  "Швидкий",
+  "Зоряний",
+  "Бадьорий",
+  "Мудрий",
+  "Дикий",
+  "Гучний",
+  "Сяйний",
+  "Впертий",
+  "Таємний",
+];
+const GUEST_NAME_NOUNS = [
+  "Панда",
+  "Фенікс",
+  "Єнот",
+  "Краб",
+  "Дракон",
+  "Бобер",
+  "Сокіл",
+  "Кіт",
+  "Бізон",
+  "Лемур",
+  "Вомбат",
+  "Лис",
+];
 
 app.prepare().then(() => {
   requestHandler = (request, response) => {
@@ -75,6 +103,7 @@ app.prepare().then(() => {
       ws,
       alive: true,
       user: null,
+      guestName: createGuestSessionName(),
       queuedDeckIds: [],
       queuedCollectionIds: [],
       matchId: null,
@@ -82,7 +111,7 @@ app.prepare().then(() => {
 
     sessions.set(session.id, session);
     onlinePresence.add(session);
-    send(session, { type: "session", clientId: session.id });
+    send(session, { type: "session", clientId: session.id, playerName: session.guestName });
     broadcastOnlineCount();
 
     ws.on("pong", () => {
@@ -922,7 +951,15 @@ function sanitizeShortString(value, maxLength) {
 }
 
 function getSessionDisplayName(session) {
-  return session.user?.name || session.user?.username || "Гравець";
+  return session.user?.name || session.user?.username || session.guestName || "Гравець";
+}
+
+function createGuestSessionName() {
+  return `${randomNamePart(GUEST_NAME_ADJECTIVES)} ${randomNamePart(GUEST_NAME_NOUNS)}`;
+}
+
+function randomNamePart(parts) {
+  return parts[crypto.randomInt(parts.length)];
 }
 
 function selectBattleHandIds(deckIds) {

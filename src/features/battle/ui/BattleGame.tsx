@@ -140,6 +140,8 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const [roundWinnerCardIds, setRoundWinnerCardIds] = useState<ReadonlySet<string>>(() => new Set());
   const [humanStatus, setHumanStatus] = useState<HumanMatchStatus>(isHumanMatch ? "connecting" : "idle");
   const [humanMessage, setHumanMessage] = useState("");
+  const [humanSessionName, setHumanSessionName] = useState("");
+  const [humanOnlineCount, setHumanOnlineCount] = useState<number | null>(null);
   const [matchInfo, setMatchInfo] = useState<HumanMatchInfo | null>(null);
   const [persistedRewards, setPersistedRewards] = useState<RewardSummary | null>(null);
   const [persistedRewardsError, setPersistedRewardsError] = useState<string | null>(null);
@@ -156,6 +158,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const pendingRoundResolvedRef = useRef(new Map<number, HumanRoundResolvedMessage>());
   const resolvingHumanRoundRef = useRef<number | null>(null);
   const humanMessageHandlerRef = useRef<(message: HumanSocketMessage) => void>(() => {});
+  const humanSessionNameRef = useRef("");
 
   useEffect(() => {
     gameRef.current = game;
@@ -183,9 +186,12 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       if (disposed) return;
       setHumanStatus("connecting");
       setMatchInfo(null);
+      setHumanSessionName("");
+      setHumanOnlineCount(null);
     }, 0);
     socketRef.current = socket;
     remoteFirstMoveRef.current = null;
+    humanSessionNameRef.current = "";
 
     socket.addEventListener("open", () => {
       sendSocketMessage(socket, {
@@ -255,6 +261,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const showBattle = pending !== null && ["battle_intro", "damage_apply"].includes(game.phase);
   const arenaText = getArenaText(game, activeClash, verdict);
   const humanBlockingOverlay = isHumanMatch && humanStatus !== "matched";
+  const humanDisplayName = (playerName?.trim() || humanSessionName).trim();
   const boardHidden = !["player_turn", "card_preview", "opponent_turn"].includes(game.phase);
   const activeHand = getActiveHand(game.phase);
   const enemySelectedCardId = activeClash?.enemyCard.id ?? enemyLockedMove?.card.id;
@@ -503,6 +510,21 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   }
 
   function handleHumanSocketMessage(message: HumanSocketMessage) {
+    if (message.type === "session") {
+      const nextSessionName = sanitizeHumanSessionName(message.playerName);
+      if (nextSessionName) {
+        humanSessionNameRef.current = nextSessionName;
+        setHumanSessionName(nextSessionName);
+      }
+      return;
+    }
+
+    if (message.type === "online_count") {
+      const nextOnlineCount = normalizeOnlineCount(message.count);
+      if (nextOnlineCount !== null) setHumanOnlineCount(nextOnlineCount);
+      return;
+    }
+
     if (message.type === "queued") {
       setHumanStatus("queued");
       setHumanMessage("");
@@ -518,7 +540,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
         return;
       }
 
-      const nextGame = createHumanGame(nextMatch, playerName);
+      const nextGame = createHumanGame(nextMatch, playerName || humanSessionNameRef.current);
       const firstCard = getAvailableCards(nextGame.player)[0];
 
       clearHumanMessageBuffers();
@@ -824,7 +846,14 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       />
 
       {humanBlockingOverlay ? (
-        <HumanMatchOverlay status={humanStatus} message={humanMessage} onOpenCollection={onOpenCollection} onRetryMatch={restartHumanQueue} />
+        <HumanMatchOverlay
+          status={humanStatus}
+          message={humanMessage}
+          playerName={humanDisplayName}
+          onlineCount={humanOnlineCount}
+          onOpenCollection={onOpenCollection}
+          onRetryMatch={restartHumanQueue}
+        />
       ) : null}
 
       {!humanBlockingOverlay && !boardHidden ? (
@@ -1089,20 +1118,35 @@ function schedule(callback: () => void, delay: number) {
   return () => window.clearTimeout(timer);
 }
 
+function sanitizeHumanSessionName(value: unknown) {
+  if (typeof value !== "string") return "";
+  return value.trim().slice(0, 48);
+}
+
+function normalizeOnlineCount(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
+  return Math.floor(value);
+}
+
 function HumanMatchOverlay({
   status,
   message,
+  playerName,
+  onlineCount,
   onOpenCollection,
   onRetryMatch,
 }: {
   status: HumanMatchStatus;
   message: string;
+  playerName: string;
+  onlineCount: number | null;
   onOpenCollection?: () => void;
   onRetryMatch?: () => void;
 }) {
   const title = getHumanOverlayTitle(status);
   const subtitle = message || getHumanOverlaySubtitle(status);
   const active = status === "connecting" || status === "queued";
+  const displayName = playerName || "Гравець";
 
   return (
     <section className="fixed inset-0 z-40 grid place-items-center bg-[#05080b]/78 p-3 backdrop-blur-[4px]" data-testid="human-match-overlay">
@@ -1118,6 +1162,26 @@ function HumanMatchOverlay({
             {title}
           </strong>
           <span className="max-w-[440px] text-sm font-black uppercase tracking-[0.04em] text-[#d9ceb2]">{subtitle}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-left max-[460px]:grid-cols-1">
+          <div className="rounded-md border border-[#ffe08a]/30 bg-[#17120a]/78 px-3 py-2" data-testid="human-match-session-name">
+            <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-[#a99664]">Ім&apos;я сесії</span>
+            <b className="block truncate text-sm font-black uppercase tracking-[0.03em] text-[#fff0ad]">{displayName}</b>
+          </div>
+          <div
+            className="rounded-md border border-[#65d7e9]/30 bg-[#07161b]/78 px-3 py-2"
+            data-testid="human-match-online"
+            data-online-count={onlineCount === null ? "" : String(onlineCount)}
+          >
+            <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-[#8db6bf]">Онлайн зараз</span>
+            {onlineCount === null ? (
+              <b className="block text-sm font-black uppercase tracking-[0.03em] text-[#6f7f82]">...</b>
+            ) : (
+              <b className="block text-sm font-black uppercase tracking-[0.03em] text-[#d9fbff]" data-testid="human-match-online-count">
+                {onlineCount} онлайн
+              </b>
+            )}
+          </div>
         </div>
         {onRetryMatch && ["opponent_left", "forfeit", "error", "closed"].includes(status) ? (
           <button

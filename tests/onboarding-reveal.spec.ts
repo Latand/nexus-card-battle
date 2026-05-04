@@ -146,6 +146,8 @@ test("starts PvP matchmaking from the ten-card starter deck-ready state", async 
   await page.getByTestId("starter-deck-ready-play-human").click();
   await expect(page.getByTestId("human-match-overlay")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId("human-match-overlay")).toContainText("Пошук суперника", { timeout: 10_000 });
+  await expect(page.getByTestId("human-match-session-name")).not.toContainText("Гравець", { timeout: 10_000 });
+  await expect(page.getByTestId("human-match-online-count")).toBeVisible({ timeout: 10_000 });
 });
 
 async function setupStarterOnboarding(page: Page, guestId = identity.guestId) {
