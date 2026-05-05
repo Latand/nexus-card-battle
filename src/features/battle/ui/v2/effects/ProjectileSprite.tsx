@@ -49,3 +49,5 @@ export function ProjectileSprite({
     />
   );
 }
+
+export default ProjectileSprite;

@@ -18,6 +18,7 @@ import { LobbyChatDrawer } from "@/shared/ui/v2/LobbyChatDrawer";
 import { TopBar } from "@/shared/ui/v2/TopBar";
 import type { TelegramPlayer } from "@/shared/lib/telegram";
 import { PLAYER_DECK_SIZE } from "../model/randomDeck";
+import { BoosterShopModal } from "./v2/collection/BoosterShopModal";
 import { CollectionDeckScreen } from "./v2/collection/CollectionDeckScreen";
 import { StarterBoosterOnboarding } from "./v2/onboarding/StarterBoosterOnboarding";
 
@@ -344,9 +345,11 @@ export function GameRoot() {
       <HudShell
         profile={playerProfile}
         playerName={playerName}
+        playerIdentity={playerIdentity}
         liveTelegramAvatarUrl={liveTelegramAvatarUrl}
         canPlay={hudCanPlay}
         onPlay={handlePlayFromHud}
+        onPlayerUpdated={handleStarterProfileChange}
       >
         <StarterBoosterOnboarding
           identity={playerIdentity}
@@ -367,9 +370,11 @@ export function GameRoot() {
     <HudShell
       profile={playerProfile}
       playerName={playerName}
+      playerIdentity={playerIdentity}
       liveTelegramAvatarUrl={liveTelegramAvatarUrl}
       canPlay={hudCanPlay}
       onPlay={handlePlayFromHud}
+      onPlayerUpdated={setPlayerProfile}
     >
       <CollectionDeckScreen
         collectionIds={ownedCardIds}
@@ -396,22 +401,27 @@ export function GameRoot() {
 function HudShell({
   profile,
   playerName,
+  playerIdentity,
   liveTelegramAvatarUrl,
   canPlay,
   onPlay,
+  onPlayerUpdated,
   children,
 }: {
   profile: PlayerProfile | null;
   playerName?: string;
+  playerIdentity: PlayerIdentity | null;
   liveTelegramAvatarUrl: string | null;
   canPlay: boolean;
   onPlay: () => void;
+  onPlayerUpdated?: (profile: PlayerProfile) => void;
   children: React.ReactNode;
 }) {
   const router = useRouter();
   const onlineCount = useOnlineCount();
   const [profileOpen, setProfileOpen] = useState(false);
   const [lobbyOpen, setLobbyOpen] = useState(false);
+  const [boosterShopOpen, setBoosterShopOpen] = useState(false);
 
   if (!profile) {
     return <AtmosphericBackground>{children}</AtmosphericBackground>;
@@ -435,11 +445,20 @@ function HudShell({
           canPlay={canPlay}
           onPlay={onPlay}
           onAvatarClick={() => setProfileOpen(true)}
+          onOpenBoosters={playerIdentity ? () => setBoosterShopOpen(true) : undefined}
           onlineCount={onlineCount}
         />
         <div className="min-w-0 flex-1">{children}</div>
       </div>
       <LobbyBubble count={onlineCount ?? 0} onClick={() => setLobbyOpen(true)} />
+      <BoosterShopModal
+        open={boosterShopOpen}
+        onClose={() => setBoosterShopOpen(false)}
+        playerIdentity={playerIdentity}
+        profileCrystals={profile.crystals}
+        onProfileChange={onPlayerUpdated}
+        onCrystalsUpdated={(next) => onPlayerUpdated?.({ ...profile, crystals: next })}
+      />
       <ProfileModal
         open={profileOpen}
         onClose={() => setProfileOpen(false)}

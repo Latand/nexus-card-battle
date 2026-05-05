@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { postMatchFinished } from "@/features/player/profile/client";
+import { useLobbyChat } from "@/features/presence/client";
 import { readStableSessionName, rememberStableSessionName } from "@/features/presence/sessionName";
 import type { PlayerIdentity, PlayerProfile } from "@/features/player/profile/types";
 import { computeLevelFromXp } from "@/features/player/profile/types";
@@ -21,20 +22,16 @@ import {
   startNextRound,
 } from "../model/game";
 import type { EnemyMove } from "../model/game";
-import type { Card, Clash, GameState, MatchResult, Outcome, Phase, Rarity, RewardSummary, Side } from "../model/types";
-import { BattleOverlay } from "./components/BattleOverlay";
-import { Hand } from "./components/Hand";
-import { NamePlate } from "./components/ResourceCounter";
-import { SceneBackground } from "./components/SceneBackground";
-import { SelectionOverlay } from "./components/SelectionOverlay";
+import type { Card, Clash, GameState, MatchResult, Outcome, Phase, RewardSummary, Side } from "../model/types";
+import type { BattleHandCard } from "./v2/molecules/BattleHand";
+import type { CenterStageVariant } from "./v2/molecules/CenterStage";
+import { BattleArena, type BattleArenaClash, type BattleArenaSplash } from "./v2/screens/BattleArena";
+import { MatchEndOverlay, type MatchEndRewards } from "./v2/organisms/MatchEndOverlay";
 import {
-  DEFAULT_REWARD_AVATAR_URL,
-  computeXpProgress,
-  resolveRewardAvatarUrl,
-  resolveRewardTitle,
-  selectVisibleTiles,
-  type RewardTitle,
-} from "./rewardOverlayPresenter";
+  MatchmakingScreen,
+  type MatchmakingChatMessage,
+  type MatchmakingStatus,
+} from "./v2/screens/MatchmakingScreen";
 
 type BattleGameProps = {
   playerCollectionIds?: string[];
@@ -148,6 +145,13 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const [selectionOpen, setSelectionOpen] = useState(false);
   const [turnSeconds, setTurnSeconds] = useState(TURN_SECONDS);
   const [roundWinnerCardIds, setRoundWinnerCardIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [hudDamageFlash, setHudDamageFlash] = useState<"player" | "enemy" | null>(null);
+  // Per-projectile HUD HP override: while ClashOverlay's barrage super-phase
+  // runs, each projectile impact decrements one HP pill in the persistent
+  // BattleHud. The actual game state is updated atomically via applyOutcome
+  // once the overlay calls onDone — this override is purely visual glue.
+  const [hudHpOverride, setHudHpOverride] = useState<{ player?: number; enemy?: number }>({});
+  const [clashOverlayDone, setClashOverlayDone] = useState(false);
   const [humanStatus, setHumanStatus] = useState<HumanMatchStatus>(isHumanMatch ? "connecting" : "idle");
   const [humanMessage, setHumanMessage] = useState("");
   const [humanSessionId, setHumanSessionId] = useState("");
@@ -155,6 +159,10 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const [humanOnlineCount, setHumanOnlineCount] = useState<number | null>(null);
   const [humanChatMessages, setHumanChatMessages] = useState<HumanChatMessage[]>([]);
   const [humanChatDraft, setHumanChatDraft] = useState("");
+  // Lobby chat for the matchmaking screen — at queue time there is no opponent
+  // yet, so we surface the global lobby websocket chat instead of per-match PvP.
+  const [lobbyChatDraft, setLobbyChatDraft] = useState("");
+  const lobbyChat = useLobbyChat(playerName);
   const [matchInfo, setMatchInfo] = useState<HumanMatchInfo | null>(null);
   const [persistedRewards, setPersistedRewards] = useState<RewardSummary | null>(null);
   const [persistedRewardsError, setPersistedRewardsError] = useState<string | null>(null);
@@ -278,10 +286,8 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const previewDamage = preview.damage + (damageBoost ? 2 : 0);
   const verdict = useMemo(() => getVerdict(game.matchResult), [game.matchResult]);
   const showBattle = pending !== null && ["battle_intro", "damage_apply"].includes(game.phase);
-  const arenaText = getArenaText(game, activeClash, verdict);
   const humanBlockingOverlay = isHumanMatch && humanStatus !== "matched";
   const humanDisplayName = (playerName?.trim() || humanSessionName).trim();
-  const boardHidden = !["player_turn", "card_preview", "opponent_turn"].includes(game.phase);
   const activeHand = getActiveHand(game.phase);
   const enemySelectedCardId = activeClash?.enemyCard.id ?? enemyLockedMove?.card.id;
   const enemyPlayedCardId = pending?.clash.enemyCard.id ?? game.round.enemyCardId;
@@ -358,22 +364,41 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     }
 
     if (game.phase === "battle_intro") {
-      return schedule(() => setGame((value) => ({ ...value, phase: "damage_apply" })), PHASE_TIMING_MS.battle_intro);
+      // Overlay drives its own end-of-fight signal; flip into damage_apply
+      // immediately so the same overlay keeps rendering through both
+      // super-phases (card combat + projectile barrage). The previous
+      // fixed-duration intro is gone — the overlay owns its timeline.
+      setGame((value) => (value.phase === "battle_intro" ? { ...value, phase: "damage_apply" } : value));
+      return;
     }
 
     if (game.phase === "damage_apply" && pending) {
-      return schedule(() => {
-        const applied = applyOutcome(game, pending);
-        const nextCard = getAvailableCards(applied.player)[0];
+      if (!clashOverlayDone) return;
 
-        if (nextCard) setSelectedId(nextCard.id);
-        setEnergy(0);
-        setDamageBoost(false);
-        setPending(null);
-        resolvingHumanRoundRef.current = null;
-        setEnemyLockedMove(null);
-        setGame(applied);
-      }, 1200 + pending.clash.damage * 220);
+      const applied = applyOutcome(game, pending);
+      const nextCard = getAvailableCards(applied.player)[0];
+
+      if (nextCard) setSelectedId(nextCard.id);
+      setEnergy(0);
+      setDamageBoost(false);
+      setPending(null);
+      setHudHpOverride({});
+      setClashOverlayDone(false);
+      resolvingHumanRoundRef.current = null;
+      setEnemyLockedMove(null);
+
+      // Owner spec (Issue 4): when the match has ended, skip the battlefield
+      // render with HP=0 and jump straight to reward_summary (which opens
+      // MatchEndOverlay). Owner spec (Issue 3): otherwise advance directly
+      // into round_intro so the splash covers the cards BEFORE the new round
+      // is visible — the legacy `round_result` recap was rendering the new
+      // hand for ~2300ms before the splash kicked in.
+      if (applied.matchResult) {
+        setGame({ ...applied, phase: "reward_summary" });
+      } else {
+        setGame(startNextRound(applied));
+      }
+      return;
     }
 
     if (game.phase === "round_result") {
@@ -383,7 +408,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     if (game.phase === "match_result") {
       return schedule(() => setGame((value) => ({ ...value, phase: "reward_summary" })), PHASE_TIMING_MS.match_result);
     }
-  }, [game, humanStatus, isHumanMatch, pending]);
+  }, [game, humanStatus, isHumanMatch, pending, clashOverlayDone]);
 
   useEffect(() => {
     if (isHumanMatch) return;
@@ -881,181 +906,246 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setGame((value) => (value.phase === "card_preview" ? { ...value, phase: "player_turn" } : value));
   }
 
+  // ── v2 hand prop construction (kept inline so existing state names flow through) ──
+  const playerHandCards: BattleHandCard[] = game.player.hand.map((card) => ({
+    card,
+    used: card.used,
+    selectable: !locked && !card.used,
+    selected: selectedId === card.id,
+    medal: card.used && roundWinnerCardIds.has(card.id),
+    played: card.id === game.round.playerCardId,
+  }));
+  const enemyHandCards: BattleHandCard[] = game.enemy.hand.map((card) => ({
+    card,
+    used: card.used,
+    selected: enemySelectedCardId === card.id,
+    medal: card.used && roundWinnerCardIds.has(card.id),
+    played: card.id === enemyPlayedCardId,
+  }));
+  const arenaMode: "ai" | "pvp" = mode === "human" ? "pvp" : "ai";
+  const centerVariant = pickCenterStageVariant(game, verdict, arenaMode);
+
+  // Splash drives the cover overlay (replaces legacy PhaseOverlay).
+  const splash: BattleArenaSplash | undefined = (() => {
+    if (game.phase === "match_intro") {
+      return { phase: "match_intro", opponentName: game.enemy.name, mode: arenaMode };
+    }
+    if (game.phase === "round_intro") {
+      return { phase: "round_intro", round: game.round.round };
+    }
+    // match_result splash intentionally suppressed — MatchEndOverlay (which
+    // opens at reward_summary) provides the verdict header. The legacy neon
+    // "ПЕРЕМОГА" cover that previously rendered here is gone by design.
+    return undefined;
+  })();
+
+  // Clash overlay payload is sourced from the in-flight `pending` outcome
+  // (the resolved clash hasn't been applied to game state yet).
+  const arenaClash: BattleArenaClash | undefined = showBattle && pending
+    ? {
+        playerCard: pending.clash.playerCard,
+        enemyCard: pending.clash.enemyCard,
+        playerAttack: pending.clash.playerAttack,
+        enemyAttack: pending.clash.enemyAttack,
+        playerDamage: pending.clash.winner === "player" ? pending.clash.damage : 0,
+        enemyDamage: pending.clash.winner === "enemy" ? pending.clash.damage : 0,
+        playerEnergy: pending.clash.playerEnergy,
+        enemyEnergy: pending.clash.enemyEnergy,
+        winner: pending.clash.winner,
+      }
+    : undefined;
+
+  // Reward content for MatchEndOverlay — uses persisted summary when available,
+  // falling back to the in-game rewards stub for AI matches that haven't yet
+  // hit the network.
+  const matchEndOpen = game.phase === "reward_summary";
+  const matchEndVariant: "victory" | "defeat" =
+    game.matchResult === "player" ? "victory" : "defeat";
+  const matchEndRewards = mapRewardsForMatchEnd(persistedRewards ?? game.rewards);
+
+  const matchmakingChatMessages: MatchmakingChatMessage[] = lobbyChat.chatMessages.map((message) => ({
+    id: message.id,
+    authorId: message.authorId,
+    authorName: message.authorName,
+    text: message.text,
+    ts: message.createdAt,
+  }));
+  const sendLobbyChatDraft = () => {
+    if (!lobbyChat.sendMessage(lobbyChatDraft)) return;
+    setLobbyChatDraft("");
+  };
+  const matchmakingStatus: MatchmakingStatus = mapHumanStatusToMatchmaking(humanStatus);
+  const matchmakingDeckSize = playerDeckIds?.length ?? game.player.hand.length;
+
+  // Hand select callback — opens card pick preview when allowed.
+  const onSelectHandCard = (cardId: string) => {
+    const card = game.player.hand.find((entry) => entry.id === cardId);
+    if (!card || locked || card.used) return;
+    setSelectedId(card.id);
+    setSelectionOpen(true);
+    setGame((value) => ({
+      ...value,
+      phase: "card_preview",
+      round: { ...value.round, playerCardId: card.id },
+    }));
+  };
+
   return (
-    <main className="battle-screen relative isolate min-h-screen w-screen overflow-hidden bg-[#05080b] px-[min(14px,1.4vw)] py-2 text-[#f8eed8]">
-      <SceneBackground />
-      <div
-        className={cn(
-          "pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_center,rgba(255,35,35,0.32),rgba(255,35,35,0.12)_42%,transparent_72%),linear-gradient(180deg,rgba(140,12,12,0.34),rgba(20,4,4,0.12))] opacity-0 mix-blend-screen transition-opacity duration-700",
-          turnWarningActive && "opacity-100",
-        )}
-        data-testid="turn-warning-overlay"
-        aria-hidden="true"
-      />
-
+    <main
+      data-testid="battle-game"
+      data-mode={arenaMode}
+      className={cn(
+        "battle-screen relative isolate min-h-screen w-screen overflow-hidden text-[#f8eed8]",
+      )}
+    >
       {humanBlockingOverlay ? (
-        <HumanMatchOverlay
-          status={humanStatus}
-          message={humanMessage}
-          playerName={humanDisplayName}
+        <MatchmakingScreen
+          status={matchmakingStatus}
+          deckSize={matchmakingDeckSize}
+          elo={playerEloRating ?? 0}
           onlineCount={humanOnlineCount}
-          sessionId={humanSessionId}
-          chatMessages={humanChatMessages}
-          chatDraft={humanChatDraft}
-          onChatDraftChange={setHumanChatDraft}
-          onSendChatMessage={sendHumanChatMessage}
-          onOpenCollection={onOpenCollection}
-          onRetryMatch={restartHumanQueue}
+          waitingSeconds={Math.max(0, TURN_SECONDS - turnSeconds)}
+          playerName={humanDisplayName}
+          statusMessage={humanMessage || undefined}
+          chat={{
+            messages: matchmakingChatMessages,
+            draft: lobbyChatDraft,
+            sessionId: lobbyChat.sessionId,
+            onDraftChange: setLobbyChatDraft,
+            onSend: sendLobbyChatDraft,
+          }}
+          onCancel={onOpenCollection ?? (() => {})}
+          onRetry={restartHumanQueue}
         />
-      ) : null}
-
-      {!humanBlockingOverlay && !boardHidden ? (
-      <div className="battle-board relative z-10">
-      <section className={topBarClass()}>
-        <div
-          className={barButtonClass(
-            turnWarningActive
-              ? "bg-[linear-gradient(180deg,rgba(128,18,18,0.98),rgba(44,5,5,0.86))] text-[#ffe5df] shadow-[inset_0_0_22px_rgba(255,51,45,0.42),0_0_18px_rgba(255,51,45,0.28)]"
-              : undefined,
-          )}
-          data-testid="turn-timer"
-        >
-          ⌛ {turnSeconds} сек
-        </div>
-        <NamePlate name={game.enemy.name} subtitle={game.enemy.title} energy={game.enemy.energy} health={game.enemy.hp} statuses={game.enemy.statuses} />
-        <button className={barButtonClass("border-l border-white/10 hover:bg-[linear-gradient(180deg,#ffe08a,#c98326)] hover:text-[#15100a]")} type="button" onClick={onOpenCollection}>
-          Колоди
-        </button>
-      </section>
-
-      <Hand
-        cards={game.enemy.hand}
-        fighter={game.enemy}
-        opponent={game.player}
-        owner="enemy"
-        active={activeHand === "enemy"}
-        selectedId={enemySelectedCardId}
-        playedCardId={enemyPlayedCardId}
-        winnerCardIds={roundWinnerCardIds}
-      />
-
-      <section
-        className={cn(
-          "battle-arena-panel",
-          "relative z-10 mx-auto grid w-[min(980px,100%)] items-center gap-3 p-0",
-          "mt-1 min-h-[132px] grid-cols-[minmax(260px,680px)] justify-center",
-          "max-[760px]:mt-3 max-[760px]:grid-cols-1",
-        )}
-      >
-        <div className="battle-arena-strip relative grid min-h-[120px] place-items-center gap-3 overflow-hidden bg-[linear-gradient(90deg,transparent,rgba(0,0,0,0.55)_12%_88%,transparent),radial-gradient(circle_at_center,rgba(255,214,73,0.14),transparent_44%)] max-[760px]:order-2 max-[760px]:min-h-[100px]">
-          <strong className="relative z-[1] min-w-[210px] px-[18px] text-center text-[clamp(30px,4.1vw,56px)] font-black uppercase leading-none text-[#ffd742] [font-family:Impact,Arial_Narrow,sans-serif] [text-shadow:0_0_16px_rgba(255,204,51,0.8),0_4px_0_rgba(0,0,0,0.75)]" data-testid="round-status">
-            {getPhaseTitle(game.phase, game.first, verdict)}
-          </strong>
-
-          {game.phase === "opponent_turn" ? <OpponentThinkingIndicator /> : null}
-
-          <p className="relative z-[1] max-w-[520px] px-2 text-center text-sm font-extrabold uppercase tracking-[0.03em] text-[#f4e7c4]">{arenaText}</p>
-        </div>
-      </section>
-
-      <Hand
-        cards={game.player.hand}
-        fighter={game.player}
-        opponent={game.enemy}
-        owner="player"
-        active={activeHand === "player"}
-        selectedId={selectedId}
-        winnerCardIds={roundWinnerCardIds}
-        onPick={(card) => {
-          if (!locked && !card.used) {
-            setSelectedId(card.id);
-            setSelectionOpen(true);
-            setGame((value) => ({
-              ...value,
-              phase: "card_preview",
-              round: { ...value.round, playerCardId: card.id },
-            }));
+      ) : (
+        <BattleArena
+          game={game}
+          player={
+            hudHpOverride.player !== undefined
+              ? { ...game.player, hp: hudHpOverride.player }
+              : game.player
           }
-        }}
-        disabled={locked}
-      />
-
-      <section className={bottomBarClass()}>
-        <div className={barButtonClass()} data-testid="round-marker">
-          Раунд {game.round.round}
-        </div>
-        <NamePlate name={game.player.name} player energy={game.player.energy} health={game.player.hp} statuses={game.player.statuses} />
-        <div className="grid grid-rows-2 gap-px overflow-hidden bg-black/40">
-          <button
-            className={cn(
-              "grid place-items-center px-2 text-center text-xs font-black uppercase tracking-[0.06em] transition max-[760px]:text-[10px] max-[420px]:text-[9px]",
-              mode === "ai"
-                ? "bg-[linear-gradient(180deg,#fff26d,#e3b51e_54%,#a66d12)] text-[#1a1408]"
-                : "bg-[#ffe08a]/12 text-[#ffe5a8] hover:bg-[#ffe08a]/24",
-            )}
-            onClick={() => (mode === "ai" ? reset() : onSwitchMode?.("ai"))}
-            type="button"
-            data-testid="reset-ai"
-            aria-label="Бій з AI"
-          >
-            БІЙ · AI
-          </button>
-          <button
-            className={cn(
-              "grid place-items-center px-2 text-center text-xs font-black uppercase tracking-[0.06em] transition max-[760px]:text-[10px] max-[420px]:text-[9px]",
-              mode === "human"
-                ? "bg-[linear-gradient(180deg,#68e5f5,#218aa3_56%,#0d4151)] text-[#061116]"
-                : "bg-[#65d7e9]/12 text-[#a8eef5] hover:bg-[#65d7e9]/24",
-            )}
-            onClick={() => (mode === "human" ? reset() : onSwitchMode?.("human"))}
-            type="button"
-            data-testid="reset-pvp"
-            aria-label="Бій з гравцем"
-          >
-            БІЙ · PvP
-          </button>
-        </div>
-      </section>
-      </div>
-      ) : null}
-
-      {selectionOpen && selected && game.phase === "card_preview" ? (
-        <SelectionOverlay
-          selected={selected}
-          enemy={game.enemy}
-          player={game.player}
+          enemy={
+            hudHpOverride.enemy !== undefined
+              ? { ...game.enemy, hp: hudHpOverride.enemy }
+              : game.enemy
+          }
+          mode={arenaMode}
+          centerVariant={centerVariant}
+          playerHand={playerHandCards}
+          enemyHand={enemyHandCards}
+          selectedCardId={selectedId}
+          energyBid={selectedEnergy}
+          damageBoost={damageBoost}
+          cardPickOpen={selectionOpen && Boolean(selected) && game.phase === "card_preview"}
+          cardPickPreview={{ attack: preview.attack, damage: previewDamage }}
+          maxEnergyForCard={maxEnergyForCard}
+          boostCost={DAMAGE_BOOST_COST}
+          canBoost={canBoost}
           knownEnemyCard={enemyLockedMove?.card}
           knownEnemyEnergy={enemyLockedMove?.energy}
-          energy={selectedEnergy}
-          maxEnergy={maxEnergyForCard}
-          damageBoost={damageBoost}
-          boostCost={DAMAGE_BOOST_COST}
-          previewAttack={preview.attack}
-          previewDamage={previewDamage}
-          canBoost={canBoost}
-          onClose={closeSelection}
-          onMinus={() => setEnergy((value) => Math.max(0, Math.min(value, maxEnergyForCard) - 1))}
-          onPlus={() => setEnergy((value) => Math.min(maxEnergyForCard, value + 1))}
+          clash={arenaClash}
+          clashPhase={game.phase}
+          splash={splash}
+          timer={{ secondsLeft: turnSeconds, warning: turnWarningActive }}
+          activeHand={activeHand}
+          playerDamageFlash={hudDamageFlash === "player"}
+          enemyDamageFlash={hudDamageFlash === "enemy"}
+          onClashImpact={(loser) => {
+            setHudDamageFlash(loser);
+            setTimeout(() => setHudDamageFlash(null), 700);
+          }}
+          onClashProjectileImpact={(loser, _index, hpRemaining) => {
+            // Decrement the persistent BattleHud HP one pill per projectile.
+            setHudHpOverride((value) => ({ ...value, [loser]: hpRemaining }));
+          }}
+          onClashDone={() => setClashOverlayDone(true)}
+          onSelectCard={onSelectHandCard}
+          onEnergyMinus={() => setEnergy((value) => Math.max(0, Math.min(value, maxEnergyForCard) - 1))}
+          onEnergyPlus={() => setEnergy((value) => Math.min(maxEnergyForCard, value + 1))}
+          onEnergyChange={(next) => setEnergy(Math.max(0, Math.min(maxEnergyForCard, next)))}
           onToggleBoost={toggleBoost}
-          onConfirm={confirmSelection}
+          onConfirmPick={confirmSelection}
+          onCancelPick={closeSelection}
+          onLeave={onOpenCollection ?? (() => {})}
+          onOpenDecks={() => {
+            // TODO(owner): wire deck-management modal. Today GameRoot only
+            // exposes onOpenCollection (which both Leaves the match AND opens
+            // the collection/deck screen) — there is no dedicated deck modal
+            // route yet. Falling back to onOpenCollection so the button works.
+            (onOpenCollection ?? (() => {}))();
+          }}
+          onResetAi={() => (mode === "ai" ? reset() : onSwitchMode?.("ai"))}
+          onResetPvp={() => (mode === "human" ? reset() : onSwitchMode?.("human"))}
         />
-      ) : null}
+      )}
 
-      {!humanBlockingOverlay ? (
-        <PhaseOverlay
-          game={game}
-          verdict={verdict}
-          mode={mode}
-          avatarUrl={avatarUrl}
-          onReplayAi={() => (mode === "ai" ? reset() : onSwitchMode?.("ai"))}
-          onReplayHuman={() => (mode === "human" ? reset() : onSwitchMode?.("human"))}
-          persistedRewards={persistedRewards}
-          persistedRewardsError={persistedRewardsError}
-        />
-      ) : null}
-      {!humanBlockingOverlay && showBattle && pending ? <BattleOverlay outcome={pending} player={game.player} enemy={game.enemy} phase={game.phase} /> : null}
+      <MatchEndOverlay
+        open={matchEndOpen}
+        variant={matchEndVariant}
+        mode={arenaMode}
+        playerName={game.player.name}
+        opponentName={game.enemy.name}
+        rewards={matchEndRewards}
+        avatarUrl={avatarUrl}
+        errorText={persistedRewardsError ?? undefined}
+        onPlayAgain={() => (mode === "ai" ? reset() : onSwitchMode?.("ai") ?? reset())}
+        onGoToCollection={onOpenCollection ?? (() => {})}
+      />
+
     </main>
   );
+}
+
+function mapRewardsForMatchEnd(summary: RewardSummary | undefined): MatchEndRewards {
+  const xpDelta = summary?.deltaXp ?? 0;
+  const newTotalXp = summary?.newTotals?.totalXp;
+  const levelInfo = typeof newTotalXp === "number" ? computeLevelFromXp(newTotalXp) : null;
+  return {
+    xp: {
+      delta: xpDelta,
+      current: levelInfo?.xpIntoLevel ?? 0,
+      max: levelInfo?.xpForNextLevel ?? Math.max(xpDelta, 100),
+      levelUp: summary?.leveledUp,
+      newLevel: summary?.newTotals?.level,
+    },
+    elo: {
+      delta: summary?.deltaElo ?? 0,
+      current: summary?.newTotals?.eloRating ?? 0,
+    },
+    crystals: summary?.deltaCrystals ?? 0,
+    milestone: summary?.milestoneCardRewards?.[0]
+      ? {
+          id: summary.milestoneCardRewards[0].cardId,
+          label: summary.milestoneCardRewards[0].cardName,
+        }
+      : undefined,
+  };
+}
+
+function mapHumanStatusToMatchmaking(status: HumanMatchStatus): MatchmakingStatus {
+  if (status === "idle") return "connecting";
+  return status as MatchmakingStatus;
+}
+
+function pickCenterStageVariant(
+  game: GameState,
+  _verdict: string,
+  arenaMode: "ai" | "pvp",
+): CenterStageVariant {
+  const phase = game.phase;
+  if (phase === "match_intro") {
+    return { kind: "match_intro", opponentName: game.enemy.name, mode: arenaMode };
+  }
+  if (phase === "round_intro") return { kind: "round_intro", round: game.round.round };
+  if (phase === "opponent_turn") return { kind: "opponent_thinking" };
+  if ((phase === "round_result" || phase === "match_result" || phase === "reward_summary") && game.lastClash) {
+    const winner: "player" | "opponent" | "draw" =
+      game.lastClash.winner === "player" ? "player" : game.lastClash.winner === "enemy" ? "opponent" : "draw";
+    return { kind: "round_result", winner, damage: game.lastClash.damage };
+  }
+  // your_turn fallback covers player_turn, card_preview, battle_intro, damage_apply
+  return { kind: "your_turn" };
 }
 
 function normalizeHumanMatch(message: HumanSocketMessage): HumanMatchInfo | null {
@@ -1212,665 +1302,6 @@ function appendHumanChatMessage(messages: HumanChatMessage[], message: HumanChat
   return [...withoutDuplicate, message].slice(-200);
 }
 
-function HumanMatchOverlay({
-  status,
-  message,
-  playerName,
-  onlineCount,
-  sessionId,
-  chatMessages,
-  chatDraft,
-  onChatDraftChange,
-  onSendChatMessage,
-  onOpenCollection,
-  onRetryMatch,
-}: {
-  status: HumanMatchStatus;
-  message: string;
-  playerName: string;
-  onlineCount: number | null;
-  sessionId: string;
-  chatMessages: HumanChatMessage[];
-  chatDraft: string;
-  onChatDraftChange: (value: string) => void;
-  onSendChatMessage: () => void;
-  onOpenCollection?: () => void;
-  onRetryMatch?: () => void;
-}) {
-  const title = getHumanOverlayTitle(status);
-  const subtitle = message || getHumanOverlaySubtitle(status);
-  const active = status === "connecting" || status === "queued";
-  const displayName = playerName || "Гравець";
-
-  return (
-    <section className="fixed inset-0 z-40 grid place-items-center overflow-y-auto bg-[#05080b]/78 p-3 py-4 backdrop-blur-[4px]" data-testid="human-match-overlay">
-      <div className="grid w-[min(560px,94vw)] gap-4 rounded-md border-2 border-[#65d7e9]/55 bg-[linear-gradient(180deg,rgba(17,24,28,0.98),rgba(5,7,10,0.98))] p-5 text-center shadow-[0_24px_70px_rgba(0,0,0,0.72),inset_0_0_80px_rgba(101,215,233,0.08)]">
-        <div className="grid justify-items-center gap-3">
-          {active ? (
-            <span className="relative grid h-14 w-14 place-items-center rounded-full border border-[#65d7e9]/45 bg-[#65d7e9]/10">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#65d7e9]/30" />
-              <span className="relative h-5 w-5 rounded-full bg-[#65d7e9] shadow-[0_0_18px_rgba(101,215,233,0.85)]" />
-            </span>
-          ) : null}
-          <strong className="text-[clamp(30px,6vw,54px)] font-black uppercase leading-none text-[#ffe08a] [font-family:Impact,Arial_Narrow,sans-serif] [text-shadow:0_4px_0_rgba(0,0,0,0.74)]">
-            {title}
-          </strong>
-          <span className="max-w-[440px] text-sm font-black uppercase tracking-[0.04em] text-[#d9ceb2]">{subtitle}</span>
-        </div>
-        <div className="grid grid-cols-2 gap-2 text-left max-[460px]:grid-cols-1">
-          <div className="rounded-md border border-[#ffe08a]/30 bg-[#17120a]/78 px-3 py-2" data-testid="human-match-session-name">
-            <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-[#a99664]">Ім&apos;я сесії</span>
-            <b className="block truncate text-sm font-black uppercase tracking-[0.03em] text-[#fff0ad]">{displayName}</b>
-          </div>
-          <div
-            className="rounded-md border border-[#65d7e9]/30 bg-[#07161b]/78 px-3 py-2"
-            data-testid="human-match-online"
-            data-online-count={onlineCount === null ? "" : String(onlineCount)}
-          >
-            <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-[#8db6bf]">Онлайн зараз</span>
-            {onlineCount === null ? (
-              <b className="block text-sm font-black uppercase tracking-[0.03em] text-[#6f7f82]">...</b>
-            ) : (
-              <b className="block text-sm font-black uppercase tracking-[0.03em] text-[#d9fbff]" data-testid="human-match-online-count">
-                {onlineCount} онлайн
-              </b>
-            )}
-          </div>
-        </div>
-        <HumanMatchChat
-          sessionId={sessionId}
-          playerName={displayName}
-          messages={chatMessages}
-          draft={chatDraft}
-          onDraftChange={onChatDraftChange}
-          onSend={onSendChatMessage}
-        />
-        {onRetryMatch && ["opponent_left", "forfeit", "error", "closed"].includes(status) ? (
-          <button
-            className="mx-auto min-h-[42px] rounded-md border-2 border-[#65d7e9]/60 bg-[linear-gradient(180deg,#68e5f5,#218aa3_56%,#0d4151)] px-4 text-xs font-black uppercase text-[#061116] transition hover:brightness-110"
-            type="button"
-            onClick={onRetryMatch}
-            data-testid="human-match-retry"
-          >
-            Знову PvP
-          </button>
-        ) : null}
-        {onOpenCollection ? (
-          <button
-            className="mx-auto min-h-[42px] rounded-md border border-white/12 bg-white/[0.06] px-4 text-xs font-black uppercase text-[#efe3c5] transition hover:border-[#ffe08a]/45 hover:bg-[#ffe08a]/12"
-            type="button"
-            onClick={onOpenCollection}
-          >
-            До колоди
-          </button>
-        ) : null}
-      </div>
-    </section>
-  );
-}
-
-function HumanMatchChat({
-  sessionId,
-  playerName,
-  messages,
-  draft,
-  onDraftChange,
-  onSend,
-}: {
-  sessionId: string;
-  playerName: string;
-  messages: HumanChatMessage[];
-  draft: string;
-  onDraftChange: (value: string) => void;
-  onSend: () => void;
-}) {
-  const listRef = useRef<HTMLDivElement | null>(null);
-  const canSend = draft.trim().length > 0;
-
-  useEffect(() => {
-    const list = listRef.current;
-    if (!list) return;
-    list.scrollTop = list.scrollHeight;
-  }, [messages.length]);
-
-  return (
-    <section
-      className="grid gap-2 rounded-md border border-[#65d7e9]/24 bg-[#071016]/82 p-3 text-left shadow-[inset_0_0_34px_rgba(101,215,233,0.06)]"
-      data-testid="human-match-chat"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#8db6bf]">Чат арени</span>
-        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[#5f7f86]">{messages.length}/200</span>
-      </div>
-      <div
-        ref={listRef}
-        className="grid max-h-[150px] min-h-[92px] content-start gap-1 overflow-y-auto pr-1 [scrollbar-color:#65d7e9_#071016] [scrollbar-width:thin]"
-        data-testid="human-match-chat-list"
-      >
-        {messages.length === 0 ? (
-          <span className="self-center text-center text-xs font-bold text-[#6f7f82]">Повідомлень ще немає.</span>
-        ) : (
-          messages.map((chatMessage) => {
-            const own = isOwnHumanChatMessage(chatMessage.authorId, chatMessage.authorName, sessionId, playerName);
-            return (
-              <article
-                key={chatMessage.id}
-                className={cn(
-                  "max-w-[92%] rounded-md border px-2 py-1",
-                  own
-                    ? "justify-self-end border-[#ffe08a]/24 bg-[#201807]/86 text-right"
-                    : "justify-self-start border-white/10 bg-white/[0.055]",
-                )}
-              >
-                <b className={cn("block truncate text-[10px] font-black uppercase tracking-[0.08em]", own ? "text-[#fff0ad]" : "text-[#d9fbff]")}>
-                  {chatMessage.authorName}
-                </b>
-                <span className="block break-words text-xs font-bold leading-snug text-[#efe3c5]">{chatMessage.text}</span>
-              </article>
-            );
-          })
-        )}
-      </div>
-      <form
-        className="grid grid-cols-[1fr_auto] gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSend();
-        }}
-      >
-        <input
-          className="min-h-[38px] rounded-md border border-white/10 bg-black/28 px-3 text-sm font-bold text-[#f8eed8] outline-none transition placeholder:text-[#6f7f82] focus:border-[#65d7e9]/70"
-          value={draft}
-          maxLength={240}
-          onChange={(event) => onDraftChange(event.target.value)}
-          placeholder="Написати..."
-          data-testid="human-match-chat-input"
-        />
-        <button
-          className="min-h-[38px] rounded-md border border-[#65d7e9]/45 bg-[#65d7e9]/14 px-3 text-xs font-black uppercase text-[#d9fbff] transition enabled:hover:bg-[#65d7e9]/24 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.04] disabled:text-[#647276]"
-          type="submit"
-          disabled={!canSend}
-          data-testid="human-match-chat-send"
-        >
-          OK
-        </button>
-      </form>
-    </section>
-  );
-}
-
-function isOwnHumanChatMessage(authorId: string, authorName: string, sessionId: string, playerName: string) {
-  if (authorId && authorId === sessionId) return true;
-  const normalizedAuthor = normalizeHumanChatName(authorName);
-  const normalizedPlayer = normalizeHumanChatName(playerName);
-  return Boolean(normalizedAuthor && normalizedPlayer && normalizedAuthor === normalizedPlayer);
-}
-
-function normalizeHumanChatName(value: string) {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-function getHumanOverlayTitle(status: HumanMatchStatus) {
-  if (status === "connecting") return "Підключення";
-  if (status === "queued") return "Пошук суперника";
-  if (status === "opponent_left") return "Суперник вийшов";
-  if (status === "forfeit") return "Матч завершено";
-  if (status === "error") return "PvP помилка";
-  if (status === "closed") return "З'єднання закрите";
-  return "PvP";
-}
-
-function getHumanOverlaySubtitle(status: HumanMatchStatus) {
-  if (status === "connecting") return "Підключаємося до живого матчу.";
-  if (status === "queued") return "Чекаємо іншого гравця.";
-  if (status === "opponent_left") return "Матч зупинено, бо другий гравець залишив арену.";
-  if (status === "forfeit") return "Час ходу вийшов, результат зафіксовано для обох гравців.";
-  if (status === "error") return "Спробуй повернутися до колоди й запустити PvP ще раз.";
-  if (status === "closed") return "Сервер закрив з'єднання з матчем.";
-  return "";
-}
-
-function PhaseOverlay({
-  game,
-  verdict,
-  mode,
-  avatarUrl,
-  onReplayAi,
-  onReplayHuman,
-  persistedRewards,
-  persistedRewardsError,
-}: {
-  game: GameState;
-  verdict: string;
-  mode: "ai" | "human";
-  avatarUrl?: string;
-  onReplayAi: () => void;
-  onReplayHuman: () => void;
-  persistedRewards: RewardSummary | null;
-  persistedRewardsError: string | null;
-}) {
-  if (["player_turn", "card_preview", "opponent_turn", "battle_intro", "damage_apply"].includes(game.phase)) return null;
-
-  if (game.phase === "reward_summary") {
-    const overlayRewards = persistedRewards ?? game.rewards;
-    const showPersistedDetails = persistedRewards !== null;
-    return (
-      <RewardOverlay
-        result={game.matchResult}
-        rewards={overlayRewards}
-        mode={mode}
-        playerName={game.player.name}
-        avatarUrl={avatarUrl}
-        onReplayAi={onReplayAi}
-        onReplayHuman={onReplayHuman}
-        persistedRewardsError={persistedRewardsError}
-        showPersistedDetails={showPersistedDetails}
-      />
-    );
-  }
-
-  const title = getOverlayTitle(game.phase, game.round.round, verdict, game.lastClash?.winner);
-  const subtitle = getOverlaySubtitle(game, verdict);
-
-  return (
-    <section
-      className="fixed inset-0 z-30 grid place-items-center bg-[#05080b] bg-[length:cover] bg-center p-3"
-      data-testid="phase-overlay"
-      data-phase={game.phase}
-      style={{
-        backgroundImage:
-          "linear-gradient(180deg,rgba(4,7,10,0.08),rgba(4,7,10,0.48) 54%,rgba(4,7,10,0.92)),url('/nexus-assets/backgrounds/arena-bar-1024x576.png')",
-      }}
-    >
-      <div className="relative grid min-h-[min(620px,94vh)] w-[min(980px,96vw)] place-items-center overflow-hidden rounded-md border-2 border-[#d6a03b]/70 bg-black/12 p-5 text-center shadow-[0_0_0_1px_rgba(0,0,0,0.82),0_28px_90px_rgba(0,0,0,0.72),inset_0_0_90px_rgba(0,0,0,0.42)]">
-        <div className="grid justify-items-center gap-3">
-          {title ? (
-            <strong className="text-[clamp(52px,8vw,112px)] font-black uppercase leading-[0.92] text-[#ffe08a] [font-family:Impact,Arial_Narrow,sans-serif] [text-shadow:0_0_20px_rgba(255,62,180,0.8),0_5px_0_rgba(0,0,0,0.78)]">
-              {title}
-            </strong>
-          ) : null}
-          {subtitle ? <span className="max-w-[620px] border-y border-[#d6a03b]/35 bg-black/58 px-5 py-2 text-base font-black uppercase tracking-[0.05em] text-[#fff8df] max-[620px]:text-xs">{subtitle}</span> : null}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function RewardOverlay({
-  result,
-  rewards,
-  mode,
-  playerName,
-  avatarUrl,
-  onReplayAi,
-  onReplayHuman,
-  persistedRewardsError,
-  showPersistedDetails,
-}: {
-  result?: MatchResult;
-  rewards?: RewardSummary;
-  mode: "ai" | "human";
-  playerName?: string;
-  avatarUrl?: string;
-  onReplayAi: () => void;
-  onReplayHuman: () => void;
-  persistedRewardsError: string | null;
-  showPersistedDetails: boolean;
-}) {
-  const title = resolveRewardTitle(result);
-  const visibleTiles = selectVisibleTiles(showPersistedDetails ? rewards : null);
-  const userXpDelta = rewards?.deltaXp ?? 0;
-  const newLevel = rewards?.newTotals?.level;
-  const newTotalXp = rewards?.newTotals?.totalXp;
-  const levelInfo = typeof newTotalXp === "number" ? computeLevelFromXp(newTotalXp) : null;
-  const xpProgress = levelInfo
-    ? computeXpProgress(levelInfo.xpIntoLevel, levelInfo.xpForNextLevel, userXpDelta)
-    : null;
-  const crystalsDelta = rewards?.deltaCrystals ?? 0;
-  const newCrystals = rewards?.newTotals?.crystals ?? 0;
-  const eloDelta = rewards?.deltaElo;
-  const newElo = rewards?.newTotals?.eloRating;
-  const eloLoss = typeof eloDelta === "number" && eloDelta < 0;
-  const previousElo = typeof eloDelta === "number" && typeof newElo === "number" ? newElo - eloDelta : null;
-  const formattedEloDelta = typeof eloDelta === "number" ? (eloDelta > 0 ? `+${eloDelta}` : `${eloDelta}`) : "";
-  const displayName = (playerName ?? "").trim() || "Гравець";
-  const resolvedAvatarUrl = resolveRewardAvatarUrl(avatarUrl);
-  const levelUpBonus = rewards?.levelUpBonusCrystals ?? 0;
-
-  return (
-    <section className="fixed inset-0 z-50 grid place-items-center bg-[#05080b] p-3 backdrop-blur-[4px]" data-testid="reward-summary">
-      <div
-        className="relative grid w-[min(680px,94vw)] gap-4 rounded-md border-2 border-[#d6a03b]/75 bg-[linear-gradient(180deg,rgba(12,18,22,0.98),rgba(4,6,9,0.98))] p-5 shadow-[0_26px_80px_rgba(0,0,0,0.76),inset_0_0_80px_rgba(255,188,50,0.08)]"
-        data-result={result ?? "unknown"}
-      >
-        <RewardTitleBlock title={title} />
-
-        <RewardAvatarBlock
-          avatarUrl={resolvedAvatarUrl}
-          playerName={displayName}
-          level={newLevel ?? rewards?.newTotals?.level ?? 1}
-          xpDelta={userXpDelta}
-          xpProgress={xpProgress}
-          showXpDelta={showPersistedDetails && userXpDelta > 0}
-        />
-
-        <div
-          className="grid grid-cols-3 gap-3 max-[560px]:grid-cols-1"
-          data-testid="reward-stat-tiles"
-        >
-          {visibleTiles.showCrystals ? (
-            <RewardStatTile
-              testId="reward-crystals-tile"
-              icon="💎"
-              label="Кристали"
-              deltaText={`+${crystalsDelta}`}
-              detailText={`всього ${newCrystals}`}
-              tone="crystal"
-              dataAttrs={{ "data-delta-crystals": String(crystalsDelta), "data-new-crystals": String(newCrystals) }}
-              detailTestId="reward-crystals-line"
-            />
-          ) : null}
-
-          {visibleTiles.showElo ? (
-            <RewardStatTile
-              testId="reward-elo-tile"
-              icon="🏆"
-              label="ELO"
-              deltaText={formattedEloDelta}
-              detailText={`${previousElo} → ${newElo}`}
-              tone={eloLoss ? "loss" : "elo"}
-              dataAttrs={{
-                "data-delta-elo": typeof eloDelta === "number" ? String(eloDelta) : "",
-                "data-new-elo": typeof newElo === "number" ? String(newElo) : "",
-              }}
-              detailTestId="reward-elo-line"
-            />
-          ) : null}
-
-          {visibleTiles.showLevelUp ? (
-            <RewardStatTile
-              testId="reward-level-up-tile"
-              icon="⭐"
-              label="Новий рівень"
-              deltaText={`Lv ${newLevel ?? "?"}`}
-              detailText={`+${levelUpBonus} 💎`}
-              tone="levelUp"
-              dataAttrs={{
-                "data-new-level": newLevel !== undefined ? String(newLevel) : "",
-                "data-level-up-bonus": String(levelUpBonus),
-              }}
-              detailTestId="reward-level-up-headline"
-            />
-          ) : null}
-
-          {visibleTiles.showMilestone
-            ? rewards?.milestoneCardRewards.map((milestone, index) => (
-                // Order is deterministic from milestone-table sort; cardId can
-                // repeat in one match when a small rarity bucket gets picked
-                // twice, so the index disambiguates the React key.
-                <RewardStatTile
-                  key={`${index}-${milestone.cardId}`}
-                  testId="reward-milestone-tile"
-                  icon="🃏"
-                  label="Карта-бонус"
-                  deltaText={milestone.cardName}
-                  detailText={milestoneRarityLabel(milestone.rarity)}
-                  tone="levelUp"
-                  dataAttrs={{
-                    "data-card-id": milestone.cardId,
-                    "data-rarity": milestone.rarity,
-                  }}
-                  detailTestId="reward-milestone-detail"
-                />
-              ))
-            : null}
-        </div>
-
-        {persistedRewardsError ? (
-          <div
-            className="rounded border border-[#ff6e6e]/50 bg-black/55 px-3 py-2 text-xs font-black uppercase text-[#ffd1d1]"
-            data-testid="reward-persisted-error"
-          >
-            {persistedRewardsError}
-          </div>
-        ) : null}
-
-        <div className="grid grid-cols-2 gap-3 max-[420px]:grid-cols-1">
-          <button
-            className="min-h-[48px] rounded-md border-2 border-black/60 bg-[linear-gradient(180deg,#fff26d,#e3b51e_54%,#a66d12)] px-3 text-sm font-black uppercase text-[#1a1408] transition hover:brightness-110"
-            type="button"
-            onClick={onReplayAi}
-            data-testid="reward-replay-ai"
-            data-mode={mode}
-          >
-            AI
-          </button>
-          <button
-            className="min-h-[48px] rounded-md border-2 border-black/60 bg-[linear-gradient(180deg,#68e5f5,#218aa3_56%,#0d4151)] px-3 text-sm font-black uppercase text-[#061116] transition hover:brightness-110"
-            type="button"
-            onClick={onReplayHuman}
-            data-testid="reward-replay-human"
-            data-mode={mode}
-          >
-            PvP
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function RewardTitleBlock({ title }: { title: RewardTitle }) {
-  return (
-    <div className="grid place-items-center" data-testid="reward-title-block" data-tone={title.tone}>
-      <strong
-        className={cn(
-          "text-[clamp(40px,7vw,72px)] font-black uppercase leading-none [font-family:Impact,Arial_Narrow,sans-serif] [text-shadow:0_4px_0_rgba(0,0,0,0.78)]",
-          rewardTitleColorClass(title.tone),
-        )}
-        data-testid="reward-title"
-      >
-        {title.text}
-      </strong>
-    </div>
-  );
-}
-
-function rewardTitleColorClass(tone: RewardTitle["tone"]) {
-  if (tone === "victory") return "text-[#ffe08a] [text-shadow:0_0_22px_rgba(255,180,46,0.6),0_4px_0_rgba(0,0,0,0.78)]";
-  if (tone === "draw") return "text-[#9bd3df] [text-shadow:0_0_18px_rgba(155,211,223,0.45),0_4px_0_rgba(0,0,0,0.78)]";
-  if (tone === "defeat") return "text-[#ff8a7c] [text-shadow:0_0_22px_rgba(255,80,68,0.55),0_4px_0_rgba(0,0,0,0.78)]";
-  return "text-[#fff8df]";
-}
-
-function RewardAvatarBlock({
-  avatarUrl,
-  playerName,
-  level,
-  xpDelta,
-  xpProgress,
-  showXpDelta,
-}: {
-  avatarUrl: string;
-  playerName: string;
-  level: number;
-  xpDelta: number;
-  xpProgress: ReturnType<typeof computeXpProgress> | null;
-  showXpDelta: boolean;
-}) {
-  return (
-    <div
-      className="grid grid-cols-[96px_minmax(0,1fr)] items-center gap-4 max-[420px]:grid-cols-1 max-[420px]:justify-items-center"
-      data-testid="reward-avatar-block"
-    >
-      <div className="relative h-[96px] w-[96px] overflow-hidden rounded-full border-2 border-[#d6a03b]/75 bg-black/55 shadow-[0_0_22px_rgba(214,160,59,0.32)]">
-        <RewardAvatarImage src={avatarUrl} />
-      </div>
-      <div className="grid gap-2 max-[420px]:justify-items-center max-[420px]:text-center">
-        <div className="flex flex-wrap items-center gap-2">
-          <strong className="text-xl font-black uppercase text-[#fff8df] max-[420px]:text-lg" data-testid="reward-player-name">
-            {playerName}
-          </strong>
-          <span
-            className="rounded border border-[#ffe08a]/55 bg-black/55 px-2 py-0.5 text-xs font-black uppercase tracking-[0.08em] text-[#ffe08a]"
-            data-testid="reward-player-level"
-          >
-            Lv {level}
-          </span>
-        </div>
-        {xpProgress ? (
-          <RewardXpBar xpProgress={xpProgress} xpDelta={xpDelta} showXpDelta={showXpDelta} />
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function RewardAvatarImage({ src }: { src: string }) {
-  return <RewardAvatarImageContent key={src} src={src} />;
-}
-
-function RewardAvatarImageContent({ src }: { src: string }) {
-  const [resolvedSrc, setResolvedSrc] = useState(src);
-
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={resolvedSrc}
-      alt=""
-      width={96}
-      height={96}
-      className="h-full w-full object-cover object-top"
-      data-testid="reward-avatar-image"
-      data-avatar-src={resolvedSrc}
-      onError={() => {
-        if (resolvedSrc !== DEFAULT_REWARD_AVATAR_URL) setResolvedSrc(DEFAULT_REWARD_AVATAR_URL);
-      }}
-    />
-  );
-}
-
-function RewardXpBar({
-  xpProgress,
-  xpDelta,
-  showXpDelta,
-}: {
-  xpProgress: ReturnType<typeof computeXpProgress>;
-  xpDelta: number;
-  showXpDelta: boolean;
-}) {
-  const highlightWidth = Math.max(0, xpProgress.highlightEndPercent - xpProgress.highlightStartPercent);
-
-  return (
-    <div className="grid gap-1" data-testid="reward-xp-bar">
-      <div
-        className="relative h-3 overflow-hidden rounded-full border border-black/60 bg-black/55"
-        role="progressbar"
-        aria-valuenow={Math.round(xpProgress.percent)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-      >
-        <span
-          className="absolute inset-y-0 left-0 rounded-full bg-[#49d2e7]"
-          style={{ width: `${xpProgress.percent}%` }}
-        />
-        {showXpDelta && highlightWidth > 0 ? (
-          <span
-            className="absolute inset-y-0 rounded-full bg-[linear-gradient(90deg,#ffe08a,#fff26d)] shadow-[0_0_10px_rgba(255,224,138,0.65)] animate-pulse"
-            style={{ left: `${xpProgress.highlightStartPercent}%`, width: `${highlightWidth}%` }}
-            data-testid="reward-xp-bar-delta"
-          />
-        ) : null}
-      </div>
-      <span className="text-[11px] font-black uppercase tracking-[0.06em] text-[#d9ceb2]" data-testid="reward-xp-label">
-        {showXpDelta ? `+${xpDelta} XP · ` : ""}
-        {xpProgress.xpIntoLevel} / {xpProgress.xpForNextLevel} XP
-      </span>
-    </div>
-  );
-}
-
-function RewardStatTile({
-  testId,
-  icon,
-  label,
-  deltaText,
-  detailText,
-  tone,
-  dataAttrs,
-  detailTestId,
-}: {
-  testId: string;
-  icon: string;
-  label: string;
-  deltaText: string;
-  detailText: string;
-  tone: "crystal" | "elo" | "loss" | "levelUp";
-  dataAttrs?: Record<string, string>;
-  detailTestId?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        "grid grid-rows-[auto_auto_auto] items-center gap-1 rounded border-2 px-3 py-3 text-center",
-        statTileToneClass(tone),
-      )}
-      data-testid={testId}
-      data-tone={tone}
-      {...dataAttrs}
-    >
-      <span className="text-3xl leading-none">{icon}</span>
-      <span className={cn("text-2xl font-black leading-none", statTileDeltaColorClass(tone))}>{deltaText}</span>
-      <span
-        className="text-[11px] font-black uppercase tracking-[0.06em] text-[#d9ceb2]"
-        data-testid={detailTestId}
-      >
-        {label} · {detailText}
-      </span>
-    </div>
-  );
-}
-
-function statTileToneClass(tone: "crystal" | "elo" | "loss" | "levelUp") {
-  if (tone === "crystal") return "border-[#65d7e9]/45 bg-[linear-gradient(180deg,rgba(8,32,40,0.88),rgba(2,14,18,0.88))]";
-  if (tone === "elo") return "border-[#ffe08a]/55 bg-[linear-gradient(180deg,rgba(40,30,8,0.88),rgba(18,12,2,0.88))]";
-  if (tone === "loss") return "border-[#ff7d6e]/55 bg-[linear-gradient(180deg,rgba(48,12,12,0.88),rgba(20,4,4,0.88))]";
-  return "border-[#ffe08a]/70 bg-[linear-gradient(180deg,rgba(60,38,8,0.92),rgba(20,12,2,0.92))] shadow-[0_0_18px_rgba(255,224,138,0.28)]";
-}
-
-function statTileDeltaColorClass(tone: "crystal" | "elo" | "loss" | "levelUp") {
-  if (tone === "crystal") return "text-[#65d7e9]";
-  if (tone === "loss") return "text-[#ff8a7c]";
-  return "text-[#ffe08a]";
-}
-
-function milestoneRarityLabel(rarity: Rarity) {
-  if (rarity === "Legend") return "Легенда";
-  if (rarity === "Unique") return "Унікальна";
-  if (rarity === "Rare") return "Рідкісна";
-  return "Звичайна";
-}
-
-function OpponentThinkingIndicator() {
-  return (
-    <div
-      className="relative z-[1] flex min-h-[30px] items-center gap-2 rounded-full border border-[#ff5f58]/45 bg-black/62 px-3 py-1 text-[11px] font-black uppercase tracking-[0.08em] text-[#ffd7d2] shadow-[0_0_18px_rgba(255,65,58,0.28)]"
-      data-testid="opponent-thinking"
-    >
-      <span className="relative grid h-3.5 w-3.5 place-items-center" aria-hidden="true">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#ff5f58]/55" />
-        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#ff5f58] shadow-[0_0_10px_rgba(255,95,88,0.9)]" />
-      </span>
-      <span>Суперник обирає відповідь</span>
-      <span className="flex items-end gap-0.5" aria-hidden="true">
-        <i className="block h-1.5 w-1.5 animate-bounce rounded-full bg-[#ffd7d2]" />
-        <i className="block h-1.5 w-1.5 animate-bounce rounded-full bg-[#ffd7d2] [animation-delay:120ms]" />
-        <i className="block h-1.5 w-1.5 animate-bounce rounded-full bg-[#ffd7d2] [animation-delay:240ms]" />
-      </span>
-    </div>
-  );
-}
-
 function showsResolvedClash(phase: Phase) {
   return ["round_result", "match_result", "reward_summary"].includes(phase);
 }
@@ -1879,57 +1310,6 @@ function getActiveHand(phase: Phase): Side | null {
   if (phase === "player_turn" || phase === "card_preview") return "player";
   if (phase === "opponent_turn") return "enemy";
   return null;
-}
-
-function getArenaText(game: GameState, clash: Clash | null, verdict: string) {
-  if (!clash) {
-    if (game.phase === "match_intro") return "Матч завантажується: бійці виходять на арену.";
-    if (game.phase === "round_intro") return `Раунд ${game.round.round}. Арена вільна, картки чекають на вибір.`;
-    return "Обери бійця, вклади енергію й випусти його на арену.";
-  }
-
-  if (game.phase === "opponent_turn") return "Картку обрано. Суперник відповідає своїм ходом.";
-  if (game.phase === "damage_apply") return `${clash.winner === "player" ? clash.playerCard.name : clash.enemyCard.name} перемагає. Завдано ${clash.damage} урону.`;
-  if (game.phase === "match_result" || game.phase === "reward_summary") return `${verdict}. Завдано ${clash.damage} урону.`;
-  if (game.phase === "round_result") return `${roundResultText(clash.winner)} Завдано ${clash.damage} урону.`;
-
-  return "Обирай наступну картку.";
-}
-
-function getPhaseTitle(phase: Phase, _first: Side, verdict: string) {
-  if (phase === "match_result" || phase === "reward_summary") return verdict;
-  if (phase === "round_intro") return "Раунд";
-  if (phase === "opponent_turn") return "Хід суперника";
-  if (phase === "battle_intro") return "Бой";
-  if (phase === "damage_apply") return "Урон";
-  if (phase === "round_result") return "Підсумок раунду";
-  return "Твій хід";
-}
-
-function getOverlayTitle(phase: Phase, round: number, verdict: string, winner?: Side) {
-  if (phase === "match_intro") return "БІЙ";
-  if (phase === "round_intro") return `Раунд ${round}`;
-  if (phase === "opponent_turn") return "Хід суперника";
-  if (phase === "round_result") {
-    if (winner === "player") return "Раунд за тобою!";
-    if (winner === "enemy") return "Раунд за суперником";
-    return "Раунд завершено";
-  }
-  if (phase === "match_result") return verdict;
-  return "";
-}
-
-function getOverlaySubtitle(game: GameState, verdict: string) {
-  if (game.phase === "match_intro") return `${game.player.name} vs ${game.enemy.name} · HP ${game.player.hp}/${game.enemy.hp} · енергія ${game.player.energy}/${game.enemy.energy}`;
-  if (game.phase === "round_intro") return "Картки готові. Обери бійця.";
-  if (game.phase === "opponent_turn") return "Картку гравця зафіксовано, суперник обирає відповідь";
-  if (game.phase === "round_result" && game.lastClash) return `${game.lastClash.damage} урону. Наступний раунд за мить.`;
-  if (game.phase === "match_result") return verdict ? "Бій завершено." : "";
-  return "";
-}
-
-function roundResultText(winner: Side) {
-  return winner === "player" ? "Раунд за тобою!" : "Раунд за суперником.";
 }
 
 function addRoundWinnerCardId(value: ReadonlySet<string>, clash: Clash) {
@@ -1951,29 +1331,3 @@ function matchResultToBucket(result: MatchResult): "win" | "draw" | "loss" {
   return "loss";
 }
 
-function topBarClass() {
-  return cn(
-    barShellClass(),
-    "mt-0 grid-cols-[96px_minmax(220px,1fr)_86px]",
-    "max-[960px]:grid-cols-[78px_minmax(0,1fr)_70px] max-[760px]:grid-cols-[62px_minmax(0,1fr)_58px]",
-  );
-}
-
-function bottomBarClass() {
-  return cn(
-    barShellClass(),
-    "mt-2 grid-cols-[104px_minmax(220px,1fr)_104px]",
-    "max-[960px]:grid-cols-[84px_minmax(0,1fr)_84px] max-[760px]:grid-cols-[68px_minmax(0,1fr)_68px]",
-  );
-}
-
-function barShellClass() {
-  return "relative z-20 mx-auto grid min-h-[54px] w-[min(880px,100%)] items-stretch overflow-hidden rounded-md bg-black/55 max-[760px]:min-h-[48px]";
-}
-
-function barButtonClass(extra?: string) {
-  return cn(
-    "grid min-h-[54px] place-items-center bg-black/30 px-2 text-center text-xs font-black uppercase tracking-[0.03em] text-[#fff8d8] max-[760px]:min-h-[48px] max-[760px]:px-1 max-[760px]:text-[9px] max-[420px]:text-[8px]",
-    extra,
-  );
-}

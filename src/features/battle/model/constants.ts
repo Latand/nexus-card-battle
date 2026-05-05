@@ -14,7 +14,7 @@ export const PHASE_TIMING_MS = {
   match_intro: 1500,
   round_intro: 1600,
   opponent_turn: 1500,
-  battle_intro: 2600,
+  battle_intro: 2800,
   round_result: 2300,
   match_result: 2400,
 } as const;

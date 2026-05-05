@@ -7,6 +7,7 @@ export type ModalProps = {
   open: boolean;
   onClose: () => void;
   size?: "sm" | "md" | "lg" | "wide" | "sheet-mobile" | "drawer-right";
+  panelClassName?: string;
   children: React.ReactNode;
   ariaLabel?: string;
 };
@@ -24,7 +25,7 @@ const PANEL_CLASS: Record<NonNullable<ModalProps["size"]>, string> = {
     "absolute top-0 right-0 bottom-0 h-full w-[520px] max-w-full rounded-none border-r-0 animate-[modal-drawer-in_280ms_cubic-bezier(0.22,1,0.36,1)]",
 };
 
-export function Modal({ open, onClose, size = "md", children, ariaLabel }: ModalProps) {
+export function Modal({ open, onClose, size = "md", panelClassName, children, ariaLabel }: ModalProps) {
   const ref = useRef<HTMLDialogElement | null>(null);
 
   useEffect(() => {
@@ -59,7 +60,7 @@ export function Modal({ open, onClose, size = "md", children, ariaLabel }: Modal
           : "open:flex items-center justify-center max-w-none max-h-none w-screen h-dvh",
       )}
     >
-      <div className={cn(PANEL_BASE, PANEL_CLASS[size])}>{children}</div>
+      <div className={cn(PANEL_BASE, PANEL_CLASS[size], panelClassName)}>{children}</div>
     </dialog>
   );
 }

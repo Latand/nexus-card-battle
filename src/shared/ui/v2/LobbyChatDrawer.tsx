@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useLobbyChat, type LobbyChatMessage } from "@/features/presence/client";
+import { isOwnChatMessage } from "@/features/presence/ownMessage";
 import { cn } from "@/shared/lib/cn";
 import { Modal } from "./Modal";
 
@@ -48,7 +49,16 @@ export function LobbyChatDrawer({ open, onClose, userName }: LobbyChatDrawerProp
             <span className="self-center text-center text-sm text-ink-mute">Повідомлень ще немає.</span>
           ) : (
             chatMessages.map((message) => (
-              <ChatBubble key={message.id} message={message} own={message.authorId === sessionId} />
+              <ChatBubble
+                key={message.id}
+                message={message}
+                own={isOwnChatMessage(
+                  message.authorId,
+                  message.authorName,
+                  sessionId,
+                  userName ?? "",
+                )}
+              />
             ))
           )}
         </div>

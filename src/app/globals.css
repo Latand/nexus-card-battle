@@ -211,6 +211,126 @@ a {
   }
 }
 
+/* Projectile arcs from clash-center toward the loser's HUD avatar.
+   The HUD avatar sits on the right edge of the viewport HUD strip:
+   - opponent HUD = top of viewport
+   - player HUD   = bottom of viewport
+   Destinations are expressed in viewport units so they land on/near
+   the HUD avatar regardless of card layout, which keeps the impact
+   visual aligned with the existing damageFlash trigger. */
+@keyframes nexus-throw-to-enemy-hud {
+  0% {
+    opacity: 0;
+    transform: translate(-40px, 20px) rotate(-12deg) scale(0.78);
+  }
+  22% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(36vw, -42vh) rotate(36deg) scale(0.6);
+  }
+}
+
+@keyframes nexus-throw-to-player-hud {
+  0% {
+    opacity: 0;
+    transform: translate(40px, -20px) rotate(12deg) scale(0.78);
+  }
+  22% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-36vw, 42vh) rotate(-36deg) scale(0.6);
+  }
+}
+
+/* Horizontal-only projectile flight between clash card slots. Owner spec:
+   crutilki must fly horizontally, NOT arc to viewport corners. The opposite
+   slot temporarily renders the loser's avatar where the card was. */
+@keyframes nexus-throw-horizontal-right {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(0deg);
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(180px, 0) rotate(360deg);
+  }
+}
+
+@keyframes nexus-throw-horizontal-left {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(0deg);
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-180px, 0) rotate(-360deg);
+  }
+}
+
+/* Card-vs-card duel animations used by ClashOverlay super-phase 1. The
+   lunge keyframes drive a quick body-check between the two clash slots;
+   the shatter keyframe plays on the loser card the moment its card-HP
+   reaches 0 (just before the projectile barrage begins). */
+@keyframes nexus-card-lunge-right {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+  50% {
+    transform: translateX(20px) rotate(2deg);
+  }
+}
+
+@keyframes nexus-card-lunge-left {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+  50% {
+    transform: translateX(-20px) rotate(-2deg);
+  }
+}
+
+@keyframes nexus-card-shatter {
+  0% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+    filter: brightness(1);
+  }
+  60% {
+    transform: scale(0.9) rotate(-3deg);
+    opacity: 0.7;
+    filter: brightness(1.6);
+  }
+  100% {
+    transform: scale(0.5) rotate(8deg);
+    opacity: 0;
+    filter: brightness(2);
+  }
+}
+
 @keyframes nexus-caption-pop {
   from {
     opacity: 0;
