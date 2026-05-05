@@ -12,6 +12,7 @@ export type TopBarProps = {
   canPlay: boolean;
   onPlay: () => void;
   onAvatarClick?: () => void;
+  onOpenBoosters?: () => void;
   isGuest?: boolean;
   /** Online presence count for legacy player-hud-online-* test IDs. */
   onlineCount?: number | null;
@@ -48,6 +49,7 @@ export function TopBar({
   canPlay,
   onPlay,
   onAvatarClick,
+  onOpenBoosters,
   isGuest,
   onlineCount,
 }: TopBarProps) {
@@ -235,6 +237,24 @@ export function TopBar({
           </span>
         )}
       </div>
+
+      {onOpenBoosters && (
+        <button
+          type="button"
+          onClick={onOpenBoosters}
+          data-testid="topbar-open-boosters"
+          data-component="topbar-v2-open-boosters"
+          aria-label="Бустери"
+          className={cn(
+            "shrink-0 inline-flex items-center justify-center gap-1 px-2 sm:px-3 h-7 sm:h-8 rounded-md",
+            "text-[11px] sm:text-xs font-medium tracking-[0.16em] uppercase",
+            "border border-accent-quiet text-accent/85 hover:bg-accent/10 hover:text-accent transition-colors",
+          )}
+        >
+          <CrystalGlyph className="text-accent/85" />
+          <span className="hidden sm:inline">Бустери</span>
+        </button>
+      )}
 
       <button
         type="button"
