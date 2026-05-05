@@ -463,7 +463,7 @@ export function ClashOverlay({
 
   return (
     <div
-      data-testid="clash-overlay"
+      data-testid="battle-overlay"
       data-phase={phase ?? "battle_intro"}
       data-local-phase={localPhase}
       data-winner={winner}
@@ -478,7 +478,7 @@ export function ClashOverlay({
       )}
       style={{ animationFillMode: "both" }}
     >
-      <div className="relative w-full max-w-[1080px] px-3 sm:px-10 flex flex-col items-center gap-4 sm:gap-5">
+      <div className="battle-overlay-stage relative w-full max-w-[1080px] px-3 sm:px-10 flex flex-col items-center gap-4 sm:gap-5">
         {/* Headline */}
         <h1
           data-testid="clash-headline"

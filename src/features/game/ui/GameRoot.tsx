@@ -36,12 +36,18 @@ type TelegramWindow = Window & {
       ready?: () => void;
       expand?: () => void;
       isFullscreen?: boolean;
-      isOrientationLocked?: boolean;
       platform?: string;
       isVersionAtLeast?: (version: string) => boolean;
       requestFullscreen?: () => void;
-      lockOrientation?: () => void;
+      unlockOrientation?: () => void;
       disableVerticalSwipes?: () => void;
+      setHeaderColor?: (color: string) => void;
+      setBackgroundColor?: (color: string) => void;
+      setBottomBarColor?: (color: string) => void;
+      viewportHeight?: number;
+      viewportStableHeight?: number;
+      onEvent?: (eventType: string, eventHandler: () => void) => void;
+      offEvent?: (eventType: string, eventHandler: () => void) => void;
       initDataUnsafe?: {
         user?: {
           id?: number;
@@ -54,10 +60,7 @@ type TelegramWindow = Window & {
     };
   };
 };
-
-type LockableScreenOrientation = ScreenOrientation & {
-  lock?: (orientation: "landscape" | "portrait" | "any" | "natural") => Promise<void>;
-};
+type TelegramWebApp = NonNullable<NonNullable<TelegramWindow["Telegram"]>["WebApp"]>;
 
 export function GameRoot() {
   const allCardIds = useMemo(() => cards.map((card) => card.id), []);
@@ -71,7 +74,6 @@ export function GameRoot() {
   const [profileRetryKey, setProfileRetryKey] = useState(0);
   const [starterDeckReadyVisible, setStarterDeckReadyVisible] = useState(false);
   const [telegramPlayer, setTelegramPlayer] = useState<TelegramPlayer>(() => readTelegramPlayer());
-  const [telegramLandscapePromptActive, setTelegramLandscapePromptActive] = useState(false);
   const deckTouchedRef = useRef(false);
   const deckSaveRequestRef = useRef(0);
   const lastConfirmedDeckIdsRef = useRef<string[]>([]);
@@ -132,39 +134,29 @@ export function GameRoot() {
 
   useEffect(() => {
     const webApp = getTelegramWebApp();
-    if (!webApp) return;
+    const syncViewportHeight = () => syncAppViewportHeight(webApp);
 
-    let disposed = false;
-    const syncLandscape = () => {
-      const landscape = isLandscapeViewport();
-      setTelegramLandscapePromptActive(isMobileTelegramClient(webApp) && !landscape);
+    syncViewportHeight();
 
-      if (landscape && canUseTelegramVersion(webApp, "8.0") && !webApp.isOrientationLocked) {
-        try {
-          webApp.lockOrientation?.();
-        } catch {
-          // Telegram clients may expose the method while rejecting the current platform.
-        }
-      }
-    };
+    if (webApp) {
+      webApp.ready?.();
+      webApp.expand?.();
+      webApp.disableVerticalSwipes?.();
+      applyTelegramChromeColors(webApp);
+      releaseTelegramOrientationLock(webApp);
+      requestTelegramFullscreen(webApp);
+      webApp.onEvent?.("viewportChanged", syncViewportHeight);
+    }
 
-    webApp.ready?.();
-    webApp.expand?.();
-    webApp.disableVerticalSwipes?.();
-    requestTelegramFullscreen(webApp);
-    void requestLandscapeOrientation(webApp).finally(() => {
-      if (!disposed) syncLandscape();
-    });
-
-    const syncHandle = window.setTimeout(syncLandscape, 0);
-    window.addEventListener("resize", syncLandscape);
-    window.screen.orientation?.addEventListener?.("change", syncLandscape);
+    const syncHandle = window.setTimeout(syncViewportHeight, 0);
+    window.addEventListener("resize", syncViewportHeight);
+    window.visualViewport?.addEventListener?.("resize", syncViewportHeight);
 
     return () => {
-      disposed = true;
       window.clearTimeout(syncHandle);
-      window.removeEventListener("resize", syncLandscape);
-      window.screen.orientation?.removeEventListener?.("change", syncLandscape);
+      window.removeEventListener("resize", syncViewportHeight);
+      window.visualViewport?.removeEventListener?.("resize", syncViewportHeight);
+      webApp?.offEvent?.("viewportChanged", syncViewportHeight);
     };
   }, []);
 
@@ -333,7 +325,6 @@ export function GameRoot() {
             onPlayerUpdated={handleBattlePlayerUpdated}
           />
         )}
-        <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
       </>
     );
   }
@@ -342,7 +333,6 @@ export function GameRoot() {
     return (
       <>
         <ProfileLoadingScreen />
-        <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
       </>
     );
   }
@@ -351,7 +341,6 @@ export function GameRoot() {
     return (
       <>
         <ProfileUnavailableScreen profileIdentityMode={playerIdentity?.mode} onRetry={retryProfileLoad} />
-        <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
       </>
     );
   }
@@ -377,7 +366,6 @@ export function GameRoot() {
           onPlayDeck={handleStarterDeckPlay}
           onEditDeck={handleStarterDeckEdit}
         />
-        <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
       </HudShell>
     );
   }
@@ -409,7 +397,6 @@ export function GameRoot() {
         onDeckChange={handleDeckChange}
         onPlay={handleSavedDeckPlay}
       />
-      <TelegramLandscapeOverlay active={telegramLandscapePromptActive} />
     </HudShell>
   );
 }
@@ -594,7 +581,7 @@ function getTelegramWebApp() {
   return webApp?.initData ? webApp : undefined;
 }
 
-function requestTelegramFullscreen(webApp: NonNullable<TelegramWindow["Telegram"]>["WebApp"]) {
+function requestTelegramFullscreen(webApp: TelegramWebApp) {
   if (!webApp || webApp.isFullscreen || !canUseTelegramVersion(webApp, "8.0")) return;
 
   try {
@@ -604,18 +591,20 @@ function requestTelegramFullscreen(webApp: NonNullable<TelegramWindow["Telegram"
   }
 }
 
-async function requestLandscapeOrientation(webApp: NonNullable<TelegramWindow["Telegram"]>["WebApp"]) {
-  if (typeof window === "undefined") return;
-  if (!isMobileTelegramClient(webApp)) return;
-
-  try {
-    await (window.screen.orientation as LockableScreenOrientation | undefined)?.lock?.("landscape");
-  } catch {
-    // Browsers commonly require fullscreen/user activation before allowing orientation lock.
+function releaseTelegramOrientationLock(webApp: TelegramWebApp) {
+  for (const unlock of [
+    () => webApp.unlockOrientation?.(),
+    () => (window.screen.orientation as (ScreenOrientation & { unlock?: () => void }) | undefined)?.unlock?.(),
+  ]) {
+    try {
+      unlock();
+    } catch {
+      // Some clients only allow unlock from a prior explicit lock or not at all.
+    }
   }
 }
 
-function canUseTelegramVersion(webApp: NonNullable<TelegramWindow["Telegram"]>["WebApp"], version: string) {
+function canUseTelegramVersion(webApp: TelegramWebApp, version: string) {
   if (!webApp?.isVersionAtLeast) return false;
 
   try {
@@ -625,29 +614,36 @@ function canUseTelegramVersion(webApp: NonNullable<TelegramWindow["Telegram"]>["
   }
 }
 
-function isLandscapeViewport() {
-  if (typeof window === "undefined") return true;
-  return window.matchMedia("(orientation: landscape)").matches || window.innerWidth >= window.innerHeight;
+function applyTelegramChromeColors(webApp: TelegramWebApp) {
+  for (const apply of [
+    () => webApp.setHeaderColor?.("#0d0e10"),
+    () => webApp.setBackgroundColor?.("#0d0e10"),
+    () => webApp.setBottomBarColor?.("#0d0e10"),
+  ]) {
+    try {
+      apply();
+    } catch {
+      // Some Telegram clients expose only a subset of the chrome color API.
+    }
+  }
 }
 
-function isMobileTelegramClient(webApp: NonNullable<TelegramWindow["Telegram"]>["WebApp"]) {
-  const platform = webApp?.platform?.toLowerCase();
-  if (platform === "android" || platform === "ios") return true;
-  if (platform === "tdesktop" || platform === "macos" || platform === "weba" || platform === "webk") return false;
+function syncAppViewportHeight(webApp?: TelegramWebApp) {
+  if (typeof window === "undefined") return;
 
-  return window.matchMedia("(pointer: coarse)").matches && Math.min(window.innerWidth, window.innerHeight) < 820;
+  const height =
+    normalizeViewportHeight(webApp?.viewportStableHeight) ??
+    normalizeViewportHeight(webApp?.viewportHeight) ??
+    normalizeViewportHeight(window.visualViewport?.height) ??
+    normalizeViewportHeight(window.innerHeight);
+
+  if (!height) return;
+  document.documentElement.style.setProperty("--app-height", `${height}px`);
 }
 
-function TelegramLandscapeOverlay({ active }: { active: boolean }) {
-  if (!active) return null;
-
-  return (
-    <section className="pointer-events-none fixed inset-x-2 top-2 z-[100] flex justify-center text-center text-[#f8eed8]">
-      <div className="max-w-[340px] rounded border border-[#ffe08a]/40 bg-[#05080b]/82 px-3 py-2 text-[10px] font-black uppercase tracking-[0.05em] text-[#ffe08a] shadow-[0_10px_28px_rgba(0,0,0,0.48)]">
-        Горизонтально зручніше, але портретний режим теж працює.
-      </div>
-    </section>
-  );
+function normalizeViewportHeight(value: number | undefined) {
+  if (!value || !Number.isFinite(value)) return undefined;
+  return Math.max(320, Math.round(value));
 }
 
 function getOwnedCardIdsForProfile(profile: PlayerProfile | null, allCardIds: string[]) {

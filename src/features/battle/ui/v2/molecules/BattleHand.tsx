@@ -41,6 +41,8 @@ export function BattleHand({ side, cards, active, onSelect, className }: BattleH
       data-side={side}
       data-active={active ? "true" : "false"}
       className={cn(
+        "battle-hand",
+        isPlayer ? "battle-hand--player" : "battle-hand--enemy",
         "flex w-full items-stretch justify-center gap-1.5 sm:gap-4 px-2 sm:px-4",
         className,
       )}
@@ -74,7 +76,7 @@ export function BattleHand({ side, cards, active, onSelect, className }: BattleH
         return (
           <div
             key={card.id}
-            data-testid="battle-card"
+            data-testid={`${isPlayer ? "player-card" : "enemy-card"}-${card.id}`}
             data-card-id={card.id}
             data-side={side}
             data-state={stateValue}
@@ -85,6 +87,7 @@ export function BattleHand({ side, cards, active, onSelect, className }: BattleH
             onClick={interactive ? handleClick : undefined}
             onKeyDown={interactive ? handleKey : undefined}
             className={cn(
+              "battle-hand-card",
               "relative flex-1 min-w-0 max-w-[184px] transition-all duration-200 ease-out",
               "outline-none",
               interactive && "cursor-pointer hover:-translate-y-0.5",

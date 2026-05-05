@@ -34,7 +34,6 @@ export function CardPickModal({
   open,
   selected,
   enemy,
-  player: _player,
   knownEnemyCard,
   knownEnemyEnergy,
   energy,
@@ -93,8 +92,8 @@ export function CardPickModal({
       ariaLabel="Вибір картки"
     >
       <section
-        data-testid="card-pick-modal"
-        className="flex flex-col w-full max-sm:max-h-[calc(100dvh-32px)]"
+        data-testid="selection-overlay"
+        className="selection-dialog flex h-full min-h-0 w-full flex-col overflow-hidden"
       >
         {/* Header */}
         <header className="flex items-center justify-between px-4 sm:px-7 pt-3 sm:pt-4 pb-1.5 sm:pb-2 shrink-0">
@@ -113,10 +112,10 @@ export function CardPickModal({
         </header>
 
         {/* Body (scrolls only on mobile sheet; sizes to content on desktop) */}
-        <div className="px-4 sm:px-7 pb-3 max-sm:flex-1 max-sm:min-h-0 max-sm:overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 sm:px-7 pb-3">
           {/* Two-card duel preview (compact) */}
           <div className="flex items-stretch justify-center gap-6">
-            <CompactCardSlot label="Твій боєць">
+            <CompactCardSlot label="Твій боєць" className="selection-card">
               <BattleCard card={selected} compact className="!w-[120px] sm:!w-[180px]" />
             </CompactCardSlot>
 
@@ -129,7 +128,7 @@ export function CardPickModal({
               </span>
             </div>
 
-            <CompactCardSlot label="Проти">
+            <CompactCardSlot label="Проти" className="selection-enemy">
               {knownEnemyCard ? (
                 <div data-testid="card-pick-known-enemy" data-card-id={knownEnemyCard.id}>
                   <BattleCard
@@ -268,7 +267,7 @@ export function CardPickModal({
           <div className="px-4 py-3">
             <button
               type="button"
-              data-testid="card-pick-confirm"
+              data-testid="selection-ok"
               onClick={onConfirm}
               className="inline-flex items-center justify-center w-full h-14 rounded-md bg-accent text-bg font-bold text-[15px] uppercase tracking-[0.18em] hover:brightness-110 transition-all"
             >
@@ -284,12 +283,14 @@ export function CardPickModal({
 function CompactCardSlot({
   label,
   children,
+  className,
 }: {
   label: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="flex flex-col items-center gap-1">
+    <div className={cn("flex flex-col items-center gap-1", className)}>
       <span className="text-[9px] sm:text-[10px] uppercase tracking-[0.16em] text-ink-mute">
         {label}
       </span>
@@ -331,17 +332,21 @@ function useIsMobile() {
   // Lazy initial state matches viewport synchronously on first client render,
   // avoiding the desktop→mobile flicker when the modal opens on a phone.
   const [isMobile, setIsMobile] = useState(() =>
-    typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches,
+    typeof window !== "undefined" && matchesMobileSheetViewport(),
   );
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const mq = window.matchMedia("(max-width: 640px)");
+    const mq = window.matchMedia("(max-width: 640px), (orientation: landscape) and (max-height: 520px)");
     const update = () => setIsMobile(mq.matches);
     update();
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
   }, []);
   return isMobile;
+}
+
+function matchesMobileSheetViewport() {
+  return window.matchMedia("(max-width: 640px), (orientation: landscape) and (max-height: 520px)").matches;
 }
 
 export default CardPickModal;

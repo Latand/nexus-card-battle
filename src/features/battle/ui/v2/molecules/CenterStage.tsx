@@ -39,7 +39,7 @@ function renderInner(variant: CenterStageVariant) {
     case "your_turn":
       return (
         <>
-          <h2 className={TITLE_CLASS} data-testid="center-stage-headline">
+          <h2 className={TITLE_CLASS} data-testid="round-status">
             ТВІЙ ХІД
           </h2>
           <p className={SUBTITLE_CLASS}>
@@ -50,7 +50,7 @@ function renderInner(variant: CenterStageVariant) {
     case "opponent_thinking":
       return (
         <>
-          <h2 className={TITLE_CLASS} data-testid="center-stage-headline">
+          <h2 className={TITLE_CLASS} data-testid="round-status">
             ХІД СУПЕРНИКА
           </h2>
           <p
@@ -65,7 +65,7 @@ function renderInner(variant: CenterStageVariant) {
     case "round_intro":
       return (
         <>
-          <h2 className={TITLE_CLASS} data-testid="center-stage-headline">
+          <h2 className={TITLE_CLASS} data-testid="round-status">
             РАУНД {variant.round}
           </h2>
           <p className={SUBTITLE_CLASS}>Карти оновлено.</p>
@@ -74,7 +74,7 @@ function renderInner(variant: CenterStageVariant) {
     case "match_intro":
       return (
         <>
-          <h2 className={TITLE_CLASS} data-testid="center-stage-headline">
+          <h2 className={TITLE_CLASS} data-testid="round-status">
             БІЙ ПОЧИНАЄТЬСЯ
           </h2>
           <p className={SUBTITLE_CLASS}>
@@ -94,7 +94,7 @@ function renderInner(variant: CenterStageVariant) {
             : "РАУНД ЗА СУПЕРНИКОМ";
       return (
         <>
-          <h2 className={TITLE_CLASS} data-testid="center-stage-headline">
+          <h2 className={TITLE_CLASS} data-testid="round-status">
             {headline}
           </h2>
           <p className={SUBTITLE_CLASS}>

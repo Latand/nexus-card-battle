@@ -135,7 +135,7 @@ export function BattleHud({
         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0 min-w-0">
           {isOpponent && timer ? (
             <span
-              data-testid="battle-timer"
+              data-testid="turn-timer"
               data-warning={timerWarning || timer.secondsLeft <= 10 ? "true" : "false"}
               className={cn(
                 "inline-flex items-center gap-0.5 sm:gap-1 font-mono tabular-nums text-[10px] sm:text-[13px] leading-none text-ink/80",
@@ -149,7 +149,7 @@ export function BattleHud({
           ) : null}
           {!isOpponent && roundNumber !== undefined ? (
             <span
-              data-testid="battle-round"
+              data-testid="round-marker"
               className="text-[10px] sm:text-[12px] uppercase tracking-[0.1em] sm:tracking-[0.14em] text-accent/80 font-semibold whitespace-nowrap"
             >
               <span className="hidden sm:inline">Раунд </span>

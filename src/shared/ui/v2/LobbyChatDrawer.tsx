@@ -32,17 +32,28 @@ export function LobbyChatDrawer({ open, onClose, userName }: LobbyChatDrawerProp
   return (
     <Modal open={open} onClose={onClose} size="drawer-right" ariaLabel="Чат лобі">
       <section
-        className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3 p-4"
+        className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3 overscroll-contain p-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1rem)]"
         data-testid="lobby-chat"
       >
         <header className="flex items-center justify-between gap-2">
           <span className="text-xs font-medium uppercase tracking-[0.14em] text-ink-mute">Чат лобі</span>
-          <span className="text-[10px] tabular-nums text-ink-mute">{chatMessages.length}/200</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] tabular-nums text-ink-mute">{chatMessages.length}/200</span>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Закрити чат"
+              data-testid="lobby-chat-close"
+              className="grid h-8 w-8 place-items-center rounded border border-accent-quiet/60 text-lg leading-none text-ink-mute transition hover:border-accent hover:text-ink focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+            >
+              <span aria-hidden>×</span>
+            </button>
+          </div>
         </header>
 
         <div
           ref={listRef}
-          className="grid content-start gap-2 overflow-y-auto pr-1 [scrollbar-color:var(--color-accent-quiet)_transparent] [scrollbar-width:thin]"
+          className="grid min-h-0 content-start gap-2 overflow-y-auto overscroll-contain pr-1 [scrollbar-color:var(--color-accent-quiet)_transparent] [scrollbar-width:thin]"
           data-testid="lobby-chat-list"
         >
           {chatMessages.length === 0 ? (

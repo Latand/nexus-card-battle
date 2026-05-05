@@ -162,7 +162,7 @@ export function BattleArena({
       data-mode={mode}
       data-phase={game.phase}
       className={cn(
-        "relative flex flex-col w-full min-h-dvh text-ink overflow-hidden",
+        "battle-arena relative flex flex-col w-full min-h-[var(--app-height)] h-[var(--app-height)] text-ink overflow-hidden",
         "bg-bg",
         "bg-[url('/nexus-assets/backgrounds/cathedral-mobile-390x844.png')] md:bg-[url('/nexus-assets/backgrounds/cathedral-desktop-1440x900.png')]",
         "bg-cover bg-center",
@@ -180,7 +180,7 @@ export function BattleArena({
         )}
       />
 
-      <div className="relative flex flex-col w-full min-h-dvh">
+      <div className="battle-board relative z-[1] w-full min-h-0">
         <BattleHud
           side="opponent"
           mode={mode}
@@ -198,8 +198,8 @@ export function BattleArena({
           <BattleHand side="opponent" cards={enemyHand} active={activeHand === "enemy"} />
         </div>
 
-        <div className="mx-auto w-full max-w-[1440px] flex-1 grid place-items-center min-h-[120px]">
-          <CenterStage variant={variant} />
+        <div className="battle-arena-panel mx-auto w-full max-w-[1440px] flex-1 grid place-items-center min-h-[120px]">
+          <CenterStage variant={variant} className="battle-arena-strip" />
         </div>
 
         <div className="mx-auto w-full max-w-[1440px] mb-3 sm:mb-5">
@@ -301,7 +301,7 @@ function PhaseSplash({ splash }: { splash: BattleArenaSplash }) {
   const { title, subtitle } = splashCopy(splash);
   return (
     <section
-      data-testid="phase-splash"
+      data-testid="phase-overlay"
       data-phase={splash.phase}
       className="fixed inset-0 z-30 grid place-items-center bg-[#05080b]/80 bg-cover bg-center p-3 backdrop-blur-sm"
       style={{
