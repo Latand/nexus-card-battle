@@ -481,3 +481,394 @@ Mobile breakpoint: 390×844 (Telegram WebApp standard). Telegram chrome above is
 7. **Browser verification + tests** (existing `data-testid` must stay intact)
 
 Cards untouched throughout — `BattleCard`, `MiniBattleCard`, `MiniRevealBattleCard`, `ClanGlyph`, painted-frame asset.
+
+---
+
+# Battle redesign — Phase 5 (TBD)
+
+Reference style: **Hearthstone-style atmospheric framing on the Nexus cathedral background**, applied to the **existing Nexus battle mechanics** (4-card hand, 4 rounds, in-place card resolution).
+
+**Battle mockup references in `./mockups/`:**
+
+| # | File | Status |
+|---|---|---|
+| 16 | `16-battle-b1-rejected-wrong-mechanics.png` | rejected — wrong mechanics (5 rounds, 1 slot, 3 fanned cards) |
+| 17 | `17-battle-old-reference-main-view.png` | OLD pre-redesign — for mechanics reference only (4+4 cards layout) |
+| 18 | `18-battle-old-reference-card-pick-modal.png` | OLD pre-redesign — card-pick modal flow |
+| 19 | `19-battle-old-reference-clash.png` | OLD pre-redesign — clash resolution moment |
+| 20 | `20-battle-old-reference-opponent-turn.png` | OLD pre-redesign — opponent thinking + used cards |
+| 21 | `21-battle-b1-desktop-final.png` | **B1 desktop final** ✓ |
+| 22 | `22-battle-b1m-mobile-pre-color-fix.png` | rejected — bars wrong color (gold instead of green HP) and on offset two-line HUD |
+| 23 | `23-battle-b1m-compact-final.png` | **B1m mobile compact final** ✓ — single-line HUD top+bottom, green HP `#6ba35f` + gold energy `#f0c668` aligned same baseline |
+| 24 | `24-battle-b2-card-pick-no-opponent.png` | B2 v1 — clean layout but missing opponent card preview and "Сумарна атака" total |
+| 25 | `25-battle-b2-card-pick-with-opponent-rejected-layout.png` | rejected — concept right (shows opponent card + Сумарна атака) but **opponent card too small/squeezed** vs player card; right info panel feels cramped |
+| 26 | `26-battle-b2-card-pick-final.png` | **B2 desktop final** ✓ — equal-size cards + VS tag, 3-column action row (energy stepper / Сумарна атака "8" box / OK), no duplicate name/abilities |
+| 27 | `27-battle-b3-clash-final.png` | **B3 desktop final** ✓ — clash resolution, two played cards centered with "БІЙ" headline, dashed-ghost slots in rows |
+| 28 | `28-battle-b4-opponent-turn-final.png` | **B4 desktop final** ✓ — opponent thinking, used cards dimmed with ✓/✕ badges, "Суперник обирає відповідь ●●●" |
+| 29 | (deleted — fabricated B5 selection-overlay screen, not a real game flow; the `SelectionOverlay.tsx` component IS the card-pick modal which is B2) |
+| 30 | `30-battle-b6-victory-final.png` | **B6 desktop final** ✓ — ПЕРЕМОГА overlay, 96px gold-ringed avatar, rewards list, ГРАТИ ЩЕ + ДО КОЛЕКЦІЇ buttons |
+| 31 | `31-battle-b7-defeat-final.png` | **B7 desktop final** ✓ — ПОРАЗКА overlay, danger-ringed avatar, dimmer atmosphere, РЕВАНШ + ДО КОЛЕКЦІЇ buttons |
+
+OLD references (17-20) document the existing battle mechanics and flows — designs are intentionally being replaced, but the FLOWS (4 cards always visible, card-pick modal with energy spend, clash centered, used cards stay in row with badges) are the locked behavior the new visuals must support.
+
+> **NOTES FOR IMPLEMENTATION AGENTS (locked feedback from owner, 2026-05-04):**
+> 1. **HP bar must be GREEN** (muted green `#6ba35f` fill, dark-green rail `#1d2a1c`) — NOT gold.
+> 2. **Energy bar stays GOLD** (`#f0c668` fill, dark-gold rail `#3a2f15`).
+> 3. **HP and energy bars must be perfectly aligned on the SAME horizontal baseline** in each HUD strip — no two-line offset, no different vertical positions. Same height, same length, same y-center. Numerals beside each bar use tabular monospace and are vertically centered on the bars.
+> 4. Cards on the field render with the existing `BattleCard` component — visuals unchanged. Only the surrounding chrome is new.
+> 5. **Card-pick modal (B2) MUST show the opponent card preview** alongside player card with **EQUAL SIZE** (no shrinking the opponent card). A subtle "VS" tag sits between them. Below or beside both cards, a "СУМАРНА АТАКА" block shows the live total = base attack + spent energy (e.g. "8 = 7 база + 1 енергія"). The right-side info panel (energy stepper, boost button, abilities, OK button) sits BELOW the two cards in a single horizontal row, NOT squeezed into a third column. Modal grows wider rather than cramping vertically.
+
+**Mechanics that the redesign MUST honour** (from `src/features/battle/model/constants.ts`):
+- `BATTLE_HAND_SIZE = 4` — each player has 4 cards in hand, **all visible simultaneously**
+- `MAX_ROUNDS = 4` — match is 4 rounds
+- `MAX_HEALTH = 12`, `MAX_ENERGY = 12` — bars cap at 12
+- `TURN_SECONDS = 75` — per-turn timer
+- Cards are played **in their hand position** — no separate "play slot". After playing, the card stays where it was and gets a "used" overlay
+- Card-pick is a **dedicated modal** with energy/damage spending UI + opponent's face-down "VS" placeholder (existing flow, kept as-is)
+- Clash resolution slides both played cards to center for the "БІЙ" reveal animation, then returns them to their hand positions with win/loss indicators
+
+**Layout (top → bottom, both AI and PvP):**
+1. **Opponent HUD strip** — avatar, name, level/title (e.g. "Рівень 2 · Швидкий тиск"), turn-timer "75 СЕК", energy bar ⚡, HP bar, "КОЛОДИ" deck-preview button
+2. **Opponent's 4 hand cards** — horizontal row, all face-up always, full-color painted; used cards stay in row, dimmed 50% with a small ✓/✕ badge in the corner
+3. **Center action area** — status headline ("Твій хід" / "Хід суперника" / "Бій"), thinking-dots indicator for opponent, hints/tooltips
+4. **Player's 4 hand cards** — same row treatment as opponent
+5. **Player HUD strip** — round counter "РАУНД 2", energy ⚡ bar, player name, HP bar, mode-info badge
+
+**Architecture decisions locked:**
+- One unified frame for AI vs PvP. PvP gets additive chrome (real opponent avatar, ELO badge, connection indicator, chat icon), not a parallel UI.
+- Cards on the field render with the existing `BattleCard` component, sized for hand-row display. We redesign the surrounding chrome, HUD strips, modals, animations, overlays.
+- Atmospheric background ramps from 14% (static screens) to ~22% opacity in battle — cathedral more present, but cards are still hero.
+- Particles intensify during clash moment (warm dust drift toward center where "БІЙ" headline appears).
+- HP/energy bars: thin horizontal bars with tabular numerals. **HP bar: muted green** (e.g. `#6ba35f` filled, `#1d2a1c` rail). **Energy bar: muted gold** (`#f0c668` filled, `#3a2f15` rail). Both bars must be the **same height, same length, and rendered side-by-side on the SAME baseline** (no offset between HP/energy lines on either HUD strip — they sit in one horizontal row aligned to identical vertical center). Danger-red `#d97056` overlay segment appears on HP bar when HP is about to drop.
+- Round counter: lives in player HUD strip ("РАУНД 2"), NOT floating in field. Optional dots `● ● ○ ○` next to it.
+- Card hand: 4 cards in flat row (no fan), generous gap, hover lifts active card 6px, selected card has 2px gold ring.
+- Used card state: same position in row, 50% opacity, slight desaturation, ✓ (won round) or ✕ (lost round) badge in top-right corner in muted gold/danger.
+- Card-pick modal: dedicated overlay with selected-card preview, energy/damage spending controls, opponent's face-down "VS" card placeholder. Existing UX flow, redesigned chrome.
+- Clash animation: both played cards slide from their hand positions toward center, "БІЙ" headline appears, brief pause, cards return to their hand positions with win/loss state applied. HP/energy bars update with delta animation.
+- Match end: full-screen overlay with portrait, "Перемога" / "Поразка" headline, rewards block, action buttons.
+
+**Common prompt header for all battle screens (paste at top of each):**
+
+> Visual style: deep matte charcoal `#0d0e10` base. Painted dark cathedral arena visible behind at ~22% opacity, blurred 8px (LESS blur than static screens — more present), warm torchlight glow on stone columns, faint warm-dust particles drifting upward. Subtle vignette around the central action area like a focused stage. Typography clean geometric sans, regular weight, NO text-shadow stamps, NO all-caps-black, NO bevelled "arcade" gold lettering. Single accent muted gold `#f0c668` used ONLY on selected-card outline, primary CTA after match ends, and turn-active state badges. Quieter gold `#6b5a31` for HP/energy bar fills, hairlines, status indicator outlines. Cyan `#65d7e9` reserved exclusively for PvP-only chrome (opponent live indicator, chat icon, ELO badge). Danger red `#d97056` for HP loss deltas and defeat states only. Cards on the field are full-color painted ornate cyberpunk-fantasy art with stat circles, ability/bonus plates at bottom, clan glyph (preserve existing `BattleCard` visual exactly). Mood: a Hearthstone-style focused play table inside a dim cathedral, every card weighted, no chromatic flair, no glow rings, no neon. Atmospheric, not loud.
+
+---
+
+## B1. Battle main view — your turn (AI mode, round 1)
+
+**Aspect:** 1440×900 desktop, primary battle workhorse.
+
+**Layout (top → bottom, all 4 cards on each side ALWAYS visible in row):**
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ ⏳ 75 СЕК   ⚡ ▰▰▰▰▰▰▰▱▱▱ 12       ІСКРА РАННЕР      HP ▰▰▰▰▰▰▰ 12  КОЛОДИ │  ← opponent HUD (~64px)
+│                                  Рівень 2 · Швидкий тиск                  │     (timer · energy · name · HP · deck btn)
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   ┌──────┐    ┌──────┐    ┌──────┐    ┌──────┐                  │  ← OPPONENT'S 4 CARDS in row
+│   │ Card │    │ Card │    │ Card │    │ Card │                  │     all face-up always, full-color painted
+│   │  1   │    │  2   │    │  3   │    │  4   │                  │     ability/bonus plates visible
+│   └──────┘    └──────┘    └──────┘    └──────┘                  │     (tooltip on hover)
+│                                                                  │
+│                                                                  │
+│                       ТВІЙ ХІД                                   │  ← center action area
+│       Обери бійця, вклади енергію й випусти його на арену.       │     (~140px tall vertical space)
+│                                                                  │
+│                                                                  │
+│   ┌──────┐    ┌──────┐    ┌──────┐    ┌──────┐                  │  ← PLAYER'S 4 CARDS in row
+│   │ Card │    │ Card │    │ Card │    │ Card │                  │     same — all face-up always
+│   │  1   │    │ [2] │←  │  3   │    │  4   │                  │     [2] = hovered/selected with gold ring + lift
+│   └──────┘    └──────┘    └──────┘    └──────┘                  │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│ РАУНД 1   ⚡ ▰▰▰▰▰▰▰▱▱▱ 12          ГРАВЕЦЬ        HP ▰▰▰▰▰▰▰ 12  AI / PvP │  ← player HUD (~64px)
+└──────────────────────────────────────────────────────────────────┘
+                                                                ✕ leave
+```
+
+**Image-gen prompt:**
+> [Common header] Battle screen 1440×900. **Top HUD strip ~64px** on `bg-surface` with hairline `accent-quiet` divider below: left cluster has hourglass glyph + "75 СЕК" tabular timer in muted parchment, then a thin horizontal energy bar `⚡` in muted gold-quiet `#6b5a31` filled to 100% (12 of 12 segments shown as a thin bar). Center: opponent name "ІСКРА РАННЕР" warm off-white at 16px regular, with subtitle "Рівень 2 · Швидкий тиск" in muted parchment small caps below. Right cluster: HP bar in muted gold-quiet filled 100% with tabular "HP 12" beside it; further right a small "КОЛОДИ" ghost text button in muted parchment outline (opens deck preview). **Center action stage**: Two horizontal rows of 4 painted playing cards each (preserve existing `BattleCard` art — ornate frames with stat circles top, name in middle, ability/bonus plates at bottom). Top row = opponent's 4 cards, ALL face-up and active (NOT face-down). Bottom row = player's own 4 cards, ALL face-up, second-from-left card is hovered/selected with a 2px muted gold `#f0c668` outline and a 6px lift. Cards in each row have generous gap (~28px between cards), each card ~180×260. **Between the two rows**, vertical space ~140px tall serves as the action area: centered headline "ТВІЙ ХІД" in warm off-white at 36px regular weight (NOT bevelled, NOT bold-shouty — the older arcade-style yellow gradient is REMOVED), with a one-line subtitle "Обери бійця, вклади енергію й випусти його на арену." in muted parchment 14px below. **Bottom HUD strip ~64px** mirrors the top: left cluster has "РАУНД 1" small caps muted gold tabular and player energy bar `⚡ 12`. Center: "ГРАВЕЦЬ" name. Right cluster: HP bar with "HP 12" tabular, then a small mode-info badge "AI" muted gold ghost outline. Below the bottom HUD, a tiny ✕ leave glyph in muted parchment bottom-right corner. **Background**: cathedral arena visible at ~22% opacity, blurred 8px, warm torchlight glow, subtle vignette around the central card area focusing attention on the play stage. Faint warm-dust particles drifting upward. NO floating round indicator, NO empty dashed slots — cards play in their hand position. NO chat bubble (AI mode). Mood: focused tournament table inside a dim cathedral.
+
+---
+
+## B2. Battle — card-pick modal
+
+**Aspect:** 1440×900. Modal overlays the battle field after player taps a card. Field dimmed 60%. **Modal is wide (~960×560)** to fit two equal-size cards on top + info row below.
+
+**Layout:**
+```
+        (battle field below, dimmed 60%)
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │                                                                       ✕  │
+  │      Твій боєць              VS              Проти                        │
+  │   ┌──────────┐           ╔══════╗          ┌──────────┐                  │
+  │   │  Player  │           ║  VS  ║          │ Opponent │                  │
+  │   │   Card   │           ╚══════╝          │   Card   │                  │
+  │   │   full   │            (sigil)          │   full   │                  │
+  │   │   art    │                              │   art   │                  │
+  │   │ EQUAL    │                              │  EQUAL  │                  │
+  │   │  SIZE    │                              │  SIZE   │                  │
+  │   └──────────┘                              └──────────┘                  │
+  │                                                                          │
+  │  ─────────────────────────────────────────────────────────────────────   │
+  │                                                                          │
+  │  GAMBLERS · Гвен                          СУМАРНА АТАКА                  │
+  │                                                                          │
+  │  Енергія для атаки                            ┌──────────┐               │
+  │  [ − ]  [ 1 ]  [ + ]   залишок: 11           │    8     │ УРОН: 3       │
+  │                                               └──────────┘               │
+  │  [ +2 УРОНУ за 3 ⚡ ]                         7 база + 1 енергія          │
+  │                                                                          │
+  │  Лють: +5 атаки соп.                                                     │
+  │  +2 енергії наступного бою                                    [  ОК  ]   │
+  └──────────────────────────────────────────────────────────────────────────┘
+```
+
+**Image-gen prompt:**
+> [Common header] A wide card-pick modal **960×560** centered over the dimmed (60% darken) battle field. Modal surface `#1e2125`, 16px radius, 1px gold-quiet border, 32px inner padding. **Top half is the duel preview**: two painted playing cards rendered at **EXACTLY THE SAME SIZE** (~220×310 each) sitting side-by-side with ~140px gap between them, both face-up showing full art. Left card is the player's chosen card (preserve existing `BattleCard` art — e.g. "Гвен" GAMBLERS, stats 4/6, full character illustration). Right card is the opponent's revealed/known card (same `BattleCard` treatment — e.g. "Іскра Раннер" RUNNERS, 3/5). Above each card a tiny muted-parchment label: left "Твій боєць", right "Проти". **Between the two cards, dead-center, a compact "VS" sigil tag** — small rounded rectangle ~46×34 with `bg-surface-raised`, gold-quiet border, "VS" text muted gold `#f0c668` 18px small caps tracking-wider. NO arrow, NO chevrons, just the tag. Optionally a thin warm-dust streak passing horizontally through the VS tag. **Below both cards, a hairline gold-quiet divider spans the modal width.** **Bottom half is the action panel** organized as two columns sharing the modal width: LEFT column ~520px with clan label "GAMBLERS · Гвен" muted gold small caps line, then heading "Енергія для атаки" muted parchment small caps, then a horizontal stepper `[−] [ 1 ] [+]` with tabular numeric "1" between, dim "залишок: 11" right-of-stepper, and below it an OPTIONAL boost button "+2 УРОНУ за 3 ⚡" in muted gold-quiet ghost outline (calm secondary, NOT red). Then ability text "Лють: +5 атаки соп." and bonus "+2 енергії наступного бою" muted parchment 14px. RIGHT column ~340px contains a **prominent "СУМАРНА АТАКА" block**: small caps muted gold heading, then a large boxed numeric "8" inside a `bg-surface-raised` rounded rectangle with gold-quiet border (~140×80, "8" in warm off-white 56px tabular regular weight), and beside it "УРОН: 3" in tabular monospace. Below the box, a single fine-print line "7 база + 1 енергія" muted parchment 12px showing the formula. Bottom-right of the right column: primary FILLED gold "ОК" button (~120×44, dark text). Top-right of modal: tiny ✕ close. Behind the modal: dimmed and blurred battle field with the player's hand row peeking at bottom (the chosen card glowing gold-outlined in its slot). Mood: a tactical commit moment with FULL information — both fighters revealed, total damage telegraphed, calm and deliberate. NO cramped third column, NO shrunken opponent card, NO red panic colors.
+
+---
+
+## B3. Battle — clash resolution moment
+
+**Aspect:** 1440×900. Both played cards slide into the center action area for the "БІЙ" reveal animation.
+
+**Layout:**
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ ⏳ 75 СЕК   ⚡ ▰▰▰▰▰▰▰▱▱▱ 8       ІСКРА РАННЕР      HP ▰▰▰▰▰▰ 12  КОЛОДИ │  ← opponent HUD (energy dropped after spend)
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   ┌──────┐    ┌──────┐    ┌──────┐    ┌──────┐                  │  ← opponent row, the played card has its frame
+│   │ Card │    │ Card │    │ ░░░░ │    │ Card │                  │     dimmed/half-out (slid to center)
+│   │  1   │    │  2   │    │ moved│    │  4   │                  │
+│   └──────┘    └──────┘    └──────┘    └──────┘                  │
+│                                                                  │
+│              ┌──────────┐  ─── БІЙ ───  ┌──────────┐            │  ← TWO played cards centered + headline
+│              │ Opponent │                 │  Player │            │     (cards lifted, slight tilt toward center)
+│              │  Card    │   ✦ tiny       │   Card  │            │     small projectile sigil between them
+│              │  full    │   sigil        │   full  │            │
+│              │  art     │                 │   art   │            │
+│              └──────────┘                 └──────────┘           │
+│                                                                  │
+│   ┌──────┐    ┌──────┐    ┌──────┐    ┌──────┐                  │  ← player row, played card half-out (slid to center)
+│   │ Card │    │ ░░░░ │    │ Card │    │ Card │                  │
+│   │  1   │    │ moved│    │  3   │    │  4   │                  │
+│   └──────┘    └──────┘    └──────┘    └──────┘                  │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│ РАУНД 1   ⚡ ▰▰▰▰▰▰▱▱▱▱ 9          ГРАВЕЦЬ        HP ▰▰▰▰▰▰ 12  AI │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Image-gen prompt:**
+> [Common header] Battle screen 1440×900, clash resolution moment. Same HUD strips as B1. Both rows of 4 cards still visible, but ONE card from each row is "out of place" — the slot it occupies in the row shows a faint dashed outline indicating "card has moved to center" (no full empty box, just a subtle ghost). **In the center action area** between the two rows: TWO painted playing cards, one from opponent (top-left) and one from player (top-right), positioned side-by-side with a small gap, each lifted 12px and tilted slightly toward each other (~3°). Both face-up showing full-color painted art. Between them, a horizontal headline "БІЙ" in warm muted gold `#f0c668` at 32px regular weight (NOT the old bevelled bright-yellow arcade style — flat clean type), with thin gold-quiet flanking hairlines extending left and right beyond the cards (museum chapter style). Between the two cards, a tiny geometric sigil ✦ (~30×30) in muted gold representing the strike, with a faint warm-dust trail. **Background**: cathedral atmosphere ~28% opacity (slightly more present during action), warm light intensifying near the center. Particles converge subtly toward the central sigil. The opponent's HP bar shows a small danger-red `#d97056` overlay segment indicating HP about to drop. Player and opponent HUD strips remain readable but slightly dimmed. Mood: the climactic strike — weighty, focused, no neon flair.
+
+---
+
+## B4. Battle — opponent's turn (mid-match, some cards used)
+
+**Aspect:** 1440×900. Round 2, both players have used some cards. Now opponent is thinking.
+
+**Layout:**
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ ⏳ 75 СЕК   ⚡ ▰▰▰▰▰▱▱▱▱▱ 5       ІСКРА РАННЕР      HP ▰▰▰▰▰▱ 9  КОЛОДИ │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   ┌──────┐    ┌──────┐    ┌──────┐    ┌──────┐                  │  ← opponent row
+│   │ Card │    │ Card │    │ Card │    │░░ ✓ ░│                  │     last card USED + ✓ (won that round)
+│   │  1   │    │  2   │    │  3   │    │ used │                  │     dimmed 50%, desaturated
+│   └──────┘    └──────┘    └──────┘    └──────┘                  │
+│                                                                  │
+│                  ХІД СУПЕРНИКА                                   │  ← center action area
+│              Суперник обирає відповідь ●●●                       │     (thinking dots animate)
+│                                                                  │
+│   ┌──────┐    ┌──────┐    ┌──────┐    ┌──────┐                  │  ← player row
+│   │ Card │    │ Card │    │ Card │    │░░ ✕ ░│                  │     last card USED + ✕ (lost that round)
+│   │  1   │    │  2   │    │  3   │    │ used │                  │     dimmed 50%, desaturated, danger-tinted ring
+│   └──────┘    └──────┘    └──────┘    └──────┘                  │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│ РАУНД 2   ⚡ ▰▰▰▰▰▰▰▰▰▰ 12         ГРАВЕЦЬ        HP ▰▰▰▰▱ 8   AI │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Image-gen prompt:**
+> [Common header] Battle screen 1440×900, opponent's turn during round 2. Same HUD/atmosphere as B1. Both card rows of 4 cards still visible. **In each row, the rightmost card is in the "used" state**: 50% opacity, desaturated to grayscale 30%, with a small badge in the top-right corner of that card — opponent's used card has a ✓ badge in muted gold `#f0c668` (won that round), player's used card has a ✕ badge in muted danger `#d97056` (lost that round). The other 3 cards in each row remain at full color and full opacity, available for the next round. **Center action area** between rows: headline "ХІД СУПЕРНИКА" warm off-white 32px regular weight, below it a smaller subtitle "Суперник обирає відповідь" in muted parchment 14px, followed by three animated dots `●●●` in muted gold (CSS pulsing one-after-another). HP bars now show partial fill (opponent 75% with HP 9, player 67% with HP 8). Round counter reads "РАУНД 2". Energy bars: opponent at 5 (recovered some after spend), player at 12 (max — hasn't acted yet). Cathedral atmosphere ~22%. Mood: a quiet pause while the opponent thinks — thinking dots are the only motion.
+
+---
+
+## B1m. Battle main view — your turn (mobile, 390×844)
+
+**Aspect:** 390×844 portrait (Telegram WebApp standard). Same mechanics as B1 desktop — 4 cards per side, ALL face-up always, no fan, no empty slots — just scaled for narrow viewport.
+
+**Layout:**
+```
+┌──────────────────────────────────────┐
+│ ⏳75с  ⚡▰▰▰▰▱▱ 12     ІСКРА РАННЕР   │  ← opponent HUD (~44px)
+│                       Рівень 2        │
+│  HP ▰▰▰▰▰▰ 12              КОЛОДИ    │  ← second line: HP + deck btn
+├──────────────────────────────────────┤
+│                                      │
+│ ┌────┐ ┌────┐ ┌────┐ ┌────┐         │  ← OPPONENT'S 4 CARDS in row
+│ │card│ │card│ │card│ │card│         │     each ~84×118, gap 6px
+│ │ 1  │ │ 2  │ │ 3  │ │ 4  │         │     simplified: art + stat circles
+│ └────┘ └────┘ └────┘ └────┘         │     (no ability text — see CardPickModal)
+│                                      │
+│            ТВІЙ ХІД                  │  ← center action area (~80px)
+│      Обери бійця й випусти          │     (subtitle shortened on mobile)
+│         його на арену.               │
+│                                      │
+│ ┌────┐ ┌────┐ ┌────┐ ┌────┐         │  ← PLAYER'S 4 CARDS in row
+│ │card│ │[card]│ │card│ │card│        │     middle card selected (gold ring + lift)
+│ │ 1  │ │ 2   │ │ 3  │ │ 4  │        │
+│ └────┘ └────┘ └────┘ └────┘         │
+│                                      │
+├──────────────────────────────────────┤
+│ РАУНД 1   ⚡▰▰▰▰▰▰ 12       ГРАВЕЦЬ   │  ← player HUD (~44px)
+│ HP ▰▰▰▰▰▰ 12                    AI   │  ← second line
+└──────────────────────────────────────┘
+                                ✕
+```
+
+**Image-gen prompt:**
+> [Common header] Mobile portrait battle screen 390×844. **Top HUD strip ~44px** on `bg-surface` with hairline `accent-quiet` divider below. The strip uses TWO compact lines (mobile is too narrow for one): line 1 has timer "⏳75с" left, energy bar `⚡▰▰▰▰▱▱ 12` middle, opponent name "ІСКРА РАННЕР" right (truncate to fit); line 2: subtitle "Рівень 2" left in muted parchment small caps, HP bar `HP ▰▰▰▰▰▰ 12` center, "КОЛОДИ" small ghost button right in muted gold-quiet outline. **Card area**: opponent's 4 cards in a single horizontal row, each ~84×118px, gap 6px, cards centered in viewport with ~9px side padding. Each card shows the SIMPLIFIED display — preserve existing painted card art, the stat circles in top corners (e.g. "3" and "4"), clan glyph at top-center, name in middle (small caps text fits in 2 lines max), but the ability/bonus text plates at the bottom are HIDDEN on mobile to save space (the player taps a card to see full info in `CardPickModal`). Cards remain full-color always. **Center action area** (~80px tall): centered headline "ТВІЙ ХІД" warm off-white 24px regular weight (smaller than desktop's 36px), with a one-line subtitle "Обери бійця й випусти його на арену." in muted parchment 12px (text shortened for mobile vs the longer desktop string). **Player's 4 cards** in a horizontal row, same treatment as opponent's row, second card from left has 2px muted gold `#f0c668` outline and 4px lift (selected/hovered state). **Bottom HUD strip ~44px** mirrors top: line 1 has "РАУНД 1" small caps muted gold left, energy bar `⚡▰▰▰▰▰▰ 12` middle, name "ГРАВЕЦЬ" right; line 2: HP bar `HP ▰▰▰▰▰▰ 12` left, mode badge "AI" right in muted gold ghost outline. Bottom-right just below HUD: tiny ✕ leave glyph in muted parchment. **Background**: cathedral arena visible at ~22% opacity, blurred 8px, warm torchlight; subtle vignette around card area. NO ability text on cards (saved for modal), NO floating round indicator, NO empty slots. Mood: focused dueling table on a phone — every card readable at thumbnail size, tap any card to commit.
+
+**Notes for implementation:**
+- Card art readability at 84×118 is the tightest constraint. The existing `BattleCard` component uses container queries — verify at this width that stat circles, name, and clan glyph remain legible. If too tight, fall back to ability-text suppression (already in spec).
+- Touch target: each card itself is the click target. 84×118 satisfies 44×44 min easily.
+- The "AI" badge in player HUD is the same as desktop — for PvP mode it becomes a small cyan-outlined "PvP" badge.
+- Top right corner just above the deck button might collide with Telegram's own header chrome — leave 8px breathing room.
+- On landscape mobile (some users rotate for games), this layout naturally widens; cards can grow to ~140×195. But primary target = portrait.
+
+---
+
+## B1m-compact. Battle main view — mobile, single-line HUD
+
+**Aspect:** 390×844. Same mechanics + corrected colors + tighter HUD: HP/energy bars on the SAME line, no two-row HUD, more vertical room for the play area.
+
+**Layout:**
+```
+┌──────────────────────────────────────────────┐
+│ ⏳75с  ⚡▰▰▰▰▱▱ 12  HP ▰▰▰▰▰▰ 12  ІСКРА РАННЕР │  ← opponent HUD: ONE line ~40px
+│                                       КОЛОДИ │     (timer · ⚡ gold · HP green · name · deck btn)
+├──────────────────────────────────────────────┤
+│                                              │
+│ ┌────┐ ┌────┐ ┌────┐ ┌────┐                 │  ← OPPONENT'S 4 CARDS in row
+│ │card│ │card│ │card│ │card│                 │     ~84×118 each
+│ │ 3⚔4│ │ 2⚔3│ │ 4⚔6│ │ 3⚔5│                 │
+│ └────┘ └────┘ └────┘ └────┘                 │
+│                                              │
+│              ТВІЙ ХІД                        │  ← center action area (~70px)
+│      Обери бійця й випусти                   │     subtitle 1 line, smaller
+│                                              │
+│ ┌────┐ ┌────┐ ┌────┐ ┌────┐                 │  ← PLAYER'S 4 CARDS in row
+│ │card│ │[2nd]│ │card│ │card│                 │     2nd selected (gold ring)
+│ │ 3⚔4│ │ 4⚔6 │ │ 2⚔3│ │ 3⚔5│                 │
+│ └────┘ └────┘ └────┘ └────┘                 │
+│                                              │
+├──────────────────────────────────────────────┤
+│ РАУНД 1  ⚡▰▰▰▰▰▰ 12  HP ▰▰▰▰▰▰ 12  ГРАВЕЦЬ AI │  ← player HUD: ONE line ~40px
+└──────────────────────────────────────────────┘
+                                          ✕
+```
+
+**Image-gen prompt:**
+> [Common header] Mobile portrait battle screen 390×844, COMPACT version. **Top HUD strip ~40px, ONE single horizontal line** on `bg-surface` with hairline `accent-quiet` divider below. The line packs everything tightly from left to right: hourglass + "75с" timer in muted parchment, then a thin energy bar in **muted gold `#f0c668`** rail-with-fill style (rail `#3a2f15`, filled to 100%) with tabular "12" right after, then a thin HP bar in **muted green `#6ba35f`** rail-with-fill (rail `#1d2a1c`, filled to 100%) with tabular "12" right after, then opponent name "ІСКРА РАННЕР" small caps warm off-white truncated to fit, finally "КОЛОДИ" tiny ghost button in muted gold-quiet outline at the right edge. **CRITICAL: the energy bar and HP bar must be IDENTICAL height (~6px), IDENTICAL length, and rendered on the EXACT SAME horizontal baseline** — they sit side-by-side in one row, not stacked. Numerals "12" are vertically centered on the bars. **Card area**: opponent's 4 painted cards in single horizontal row, each ~84×118px (preserve existing `BattleCard` art with stat circles, name, clan glyph; ability text plates HIDDEN on mobile to save space — full info shown in CardPickModal). Gap 6px between cards, ~9px side padding. **Center action area** ~70px tall (tighter than B1m): centered headline "ТВІЙ ХІД" warm off-white 22px regular weight, subtitle one line "Обери бійця й випусти" muted parchment 12px (single line on mobile, no wrapping). **Player's 4 cards** in horizontal row, same treatment as opponent's. Second card from left has 2px muted gold `#f0c668` outline + 4px lift (selected). **Bottom HUD strip ~40px, ONE single line** mirroring top: "РАУНД 1" small caps muted gold left, then energy bar gold + "12", then HP bar GREEN + "12", then "ГРАВЕЦЬ" name, then "AI" mode badge in tiny ghost outline at right edge. Bottom-right just below HUD: tiny ✕ leave glyph. **Background**: cathedral arena ~22% opacity, blurred 8px, warm torchlight, subtle vignette. NO two-line HUD anywhere — everything fits on single rows top and bottom for maximum vertical space for the cards. Mood: dense focused dueling table on phone — no wasted vertical pixels.
+
+---
+
+## B6. Battle — Match end · Victory
+
+**Aspect:** 1440×900 full-screen overlay. Replaces battle view.
+
+**Layout:**
+```
+                                        
+                                          
+         ┌──────┐     ПЕРЕМОГА             
+         │@@@@@@│                          
+         │ avatar│   Гравець                
+         │ 96px │   проти AI Brawler       
+         └──────┘                          
+                                          
+                                          
+         ──── НАГОРОДИ ────                
+         +120 XP  ·  +25 ELO               
+         +50 ◆ кристалів                   
+         +1 нова карта · UNDERWORLD        
+                                          
+                                          
+              [ ГРАТИ ЩЕ ]   [ ДО КОЛЕКЦІЇ ]
+```
+
+**Image-gen prompt:**
+> [Common header] Full-screen victory overlay 1440×900, replacing the battle view. Background: the cathedral arena at ~28% opacity (slightly more present than during play, with warm "sunrise" light coming through stained glass at the back, reinforcing victory mood). Center column. Top: 96px round player avatar with 1.5px gold ring and a subtle gold glow halo behind it. To the right of the avatar (or below on mobile): a heading "ПЕРЕМОГА" in warm off-white 48px regular weight (NOT bold), with subtle gold underline accent. Below: subtitle "Гравець · проти AI Brawler" in muted parchment small caps. Generous vertical space. Then a section heading "НАГОРОДИ" in small caps gold with hairline rule. A list of reward rows (each line, no panels): "+120 XP" with a small XP glyph, "+25 ELO" with trophy glyph, "+50 ◆ кристалів", "+1 нова карта · UNDERWORLD" — labels in muted parchment, values tabular in warm off-white. If a new card was gained, a small painted card preview to the right of that line. Generous space below. Two buttons centered: primary FILLED gold "ГРАТИ ЩЕ" with dark text, ghost outline "ДО КОЛЕКЦІЇ" in muted gold-quiet outline. Mood: a calm ceremonial finish — earned, not loud.
+
+---
+
+## B7. Battle — Match end · Defeat
+
+**Aspect:** mirror of B6, defeat variant.
+
+**Image-gen prompt:**
+> [Common header] Full-screen defeat overlay 1440×900. Background: cathedral arena at ~24% opacity, dimmer than victory, warm light source dimmed, more shadow. Center column. Top: 96px round player avatar with a muted danger `#d97056` ring (NOT red-glow, just a tinted border). Heading "ПОРАЗКА" in warm off-white 48px regular weight, slightly muted (~85% opacity vs full ink). Subtitle "Гравець · проти AI Brawler". Section heading "РЕЗУЛЬТАТ" in small caps muted parchment. Reward rows: "+30 XP" (still some XP for playing), "−15 ELO" in muted danger, "+5 ◆ кристалів". NO new-card line on defeat. Two buttons centered: primary FILLED gold "РЕВАНШ" with dark text, ghost outline "ДО КОЛЕКЦІЇ". Mood: somber but not punishing — the cathedral acknowledges defeat without cruelty.
+
+---
+
+## B8. PvP-only chrome additions
+
+**Aspect:** additive overlay on B1-B5 when match is PvP. Same battle layout, plus:
+
+- Opponent strip: avatar slot now uses real opponent's Telegram photo (or default), name shows opponent's display name, "Lv X" + small ELO badge in cyan-tinted outline.
+- Below opponent strip on the right: small **live indicator dot** (green pulse if opponent connected, amber if reconnecting, red+grey if disconnected). One-line text under: "Online" / "Reconnecting…" / "Disconnected — waiting".
+- Top-right of viewport (above settings ⚙): a **chat icon** with unread count badge (cyan `#65d7e9` outline, count in cyan). Tap → opens battle-chat drawer (slides from right).
+- Battle-chat drawer: same primitive as `LobbyChatDrawer`, just labeled "Чат бою" — re-uses Modal `drawer-right`.
+- During a desync/disconnection: a non-blocking toast at top-center "Очікуємо суперника…" in cyan, fades in/out.
+
+**Image-gen prompt:**
+> [Common header] Same battle layout as B1, but PvP variant. Opponent strip: avatar is a stylized real-user portrait (not a generic enemy), opponent name "Andrii" warm off-white, "Lv 9" muted parchment, plus a small cyan-outlined ELO badge "ELO 1284". Just below opponent strip on the right edge: a small connection indicator — a tiny green pulsing dot with thin "Online" label in muted parchment. Top-right corner of viewport: a small chat icon (chat bubble glyph) in muted parchment outline with a tiny "2" badge in cyan indicating unread messages. The icon sits next to the ⚙ settings glyph. Everything else identical to B1: round counter, player strip, hand, slots. Mood: an opponent is present, but the chrome is calm — no glowing avatar, no shouty status.
+
+---
+
+## B9. PvP — matchmaking screen
+
+**Aspect:** 1440×900 — appears when player taps "ГРАТИ PvP" and waits for opponent.
+
+**Layout:**
+```
+                                        
+              ─── ПОШУК СУПЕРНИКА ───      
+                                          
+                  [ spinning emblem ]      
+              (subtle slow rotation)       
+                                          
+              Готова колода: 8 карт         
+              ELO: 1284                    
+                                          
+              Знайдено: 12 онлайн          
+              Час очікування: 0:23         
+                                          
+                                          
+                ─── СКАСУВАТИ ───           
+```
+
+**Image-gen prompt:**
+> [Common header] A matchmaking wait screen 1440×900. Cathedral arena visible at ~22%. Centered single column. Top: heading "ПОШУК СУПЕРНИКА" in warm off-white 24px regular with thin gold-quiet flanking hairlines. Below, generous vertical space. Center: a slowly rotating emblem in muted gold — a stylized geometric mark (e.g. a circle with three orbiting dots), about 80×80, slow continuous rotation (CSS animation, ~6s per rev). Below the emblem: two info lines in muted parchment small caps: "Готова колода: 8 карт" and "ELO: 1284". Below those: two more lines slightly smaller — "Знайдено: 12 онлайн" with a small green pulsing dot, and "Час очікування: 0:23" tabular. Generous space. Bottom-center: a single ghost text button "СКАСУВАТИ" in muted parchment with underline-on-hover. NO modal box. Mood: a calm waiting room, not anxious.
+
+---
+
+## Implementation order (Phase 5)
+
+1. **Logic contracts** for `BattleGame`, `RealtimeBattleGame`, all `battle/ui/components/*` (subagent, read-only)
+2. **Foundation extensions**: `BattleHudStrip` (timer/energy/name/HP/deck), `EnergyBar`, `HpBar` (with delta animation), `BattleHand` (4-card row with used overlay + win/loss badges), `CenterStage` (action area for status text + clash animation), `CardPickModal` (uses existing `<Modal>`)
+3. **Screens (parallel agents):**
+   - A. `BattleArena` (B1-B3 — main view + pick + attack)
+   - B. `BattleResultBanner` + `MatchEndOverlay` (B4 + B6 + B7)
+   - C. `SelectionOverlay` redesign (B5)
+   - D. `PvPChromeAdditions` + `BattleChatDrawer` + `MatchmakingScreen` (B8 + B9)
+4. **Integration**: rewire `BattleGame.tsx` and `RealtimeBattleGame.tsx` to use new arena components.
+5. **Browser walkthrough** + Playwright e2e updates.
+
+Cards (`BattleCard`) untouched throughout. Existing battle keyframes (`nexus-throw-*`, `nexus-projectile-spin`, etc.) can be reused or replaced with cleaner equivalents — agent's call per animation.
