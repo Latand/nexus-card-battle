@@ -41878,6 +41878,516 @@ export const sourceCards = [
       "bonusText": "+2 енергії",
       "bonusDescription": "Якщо картка с этой умінням перемагає раунд, гравець отримує 2 енергії."
     }
+  },
+  {
+    "id": "vibecoders-latand",
+    "sourceId": 9001,
+    "sourceUrl": "",
+    "name": "Latand ★",
+    "clan": "VibeCoders",
+    "rarity": "Legend",
+    "level": 4,
+    "power": 7,
+    "damage": 3,
+    "cost": 900,
+    "collectible": false,
+    "ability": {
+      "id": "plus3-енергії-за-урон",
+      "name": "+3 енергії за урон",
+      "description": "Якщо картка перемагає раунд, гравець отримує по 3 енергії за кожну одиницю завданого урону.",
+      "effects": [
+        {
+          "key": "add-energy",
+          "amount": 3,
+          "mode": "per_damage",
+          "outcome": "on_win"
+        }
+      ]
+    },
+    "source": {
+      "sourceId": 9001,
+      "sourceUrl": "",
+      "sourceArtUrl": "",
+      "cost": 900,
+      "collectible": false,
+      "abilityText": "+3 енергії за урон",
+      "abilityDescription": "Якщо картка перемагає раунд, гравець отримує по 3 енергії за кожну одиницю завданого урону.",
+      "bonusText": "+2 урону супернику",
+      "bonusDescription": "Якщо картка з цим бонусом програє раунд, картка суперника завдає на 2 одиниці урону більше."
+    }
+  },
+  {
+    "id": "vibecoders-alejandro",
+    "sourceId": 9002,
+    "sourceUrl": "",
+    "name": "Alejandro ★",
+    "clan": "VibeCoders",
+    "rarity": "Legend",
+    "level": 4,
+    "power": 9,
+    "damage": 5,
+    "cost": 900,
+    "collectible": false,
+    "ability": {
+      "id": "порча-2",
+      "name": "порча 2",
+      "description": "Якщо картка с этой умінням перемагає раунд, у суперника дополнительно віднімається 2 од. здоров'я, а гравцю додається 2 од. енергії.",
+      "effects": [
+        {
+          "key": "add-hp",
+          "amount": -2,
+          "target": "opponent",
+          "outcome": "on_win"
+        },
+        {
+          "key": "add-energy",
+          "amount": 2,
+          "outcome": "on_win"
+        }
+      ]
+    },
+    "source": {
+      "sourceId": 9002,
+      "sourceUrl": "",
+      "sourceArtUrl": "",
+      "cost": 900,
+      "collectible": false,
+      "abilityText": "порча 2",
+      "abilityDescription": "Якщо картка с этой умінням перемагає раунд, у суперника дополнительно віднімається 2 од. здоров'я, а гравцю додається 2 од. енергії.",
+      "bonusText": "+2 урону супернику",
+      "bonusDescription": "Якщо картка з цим бонусом програє раунд, картка суперника завдає на 2 одиниці урону більше."
+    }
+  },
+  {
+    "id": "vibecoders-yamy",
+    "sourceId": 9003,
+    "sourceUrl": "",
+    "name": "Ями Ямилиаф ★",
+    "clan": "VibeCoders",
+    "rarity": "Legend",
+    "level": 4,
+    "power": 6,
+    "damage": 8,
+    "cost": 900,
+    "collectible": false,
+    "ability": {
+      "id": "minus-способность",
+      "name": "- уміння",
+      "description": "Скасовує уміння суперника.",
+      "effects": [
+        {
+          "key": "stop-ability",
+          "target": "opponent"
+        }
+      ]
+    },
+    "source": {
+      "sourceId": 9003,
+      "sourceUrl": "",
+      "sourceArtUrl": "",
+      "cost": 900,
+      "collectible": false,
+      "abilityText": "- уміння",
+      "abilityDescription": "Скасовує уміння суперника.",
+      "bonusText": "+2 урону супернику",
+      "bonusDescription": "Якщо картка з цим бонусом програє раунд, картка суперника завдає на 2 одиниці урону більше."
+    }
+  },
+  {
+    "id": "vibecoders-yachu",
+    "sourceId": 9004,
+    "sourceUrl": "",
+    "name": "yachu ★",
+    "clan": "VibeCoders",
+    "rarity": "Legend",
+    "level": 4,
+    "power": 7,
+    "damage": 4,
+    "cost": 900,
+    "collectible": false,
+    "ability": {
+      "id": "minus5-атаки-мин-4",
+      "name": "-5 атаки, мін. 4",
+      "description": "Загальна кількість атаки суперника зменшується на 5, але не може бути менше 4.",
+      "effects": [
+        {
+          "key": "reduce-attack",
+          "amount": -5,
+          "min": 4,
+          "target": "opponent"
+        }
+      ]
+    },
+    "source": {
+      "sourceId": 9004,
+      "sourceUrl": "",
+      "sourceArtUrl": "",
+      "cost": 900,
+      "collectible": false,
+      "abilityText": "-5 атаки, мін. 4",
+      "abilityDescription": "Загальна кількість атаки суперника зменшується на 5, але не може бути менше 4.",
+      "bonusText": "+2 урону супернику",
+      "bonusDescription": "Якщо картка з цим бонусом програє раунд, картка суперника завдає на 2 одиниці урону більше."
+    }
+  },
+  {
+    "id": "vibecoders-arwi",
+    "sourceId": 9005,
+    "sourceUrl": "",
+    "name": "Arwi ★",
+    "clan": "VibeCoders",
+    "rarity": "Legend",
+    "level": 4,
+    "power": 8,
+    "damage": 5,
+    "cost": 900,
+    "collectible": false,
+    "ability": {
+      "id": "хамелеон",
+      "name": "Хамелеон",
+      "description": "Картка копіює бонус клану суперника замість власного бонусу.",
+      "effects": [
+        {
+          "key": "copy-bonus",
+          "target": "self"
+        }
+      ]
+    },
+    "source": {
+      "sourceId": 9005,
+      "sourceUrl": "",
+      "sourceArtUrl": "",
+      "cost": 900,
+      "collectible": false,
+      "abilityText": "Хамелеон",
+      "abilityDescription": "Картка копіює бонус клану суперника замість власного бонусу.",
+      "bonusText": "+2 урону супернику",
+      "bonusDescription": "Якщо картка з цим бонусом програє раунд, картка суперника завдає на 2 одиниці урону більше."
+    }
+  },
+  {
+    "id": "vibecoders-artemhchik",
+    "sourceId": 9006,
+    "sourceUrl": "",
+    "name": "Artemhchik ★",
+    "clan": "VibeCoders",
+    "rarity": "Legend",
+    "level": 4,
+    "power": 6,
+    "damage": 8,
+    "cost": 900,
+    "collectible": false,
+    "ability": {
+      "id": "гнев-урон-скопійовано",
+      "name": "Лють: урон = урону соп.",
+      "description": "Якщо здоров'я гравця менше за здоров'я суперника, картка завдає той самий урон, що й картка суперника.",
+      "effects": [
+        {
+          "key": "rage-mirror-damage"
+        }
+      ]
+    },
+    "source": {
+      "sourceId": 9006,
+      "sourceUrl": "",
+      "sourceArtUrl": "",
+      "cost": 900,
+      "collectible": false,
+      "abilityText": "Лють: урон = урону соп.",
+      "abilityDescription": "Якщо здоров'я гравця менше за здоров'я суперника, картка завдає той самий урон, що й картка суперника.",
+      "bonusText": "+2 урону супернику",
+      "bonusDescription": "Якщо картка з цим бонусом програє раунд, картка суперника завдає на 2 одиниці урону більше."
+    }
+  },
+  {
+    "id": "vibecoders-andrew",
+    "sourceId": 9007,
+    "sourceUrl": "",
+    "name": "Andrew ★",
+    "clan": "VibeCoders",
+    "rarity": "Legend",
+    "level": 4,
+    "power": 7,
+    "damage": 5,
+    "cost": 900,
+    "collectible": false,
+    "ability": {
+      "id": "plus3-атаки-за-энергию-соп",
+      "name": "+3 атаки за енергію суп.",
+      "description": "Атака збільшується на 3 за кожну одиницю енергії, що залишилась у суперника після ходу.",
+      "effects": [
+        {
+          "key": "add-attack-per-opponent-energy",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "sourceId": 9007,
+      "sourceUrl": "",
+      "sourceArtUrl": "",
+      "cost": 900,
+      "collectible": false,
+      "abilityText": "+3 атаки за енергію суп.",
+      "abilityDescription": "Атака збільшується на 3 за кожну одиницю енергії, що залишилась у суперника після ходу.",
+      "bonusText": "+2 урону супернику",
+      "bonusDescription": "Якщо картка з цим бонусом програє раунд, картка суперника завдає на 2 одиниці урону більше."
+    }
+  },
+  {
+    "id": "vibecoders-scrooge",
+    "sourceId": 9008,
+    "sourceUrl": "",
+    "name": "Scrooge ★",
+    "clan": "VibeCoders",
+    "rarity": "Legend",
+    "level": 4,
+    "power": 6,
+    "damage": 5,
+    "cost": 900,
+    "collectible": false,
+    "ability": {
+      "id": "minus3-сили-мин-2",
+      "name": "-3 сили, мін. 2",
+      "description": "Сила суперника зменшується на 3, але не може бути менше 2.",
+      "effects": [
+        {
+          "key": "reduce-power",
+          "amount": -3,
+          "min": 2,
+          "target": "opponent"
+        }
+      ]
+    },
+    "source": {
+      "sourceId": 9008,
+      "sourceUrl": "",
+      "sourceArtUrl": "",
+      "cost": 900,
+      "collectible": false,
+      "abilityText": "-3 сили, мін. 2",
+      "abilityDescription": "Сила суперника зменшується на 3, але не може бути менше 2.",
+      "bonusText": "+2 урону супернику",
+      "bonusDescription": "Якщо картка з цим бонусом програє раунд, картка суперника завдає на 2 одиниці урону більше."
+    }
+  },
+  {
+    "id": "vibecoders-yurii",
+    "sourceId": 9009,
+    "sourceUrl": "",
+    "name": "YURII ★",
+    "clan": "VibeCoders",
+    "rarity": "Legend",
+    "level": 4,
+    "power": 7,
+    "damage": 7,
+    "cost": 900,
+    "collectible": false,
+    "ability": {
+      "id": "minus-бонус",
+      "name": "- бонус",
+      "description": "Скасовує бонус суперника.",
+      "effects": [
+        {
+          "key": "stop-bonus",
+          "target": "opponent"
+        }
+      ]
+    },
+    "source": {
+      "sourceId": 9009,
+      "sourceUrl": "",
+      "sourceArtUrl": "",
+      "cost": 900,
+      "collectible": false,
+      "abilityText": "- бонус",
+      "abilityDescription": "Скасовує бонус суперника.",
+      "bonusText": "+2 урону супернику",
+      "bonusDescription": "Якщо картка з цим бонусом програє раунд, картка суперника завдає на 2 одиниці урону більше."
+    }
+  },
+  {
+    "id": "vibecoders-dmytro",
+    "sourceId": 9010,
+    "sourceUrl": "",
+    "name": "Dmytro ★",
+    "clan": "VibeCoders",
+    "rarity": "Legend",
+    "level": 4,
+    "power": 5,
+    "damage": 8,
+    "cost": 900,
+    "collectible": false,
+    "ability": {
+      "id": "сила-силе-соп",
+      "name": "сила = силі соп.",
+      "description": "Сила картки прирівнюється до сили картки суперника. Враховується тільки сила, написана на карті, без урахування бонусів і умінь.",
+      "effects": [
+        {
+          "key": "add-power",
+          "mode": "mirror_opponent_card_power"
+        }
+      ]
+    },
+    "source": {
+      "sourceId": 9010,
+      "sourceUrl": "",
+      "sourceArtUrl": "",
+      "cost": 900,
+      "collectible": false,
+      "abilityText": "сила = силі соп.",
+      "abilityDescription": "Сила картки прирівнюється до сили картки суперника. Враховується тільки сила, написана на карті, без урахування бонусів і умінь.",
+      "bonusText": "+2 урону супернику",
+      "bonusDescription": "Якщо картка з цим бонусом програє раунд, картка суперника завдає на 2 одиниці урону більше."
+    }
+  },
+  {
+    "id": "vibecoders-daniil",
+    "sourceId": 9011,
+    "sourceUrl": "",
+    "name": "Daniil ★",
+    "clan": "VibeCoders",
+    "rarity": "Legend",
+    "level": 4,
+    "power": 8,
+    "damage": 6,
+    "cost": 900,
+    "collectible": false,
+    "ability": {
+      "id": "plus3-атаки-фракції",
+      "name": "+3 атаки фракції",
+      "description": "Усі картки клану VibeCoders в руці гравця отримують +3 атаки.",
+      "effects": [
+        {
+          "key": "add-attack-to-clan-hand",
+          "amount": 3
+        }
+      ]
+    },
+    "source": {
+      "sourceId": 9011,
+      "sourceUrl": "",
+      "sourceArtUrl": "",
+      "cost": 900,
+      "collectible": false,
+      "abilityText": "+3 атаки фракції",
+      "abilityDescription": "Усі картки клану VibeCoders в руці гравця отримують +3 атаки.",
+      "bonusText": "+2 урону супернику",
+      "bonusDescription": "Якщо картка з цим бонусом програє раунд, картка суперника завдає на 2 одиниці урону більше."
+    }
+  },
+  {
+    "id": "vibecoders-strawberry",
+    "sourceId": 9012,
+    "sourceUrl": "",
+    "name": "StrawBerry ★",
+    "clan": "VibeCoders",
+    "rarity": "Legend",
+    "level": 4,
+    "power": 4,
+    "damage": 3,
+    "cost": 900,
+    "collectible": false,
+    "ability": {
+      "id": "отрута-4-мин-2",
+      "name": "Отрута 4, мін. 2",
+      "description": "Якщо картка з цим умінням перемагає раунд, на суперника накладається Отрута: наприкінці кожного раунду він втрачає по 4 здоров'я, але не нижче 2.",
+      "effects": [
+        {
+          "key": "apply-poison",
+          "amount": 4,
+          "min": 2
+        }
+      ]
+    },
+    "source": {
+      "sourceId": 9012,
+      "sourceUrl": "",
+      "sourceArtUrl": "",
+      "cost": 900,
+      "collectible": false,
+      "abilityText": "Отрута 4, мін. 2",
+      "abilityDescription": "Якщо картка з цим умінням перемагає раунд, на суперника накладається Отрута: наприкінці кожного раунду він втрачає по 4 здоров'я, але не нижче 2.",
+      "bonusText": "+2 урону супернику",
+      "bonusDescription": "Якщо картка з цим бонусом програє раунд, картка суперника завдає на 2 одиниці урону більше."
+    }
+  },
+  {
+    "id": "vibecoders-yuriy25",
+    "sourceId": 9013,
+    "sourceUrl": "",
+    "name": "Yuriy²⁵ ★",
+    "clan": "VibeCoders",
+    "rarity": "Legend",
+    "level": 4,
+    "power": 8,
+    "damage": 6,
+    "cost": 900,
+    "collectible": false,
+    "ability": {
+      "id": "інвестор-plus5-енергії",
+      "name": "+5 енергії",
+      "description": "Якщо картка з цим умінням перемагає раунд, гравець отримує 5 одиниць енергії.",
+      "effects": [
+        {
+          "key": "add-energy",
+          "amount": 5,
+          "outcome": "on_win"
+        }
+      ]
+    },
+    "source": {
+      "sourceId": 9013,
+      "sourceUrl": "",
+      "sourceArtUrl": "",
+      "cost": 900,
+      "collectible": false,
+      "abilityText": "+5 енергії",
+      "abilityDescription": "Якщо картка з цим умінням перемагає раунд, гравець отримує 5 одиниць енергії.",
+      "bonusText": "+2 урону супернику",
+      "bonusDescription": "Якщо картка з цим бонусом програє раунд, картка суперника завдає на 2 одиниці урону більше."
+    }
+  },
+  {
+    "id": "vibecoders-cerbin",
+    "sourceId": 9014,
+    "sourceUrl": "",
+    "name": "Cerbin ★",
+    "clan": "VibeCoders",
+    "rarity": "Legend",
+    "level": 4,
+    "power": 7,
+    "damage": 5,
+    "cost": 900,
+    "collectible": false,
+    "ability": {
+      "id": "вечірка-plus3-жизни-енергії",
+      "name": "+3 здоров'я та +3 енергії",
+      "description": "Якщо картка з цим умінням перемагає раунд, гравець отримує 3 одиниці здоров'я та 3 одиниці енергії.",
+      "effects": [
+        {
+          "key": "add-hp",
+          "amount": 3,
+          "outcome": "on_win"
+        },
+        {
+          "key": "add-energy",
+          "amount": 3,
+          "outcome": "on_win"
+        }
+      ]
+    },
+    "source": {
+      "sourceId": 9014,
+      "sourceUrl": "",
+      "sourceArtUrl": "",
+      "cost": 900,
+      "collectible": false,
+      "abilityText": "+3 здоров'я та +3 енергії",
+      "abilityDescription": "Якщо картка з цим умінням перемагає раунд, гравець отримує 3 одиниці здоров'я та 3 одиниці енергії.",
+      "bonusText": "+2 урону супернику",
+      "bonusDescription": "Якщо картка з цим бонусом програє раунд, картка суперника завдає на 2 одиниці урону більше."
+    }
   }
 ] satisfies SourceCard[];
 

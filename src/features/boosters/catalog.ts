@@ -14,9 +14,11 @@ export const boosterCatalog = [
   { id: "metro-chase", name: "Metro Chase", clans: ["Metropolis", "Chasers"] },
   { id: "desert-signal", name: "Desert Signal", clans: ["Халифат", "Nemos"] },
   { id: "street-plague", name: "Street Plague", clans: ["Street", "Damned"] },
+  // Solo-clan VibeCoders pack: 4 random Legends from the new fan clan.
+  { id: "vibe-drop", name: "Vibe Drop", clans: ["VibeCoders"], cardCount: 4, requiredRarities: ["Legend"] },
 ] as const satisfies readonly Booster[];
 
-export function getBoosterById(boosterId: string) {
+export function getBoosterById(boosterId: string): Booster | undefined {
   return boosterCatalog.find((booster) => booster.id === boosterId);
 }
 
@@ -25,6 +27,7 @@ export function serializeBooster(booster: Booster): BoosterResponse {
     id: booster.id,
     name: booster.name,
     clans: [...booster.clans],
+    cardCount: booster.cardCount,
   };
 }
 
@@ -58,8 +61,8 @@ export function getBoosterCatalogForPlayer(profile: PlayerBoosterCatalogProfile)
 
 export function validateBoosterCatalog() {
   for (const booster of boosterCatalog) {
-    if (booster.clans.length !== 2) {
-      throw new Error(`Booster ${booster.id} must have exactly two clans.`);
+    if (booster.clans.length < 1 || booster.clans.length > 2) {
+      throw new Error(`Booster ${booster.id} must have one or two clans.`);
     }
 
     const boosterClans: readonly string[] = booster.clans;

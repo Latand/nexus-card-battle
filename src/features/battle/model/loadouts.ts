@@ -47,6 +47,10 @@ export type AiOpponent = {
   style: AiStyle;
   aggression: number;
   riskTolerance: number;
+  // Fixed ELO per bot — used for matchmaking targeting and to compute the
+  // player's ELO delta after a PvE match. Spaced to span the full ladder
+  // (rookie ~850, grandmaster ~2100) so PvE play meaningfully nudges rating.
+  eloRating: number;
   collectionIds: string[];
   deckIds: string[];
 };
@@ -66,6 +70,7 @@ export const aiOpponents: AiOpponent[] = [
     style: "balanced",
     aggression: 0.35,
     riskTolerance: 0.25,
+    eloRating: 850,
     collectionIds: [
       "metropolis-396",
       "metropolis-301",
@@ -104,6 +109,7 @@ export const aiOpponents: AiOpponent[] = [
     style: "aggressive",
     aggression: 0.58,
     riskTolerance: 0.42,
+    eloRating: 1000,
     collectionIds: [
       "fury-1429",
       "fury-482",
@@ -142,6 +148,7 @@ export const aiOpponents: AiOpponent[] = [
     style: "control",
     aggression: 0.42,
     riskTolerance: 0.32,
+    eloRating: 1125,
     collectionIds: [
       "aliens-598",
       "aliens-1679",
@@ -180,6 +187,7 @@ export const aiOpponents: AiOpponent[] = [
     style: "tempo",
     aggression: 0.5,
     riskTolerance: 0.34,
+    eloRating: 1225,
     collectionIds: [
       "metropolis-590",
       "metropolis-787",
@@ -218,6 +226,7 @@ export const aiOpponents: AiOpponent[] = [
     style: "attrition",
     aggression: 0.46,
     riskTolerance: 0.3,
+    eloRating: 1325,
     collectionIds: [
       "damned-202",
       "damned-668",
@@ -256,6 +265,7 @@ export const aiOpponents: AiOpponent[] = [
     style: "control",
     aggression: 0.5,
     riskTolerance: 0.5,
+    eloRating: 1450,
     collectionIds: [
       "enigma-1431",
       "enigma-1394",
@@ -294,6 +304,7 @@ export const aiOpponents: AiOpponent[] = [
     style: "aggressive",
     aggression: 0.7,
     riskTolerance: 0.68,
+    eloRating: 1575,
     collectionIds: [
       "gamblers-472",
       "gamblers-1456",
@@ -332,6 +343,7 @@ export const aiOpponents: AiOpponent[] = [
     style: "tempo",
     aggression: 0.62,
     riskTolerance: 0.42,
+    eloRating: 1725,
     collectionIds: [
       "toyz-1385",
       "toyz-1273",
@@ -370,6 +382,7 @@ export const aiOpponents: AiOpponent[] = [
     style: "attrition",
     aggression: 0.58,
     riskTolerance: 0.52,
+    eloRating: 1900,
     collectionIds: [
       "symbio-1698",
       "symbio-1708",
@@ -408,6 +421,7 @@ export const aiOpponents: AiOpponent[] = [
     style: "balanced",
     aggression: 0.72,
     riskTolerance: 0.62,
+    eloRating: 2100,
     collectionIds: [
       "alpha-630",
       "aliens-392",
@@ -479,6 +493,7 @@ export function toFighterAiProfile(opponent: AiOpponent): FighterAiProfile {
     style: opponent.style,
     aggression: opponent.aggression,
     riskTolerance: opponent.riskTolerance,
+    eloRating: opponent.eloRating,
   };
 }
 

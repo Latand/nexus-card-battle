@@ -116,7 +116,7 @@ function BoosterTile({ booster, selected, busy, onSelect }: BoosterTileProps) {
 
         <span className="mt-auto flex items-end gap-2 text-ink-mute">
           <ClanGlyph clan={primary} className="h-5 w-5 opacity-70" />
-          <ClanGlyph clan={secondary} className="h-5 w-5 opacity-70" />
+          {secondary && <ClanGlyph clan={secondary} className="h-5 w-5 opacity-70" />}
         </span>
       </button>
     </article>

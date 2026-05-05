@@ -11,6 +11,7 @@ import type { TelegramPlayer } from "@/shared/lib/telegram";
 import { cards } from "../model/cards";
 import { isClanBonusActive } from "../model/clans";
 import { DAMAGE_BOOST_COST, PHASE_TIMING_MS, TURN_SECONDS } from "../model/constants";
+import { clearBattleSession, loadBattleSession, saveBattleSession } from "../persistence";
 import {
   applyOutcome,
   chooseEnemyMove,
@@ -132,12 +133,30 @@ type HumanChatMessage = {
 
 export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity, playerName, playerEloRating, telegramPlayer, mode = "ai", avatarUrl, onOpenCollection, onSwitchMode, onPlayerUpdated }: BattleGameProps = {}) {
   const isHumanMatch = mode === "human";
-  const initialGame = useMemo(
-    () => createInitialGame({ playerCollectionIds, playerDeckIds, playerName, playerEloRating }),
-    [playerCollectionIds, playerDeckIds, playerName, playerEloRating],
-  );
-  const [game, setGame] = useState(() => initialGame);
-  const [selectedId, setSelectedId] = useState(() => getAvailableCards(initialGame.player)[0]?.id);
+  // createInitialGame throws on under-populated decks (e.g. refresh into
+  // /battle before the parent profile/deck props have hydrated). Wrap in a
+  // try so the lazy initializer can still fall back to a persisted session.
+  const initialGame = useMemo<GameState | null>(() => {
+    try {
+      return createInitialGame({ playerCollectionIds, playerDeckIds, playerName, playerEloRating });
+    } catch {
+      return null;
+    }
+  }, [playerCollectionIds, playerDeckIds, playerName, playerEloRating]);
+  // AI mode resumes mid-match across refresh by hydrating from localStorage.
+  // PvP cannot resume cleanly (server-authoritative + live socket), so it
+  // always starts fresh and never reads/writes the persistence slot.
+  const [game, setGame] = useState<GameState>(() => {
+    if (!isHumanMatch) {
+      const persisted = loadBattleSession();
+      if (persisted && !persisted.matchResult) return persisted;
+    }
+    if (!initialGame) {
+      throw new Error("BattleGame mounted without a usable deck or persisted session");
+    }
+    return initialGame;
+  });
+  const [selectedId, setSelectedId] = useState(() => getAvailableCards(game.player)[0]?.id);
   const [energy, setEnergy] = useState(0);
   const [damageBoost, setDamageBoost] = useState(false);
   const [pending, setPending] = useState<Outcome | null>(null);
@@ -185,6 +204,17 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   useEffect(() => {
     gameRef.current = game;
   }, [game]);
+
+  // Persist AI-mode game state across refreshes; clear once a match concludes
+  // so the next entry to the battle screen starts a fresh fight.
+  useEffect(() => {
+    if (isHumanMatch) return;
+    if (game.matchResult) {
+      clearBattleSession();
+      return;
+    }
+    saveBattleSession(game);
+  }, [game, isHumanMatch]);
 
   useEffect(() => {
     matchInfoRef.current = matchInfo;
@@ -424,7 +454,8 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     persistedMatchSignatureRef.current = signature;
 
     let cancelled = false;
-    postMatchFinished({ identity: playerIdentity, mode: "pve", result })
+    const opponentEloBefore = game.enemy.aiProfile?.eloRating;
+    postMatchFinished({ identity: playerIdentity, mode: "pve", result, opponentEloBefore })
       .then((response) => {
         if (cancelled) return;
         if (Array.isArray(response.player.ownedCards)) {

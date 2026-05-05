@@ -26,6 +26,7 @@ const clanSlugs: Record<string, string> = {
   Chasers: "chasers",
   Халифат: "kalifat",
   Nemos: "nemos",
+  VibeCoders: "vibecoders",
 };
 
 // Canonical color per clan. Picked so the two clans in every booster pair
@@ -53,6 +54,7 @@ export const clanColors: Record<string, string> = {
   Chasers: "#ff7e26",
   Халифат: "#e0aa54",
   Nemos: "#5fa9c8",
+  VibeCoders: "#6366f1",
 };
 
 export function getClanColor(clan: string): string {

@@ -28,9 +28,12 @@ export const PVP_CRYSTAL_REWARDS = {
   loss: 0,
 } as const;
 
+// Per-result crystal rewards for PvE. Win amount depends on whether the bot's
+// ELO is higher than the player's: a tougher fight pays more.
 export const PVE_CRYSTAL_REWARDS = {
-  win: 5,
-  draw: 0,
+  winHigher: 20,
+  winLower: 10,
+  draw: 5,
   loss: 0,
 } as const;
 
@@ -42,6 +45,7 @@ export type MatchInfo =
   | {
       mode: "pve";
       result: MatchResultBucket;
+      opponentEloBefore?: number;
     }
   | {
       mode: "pvp";
@@ -82,10 +86,11 @@ export function computeMatchRewards(
   }
 
   const xpFromMatch = matchInfo.mode === "pvp" ? PVP_XP_REWARDS[matchInfo.result] : PVE_XP_REWARDS[matchInfo.result];
+  const playerEloBefore = sanitizeRating(profileBefore.eloRating, DEFAULT_PLAYER_ELO_RATING);
   const matchCrystals =
     matchInfo.mode === "pvp"
       ? PVP_CRYSTAL_REWARDS[matchInfo.result]
-      : PVE_CRYSTAL_REWARDS[matchInfo.result];
+      : computePveCrystalReward(matchInfo.result, playerEloBefore, matchInfo.opponentEloBefore);
   const crystalsBefore = nonNegativeInteger(profileBefore.crystals, DEFAULT_PLAYER_CRYSTALS);
   const totalXpBefore = nonNegativeInteger(profileBefore.totalXp, DEFAULT_PLAYER_TOTAL_XP);
   const levelBefore = positiveInteger(profileBefore.level, DEFAULT_PLAYER_LEVEL);
@@ -100,10 +105,9 @@ export function computeMatchRewards(
 
   let deltaElo: number | undefined;
   let eloRating: number | undefined;
-  if (matchInfo.mode === "pvp" && typeof matchInfo.opponentEloBefore === "number") {
-    const playerElo = sanitizeRating(profileBefore.eloRating, DEFAULT_PLAYER_ELO_RATING);
+  if (typeof matchInfo.opponentEloBefore === "number") {
     const eloOutcome = computeElo({
-      playerRating: playerElo,
+      playerRating: playerEloBefore,
       opponentRating: matchInfo.opponentEloBefore,
       result: matchInfo.result,
     });
@@ -156,4 +160,18 @@ function positiveInteger(value: unknown, fallback: number) {
 function sanitizeRating(value: unknown, fallback: number) {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
   return Math.round(value);
+}
+
+function computePveCrystalReward(
+  result: MatchResultBucket,
+  playerEloBefore: number,
+  opponentEloBefore?: number,
+): number {
+  if (result === "draw") return PVE_CRYSTAL_REWARDS.draw;
+  if (result === "loss") return PVE_CRYSTAL_REWARDS.loss;
+  // Win: pay more when the bot was tougher than the player.
+  if (typeof opponentEloBefore !== "number") return PVE_CRYSTAL_REWARDS.winLower;
+  return opponentEloBefore > playerEloBefore
+    ? PVE_CRYSTAL_REWARDS.winHigher
+    : PVE_CRYSTAL_REWARDS.winLower;
 }

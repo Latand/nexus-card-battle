@@ -2,7 +2,7 @@ import { cards as activeCards } from "@/features/battle/model/cards";
 import type { Card, Rarity } from "@/features/battle/model/types";
 import type { PlayerProfile } from "@/features/player/profile/types";
 import { getBoosterById, serializeBooster } from "./catalog";
-import { PAID_BOOSTER_CRYSTAL_COST, STARTER_BOOSTER_CARD_COUNT, type PreparedPaidBoosterOpening, type PreparedStarterBoosterOpening } from "./types";
+import { PAID_BOOSTER_CRYSTAL_COST, STARTER_BOOSTER_CARD_COUNT, type Booster, type PreparedPaidBoosterOpening, type PreparedStarterBoosterOpening } from "./types";
 
 export type RandomSource = () => number;
 
@@ -54,10 +54,10 @@ export function prepareStarterBoosterOpening(input: {
     throw new BoosterOpeningError("starter_booster_already_opened", "Starter boosters must be different.", 409);
   }
 
+  const requiredRarities = booster.requiredRarities ?? REQUIRED_STARTER_RARITIES;
   const openedCards = prepareBoosterOpeningCards({
-    clans: booster.clans,
-    requiredRarities: REQUIRED_STARTER_RARITIES,
-    requireLegend: true,
+    booster,
+    requiredRarities,
     rng: input.rng,
     cardPool: input.cardPool,
   });
@@ -86,10 +86,10 @@ export function preparePaidBoosterOpening(input: {
     throw new BoosterOpeningError("insufficient_crystals", "Not enough crystals to open this booster.", 409);
   }
 
+  const requiredRarities = booster.requiredRarities ?? REQUIRED_PAID_RARITIES;
   const openedCards = prepareBoosterOpeningCards({
-    clans: booster.clans,
-    requiredRarities: REQUIRED_PAID_RARITIES,
-    requireLegend: false,
+    booster,
+    requiredRarities,
     rng: input.rng,
     cardPool: input.cardPool,
   });
@@ -116,33 +116,33 @@ export function chooseStarterWeightedRarity(rng: RandomSource): Rarity {
 }
 
 function prepareBoosterOpeningCards(input: {
-  clans: readonly [string, string];
+  booster: Booster;
   requiredRarities: readonly Rarity[];
-  requireLegend: boolean;
   rng?: RandomSource;
   cardPool?: readonly Card[];
 }) {
   const rng = input.rng ?? Math.random;
   const cardPool = input.cardPool ?? activeCards;
+  const cardCount = input.booster.cardCount ?? STARTER_BOOSTER_CARD_COUNT;
   // Within-pull duplicate prevention only — cross-pull duplicates are allowed
   // and increment the multiset count instead.
   const openedCards: Card[] = [];
-  const candidatePool = createBoosterCardPool(input.clans, cardPool);
+  const candidatePool = createBoosterCardPool(input.booster.clans, cardPool);
 
   for (const rarity of input.requiredRarities) {
     openedCards.push(pickRequiredRarityCard(candidatePool, rarity, openedCards, rng));
   }
 
-  const weightedCardCount = STARTER_BOOSTER_CARD_COUNT - input.requiredRarities.length;
+  const weightedCardCount = Math.max(0, cardCount - input.requiredRarities.length);
   for (let index = 0; index < weightedCardCount; index += 1) {
     openedCards.push(pickWeightedRarityCard(candidatePool, chooseStarterWeightedRarity(rng), openedCards, rng));
   }
 
-  validateOpeningCards(openedCards, input.clans, cardPool, { requireLegend: input.requireLegend });
+  validateOpeningCards(openedCards, input.booster, cardPool, { requiredRarities: input.requiredRarities });
   return openedCards;
 }
 
-function createBoosterCardPool(clans: readonly [string, string], cardPool: readonly Card[]) {
+function createBoosterCardPool(clans: readonly string[], cardPool: readonly Card[]) {
   const clanSet = new Set<string>(clans);
   const seen = new Set<string>();
 
@@ -202,19 +202,19 @@ function normalizeRandom(value: number) {
 
 function validateOpeningCards(
   openedCards: readonly Card[],
-  clans: readonly [string, string],
+  booster: Booster,
   cardPool: readonly Card[],
-  options: { requireLegend: boolean },
+  options: { requiredRarities: readonly Rarity[] },
 ) {
-  if (openedCards.length !== STARTER_BOOSTER_CARD_COUNT) {
-    throw new BoosterOpeningError("invalid_booster_opening", "Starter booster opening must contain five cards.", 500);
+  const expectedCount = booster.cardCount ?? STARTER_BOOSTER_CARD_COUNT;
+  if (openedCards.length !== expectedCount) {
+    throw new BoosterOpeningError("invalid_booster_opening", `Booster opening must contain ${expectedCount} cards.`, 500);
   }
 
   const activeCardIds = new Set(cardPool.map((card) => card.id));
-  const clanSet = new Set<string>(clans);
+  const clanSet = new Set<string>(booster.clans);
   const openedCardIds = new Set<string>();
-  let hasLegend = false;
-  let hasUnique = false;
+  const presentRarities = new Set<Rarity>();
 
   for (const card of openedCards) {
     if (openedCardIds.has(card.id)) {
@@ -230,11 +230,12 @@ function validateOpeningCards(
     }
 
     openedCardIds.add(card.id);
-    hasLegend ||= card.rarity === "Legend";
-    hasUnique ||= card.rarity === "Unique";
+    presentRarities.add(card.rarity);
   }
 
-  if (!hasUnique || (options.requireLegend && !hasLegend)) {
-    throw new BoosterOpeningError("invalid_booster_opening", "Booster opening does not satisfy its guaranteed rarity rules.", 500);
+  for (const rarity of options.requiredRarities) {
+    if (!presentRarities.has(rarity)) {
+      throw new BoosterOpeningError("invalid_booster_opening", "Booster opening does not satisfy its guaranteed rarity rules.", 500);
+    }
   }
 }

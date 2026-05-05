@@ -557,6 +557,29 @@ export const clanList = [
         }
       ]
     }
+  },
+  {
+    "slug": "vibecoders",
+    "name": "VibeCoders",
+    "sourceUrl": "",
+    "cardCounts": {
+      "Common": 0,
+      "Rare": 0,
+      "Unique": 0,
+      "Legend": 14
+    },
+    "bonus": {
+      "id": "плюс2-урона-сопернику",
+      "name": "+2 урону супернику",
+      "description": "Якщо картка з цим бонусом програє раунд, картка суперника завдає на 2 одиниці урону більше.",
+      "effects": [
+        {
+          "key": "add-damage",
+          "amount": 2,
+          "target": "opponent"
+        }
+      ]
+    }
   }
 ] satisfies ClanRecord[];
 

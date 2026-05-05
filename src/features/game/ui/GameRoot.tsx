@@ -18,6 +18,8 @@ import { LobbyChatDrawer } from "@/shared/ui/v2/LobbyChatDrawer";
 import { TopBar } from "@/shared/ui/v2/TopBar";
 import type { TelegramPlayer } from "@/shared/lib/telegram";
 import { PLAYER_DECK_SIZE } from "../model/randomDeck";
+import { clearBattleSession, hasBattleSession } from "@/features/battle/persistence";
+import { useUrlEnum } from "./useUrlState";
 import { BoosterShopModal } from "./v2/collection/BoosterShopModal";
 import { CollectionDeckScreen } from "./v2/collection/CollectionDeckScreen";
 import { StarterBoosterOnboarding } from "./v2/onboarding/StarterBoosterOnboarding";
@@ -59,7 +61,7 @@ type LockableScreenOrientation = ScreenOrientation & {
 
 export function GameRoot() {
   const allCardIds = useMemo(() => cards.map((card) => card.id), []);
-  const [screen, setScreen] = useState<"collection" | "battle">("collection");
+  const [screen, setScreen] = useUrlEnum<"collection" | "battle">("screen", ["collection", "battle"], "collection", "push");
   const [battleMode, setBattleMode] = useState<BattleMode>("ai");
   const [deckIds, setDeckIds] = useState<string[]>([]);
   const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
@@ -214,8 +216,9 @@ export function GameRoot() {
     setDeckIds(sanitizedDeckIds);
     setStarterDeckReadyVisible(false);
     setBattleMode(mode);
+    clearBattleSession();
     setScreen("battle");
-  }, [ownedCardIds]);
+  }, [ownedCardIds, setScreen]);
   const handleStarterDeckEdit = useCallback(
     (starterDeckIds: string[]) => {
       deckTouchedRef.current = true;
@@ -223,7 +226,7 @@ export function GameRoot() {
       setStarterDeckReadyVisible(false);
       setScreen("collection");
     },
-    [ownedCardIds],
+    [ownedCardIds, setScreen],
   );
   const handleSavedDeckPlay = useCallback(
     (nextDeckIds: string[], mode: BattleMode) => {
@@ -233,9 +236,10 @@ export function GameRoot() {
       deckTouchedRef.current = true;
       setDeckIds(profileDeckIds);
       setBattleMode(mode);
+      clearBattleSession();
       setScreen("battle");
     },
-    [deckReadyToPlay, ownedCardIds, profileDeckIds],
+    [deckReadyToPlay, ownedCardIds, profileDeckIds, setScreen],
   );
   const handleBattlePlayerUpdated = useCallback((nextProfile: PlayerProfile) => {
     const nextOwnedCardIds = getOwnedCardIdsForProfile(nextProfile, allCardIds);
@@ -289,7 +293,19 @@ export function GameRoot() {
     };
   }, [liveTelegramAvatarUrl, playerIdentity, playerProfile, profileStatus]);
 
-  if (screen === "battle") {
+  // Refresh on `?screen=battle` arrives before the profile/deck have hydrated;
+  // bounce back to the collection unless we have a persisted session that
+  // BattleGame can resume from. Without this guard, BattleGame's createInitialGame
+  // throws on the empty placeholder deck.
+  const battleResumable = screen === "battle" && (deckIds.length >= PLAYER_DECK_SIZE || hasBattleSession());
+  useEffect(() => {
+    if (screen !== "battle") return;
+    if (profileStatus !== "ready") return;
+    if (battleResumable) return;
+    setScreen("collection");
+  }, [battleResumable, profileStatus, screen, setScreen]);
+
+  if (screen === "battle" && battleResumable) {
     const persistedAvatarUrl = playerProfile?.avatarUrl;
     return (
       <>

@@ -9,6 +9,7 @@ import { getOwnedCount } from "@/features/inventory/inventoryOps";
 import { sellPlayerCards } from "@/features/player/profile/client";
 import { cn } from "@/shared/lib/cn";
 import Modal from "@/shared/ui/v2/Modal";
+import { useUrlEnum, useUrlState, useUrlText } from "../../useUrlState";
 import { CardDetailModal } from "./CardDetailModal";
 import { DeckDockModal } from "./DeckDockModal";
 import {
@@ -46,11 +47,33 @@ export function CollectionDeckScreen(props: CollectionDeckScreenProps) {
     onPlay,
   } = props;
 
-  const [collectionMode, setCollectionMode] = useState<CollectionMode>("owned");
-  const [query, setQuery] = useState("");
-  const [activeFaction, setActiveFaction] = useState<string>("all");
-  const [rarity, setRarity] = useState<RarityFilter>("all");
-  const [sortMode, setSortMode] = useState<SortMode>("rarity");
+  const [collectionMode, setCollectionMode] = useUrlEnum<CollectionMode>(
+    "tab",
+    ["owned", "base"],
+    "owned",
+  );
+  const [query, setQuery] = useUrlText("q", "", 300);
+  const clanNamesSet = useMemo(() => new Set(clanList.map((c) => c.name)), []);
+  const parseFaction = useCallback(
+    (raw: string | null) => (raw && (raw === "all" || clanNamesSet.has(raw)) ? raw : "all"),
+    [clanNamesSet],
+  );
+  const serializeFaction = useCallback((v: string) => (v === "all" ? null : v), []);
+  const [activeFaction, setActiveFaction] = useUrlState<string>("clan", "all", {
+    parse: parseFaction,
+    serialize: serializeFaction,
+    mode: "push",
+  });
+  const [rarity, setRarity] = useUrlEnum<RarityFilter>(
+    "rarity",
+    ["all", "Legend", "Unique", "Rare", "Common"],
+    "all",
+  );
+  const [sortMode, setSortMode] = useUrlEnum<SortMode>(
+    "sort",
+    ["rarity", "power", "damage", "name"],
+    "rarity",
+  );
   const [visiblePage, setVisiblePage] = useState<{ key: string; limit: number }>({
     key: "",
     limit: GRID_LIMIT,
@@ -123,10 +146,21 @@ export function CollectionDeckScreen(props: CollectionDeckScreenProps) {
     setActiveFaction("all");
   };
 
+  // Scroll position is captured when entering detail and restored on close so
+  // the user lands back at the same card in a long collection list.
+  const scrollPositionRef = useRef(0);
   const handleCardClick = (cardId: string) => {
+    if (typeof window !== "undefined") scrollPositionRef.current = window.scrollY;
     setSelectedId(cardId);
     setSellStatus({ kind: "idle" });
     setDetailOpen(true);
+  };
+  const handleDetailClose = () => {
+    setDetailOpen(false);
+    if (typeof window !== "undefined") {
+      const target = scrollPositionRef.current;
+      requestAnimationFrame(() => window.scrollTo({ top: target, behavior: "instant" as ScrollBehavior }));
+    }
   };
 
   const handleToggleDeck = (cardId: string) => {
@@ -416,7 +450,7 @@ export function CollectionDeckScreen(props: CollectionDeckScreenProps) {
         canSell={canSell && Boolean(selectedCard && ownedSet.has(selectedCard.id))}
         sellStatus={sellStatus}
         isMobile={isMobile}
-        onClose={() => setDetailOpen(false)}
+        onClose={handleDetailClose}
         onToggleDeck={handleToggleDeck}
         onSell={handleSellCard}
       />

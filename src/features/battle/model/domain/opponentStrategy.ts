@@ -228,5 +228,6 @@ function normalizeProfile(profile?: FighterAiProfile): FighterAiProfile {
     style: profile?.style ?? "balanced",
     aggression: profile?.aggression ?? 0.55,
     riskTolerance: profile?.riskTolerance ?? 0.45,
+    eloRating: profile?.eloRating ?? 1300,
   };
 }

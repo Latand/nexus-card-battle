@@ -1,20 +1,27 @@
-import type { Card } from "@/features/battle/model/types";
+import type { Card, Rarity } from "@/features/battle/model/types";
 import type { PlayerProfile, StoredPlayerProfile } from "@/features/player/profile/types";
 
 export const STARTER_BOOSTER_CARD_COUNT = 5;
 export const STARTER_BOOSTER_WEIGHTED_CARD_COUNT = 3;
 export const PAID_BOOSTER_CRYSTAL_COST = 100;
 
+// `clans` is 1..2 entries — most boosters pair two clans, but solo-clan
+// boosters (e.g. fan-clan drops like VibeCoders) are also supported.
 export type Booster = {
   id: string;
   name: string;
-  clans: readonly [string, string];
+  clans: readonly string[];
+  // Optional per-booster overrides — fall back to the global defaults when
+  // omitted. Allows weird shapes like a 4-Legend solo-clan starter pack.
+  cardCount?: number;
+  requiredRarities?: readonly Rarity[];
 };
 
 export type BoosterResponse = {
   id: string;
   name: string;
-  clans: [string, string];
+  clans: string[];
+  cardCount?: number;
 };
 
 export type BoosterCatalogItem = BoosterResponse & {

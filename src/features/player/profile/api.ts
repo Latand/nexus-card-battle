@@ -152,8 +152,13 @@ export async function handlePlayerMatchFinishedPost(request: Request, store: Pla
     const identity = parsePlayerIdentity(body.identity);
     const mode = parseMatchMode(body.mode);
     const result = parseMatchResult(body.result);
+    const opponentEloBefore = parseOptionalRating(body.opponentEloBefore);
 
-    const { summary, persisted } = await applyAndSummarizeMatchRewards(store, identity, { mode, result });
+    const { summary, persisted } = await applyAndSummarizeMatchRewards(store, identity, {
+      mode,
+      result,
+      ...(opponentEloBefore !== undefined ? { opponentEloBefore } : {}),
+    });
 
     return Response.json(
       { rewards: summary, player: persisted },
@@ -165,7 +170,7 @@ export async function handlePlayerMatchFinishedPost(request: Request, store: Pla
 }
 
 export type ApplyMatchRewardsContext =
-  | { mode: "pve"; result: MatchResultBucket }
+  | { mode: "pve"; result: MatchResultBucket; opponentEloBefore?: number }
   | { mode: "pvp"; result: MatchResultBucket; opponentEloBefore?: number };
 
 export type PvpSideInput = {
@@ -284,6 +289,14 @@ function parseMatchMode(value: unknown): "pve" {
 function parseMatchResult(value: unknown): MatchResultBucket {
   if (value === "win" || value === "draw" || value === "loss") return value;
   throw new MatchFinishedValidationError("result must be one of \"win\", \"draw\", \"loss\".");
+}
+
+function parseOptionalRating(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new MatchFinishedValidationError("opponentEloBefore must be a finite number when present.");
+  }
+  return Math.max(0, Math.round(value));
 }
 
 class MatchFinishedValidationError extends Error {

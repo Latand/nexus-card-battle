@@ -2,6 +2,7 @@ import Image from "next/image";
 import { useState, type CSSProperties } from "react";
 import { cn } from "@/shared/lib/cn";
 import { FALLBACK_PORTRAIT_URL } from "../../model/cards";
+import { hasCardArt } from "../../model/cardArtIndex";
 import type { Card, Rarity } from "../../model/types";
 import { CardTooltip } from "./CardTooltip";
 import { ClanGlyph, getClanColor } from "./ClanGlyph";
@@ -85,7 +86,7 @@ export function BattleCard({
       </span>
 
       <div className="battle-card-art absolute left-[9.5%] top-[9.8%] z-[1] h-[42.5%] w-[81%] overflow-hidden bg-bg">
-        <CardArtImage src={card.artUrl} fallbackBg={card.portrait} />
+        <CardArtImage cardId={card.id} src={card.artUrl} fallbackBg={card.portrait} />
       </div>
 
       {/* Frame overlay — sits above the character image so its alpha cutout
@@ -192,8 +193,11 @@ function TraitSlot({
 // Falls back to the legacy portrait + gradient backdrop when a per-card image
 // hasn't been generated yet (rollout is progressive). Real portraits render
 // clean — no tint, no white-spot placeholder.
-function CardArtImage({ src, fallbackBg }: { src: string; fallbackBg: string }) {
-  const [errored, setErrored] = useState(false);
+function CardArtImage({ cardId, src, fallbackBg }: { cardId: string; src: string; fallbackBg: string }) {
+  // Skip the <Image> request entirely when we know there's no portrait yet.
+  // Avoids noisy 400s from the Next image optimizer for cards without art.
+  const knownMissing = !hasCardArt(cardId);
+  const [errored, setErrored] = useState(knownMissing);
   const resolved = errored ? FALLBACK_PORTRAIT_URL : src;
   return (
     <div className="absolute inset-0" style={errored ? { background: fallbackBg } : undefined}>

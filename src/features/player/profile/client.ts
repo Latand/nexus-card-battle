@@ -7,6 +7,9 @@ export type MatchFinishedRequest = {
   identity: PlayerIdentity;
   mode: "pve";
   result: "win" | "draw" | "loss";
+  // ELO of the AI bot the player faced. Required for ELO delta + tiered
+  // crystal payout (higher-ELO win = more crystals).
+  opponentEloBefore?: number;
 };
 
 export type MatchFinishedResponse = {
