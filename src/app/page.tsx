@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import { GameRoot } from "@/features/game/ui/GameRoot";
 
 export default function Home() {
-  return <GameRoot />;
+  return (
+    <Suspense fallback={null}>
+      <GameRoot />
+    </Suspense>
+  );
 }
