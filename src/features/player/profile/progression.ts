@@ -28,6 +28,12 @@ export const PVP_CRYSTAL_REWARDS = {
   loss: 0,
 } as const;
 
+export const PVE_CRYSTAL_REWARDS = {
+  win: 5,
+  draw: 0,
+  loss: 0,
+} as const;
+
 export const LEVEL_UP_CRYSTAL_BONUS_PER_LEVEL = 25;
 
 export type MatchResultBucket = "win" | "draw" | "loss";
@@ -76,7 +82,10 @@ export function computeMatchRewards(
   }
 
   const xpFromMatch = matchInfo.mode === "pvp" ? PVP_XP_REWARDS[matchInfo.result] : PVE_XP_REWARDS[matchInfo.result];
-  const matchCrystals = matchInfo.mode === "pvp" ? PVP_CRYSTAL_REWARDS[matchInfo.result] : 0;
+  const matchCrystals =
+    matchInfo.mode === "pvp"
+      ? PVP_CRYSTAL_REWARDS[matchInfo.result]
+      : PVE_CRYSTAL_REWARDS[matchInfo.result];
   const crystalsBefore = nonNegativeInteger(profileBefore.crystals, DEFAULT_PLAYER_CRYSTALS);
   const totalXpBefore = nonNegativeInteger(profileBefore.totalXp, DEFAULT_PLAYER_TOTAL_XP);
   const levelBefore = positiveInteger(profileBefore.level, DEFAULT_PLAYER_LEVEL);
