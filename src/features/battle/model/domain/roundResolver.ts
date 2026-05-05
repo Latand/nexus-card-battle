@@ -28,9 +28,14 @@ export function resolveRound(
     first,
   });
   const { playerBonus, enemyBonus } = getEffectiveBonusStates(player, playerCard, enemy, enemyChoice.card);
+  // Ability-level stop-ability fires only if the source ability survives the
+  // opponent bonus's stop-ability (or is unblockable). This breaks the
+  // chicken/egg: bonus-level stops are evaluated first, then ability-level.
+  const playerStopsAbilityViaAbility = abilityStopsOpponentAbility(playerCard, playerBonus.stopsAbility);
+  const enemyStopsAbilityViaAbility = abilityStopsOpponentAbility(enemyChoice.card, enemyBonus.stopsAbility);
   const playerAbilityBlocked = isAbilityBlocked(
     playerCard,
-    enemyBonus.active && enemyBonus.bonus.id === "stop-opponent-ability",
+    enemyBonus.stopsAbility || enemyStopsAbilityViaAbility,
     {
       owner: player,
       opponent: enemy,
@@ -40,7 +45,7 @@ export function resolveRound(
   );
   const enemyAbilityBlocked = isAbilityBlocked(
     enemyChoice.card,
-    playerBonus.active && playerBonus.bonus.id === "stop-opponent-ability",
+    playerBonus.stopsAbility || playerStopsAbilityViaAbility,
     {
       owner: enemy,
       opponent: player,
@@ -173,7 +178,18 @@ function applyQueuedNumberEffects(
   effects: ResolvedEffect[],
   targetEnergy?: number,
 ) {
-  return queuedEffects.reduce((currentValue, effect) => {
+  // Order matters when multiple reduce_with_min effects are present: applying
+  // them in the wrong order can leave value stuck above the lowest available
+  // floor (each rule's `min` is checked independently). Sort reductions by
+  // `min` descending so the floor of every rule is reachable.
+  const ordered = [...queuedEffects].sort((a, b) => {
+    const aReduce = a.rule.mode === "reduce_with_min";
+    const bReduce = b.rule.mode === "reduce_with_min";
+    if (!aReduce || !bReduce) return 0;
+    return (b.rule.min ?? 0) - (a.rule.min ?? 0);
+  });
+
+  return ordered.reduce((currentValue, effect) => {
     const nextValue =
       effect.rule.stat === "power" && targetEnergy !== undefined
         ? applyPowerEffectToAttack(currentValue, targetEnergy, effect.rule)
@@ -406,4 +422,13 @@ function resolveTie({
   }
 
   return { winner: first, tieBreaker: "initiative" };
+}
+
+function abilityStopsOpponentAbility(card: Card, abilityBlockedByBonus: boolean) {
+  return card.ability.effects.some(
+    (effect) =>
+      effect.key === "stop-ability" &&
+      effect.target !== "self" &&
+      (!abilityBlockedByBonus || effect.unblockable),
+  );
 }

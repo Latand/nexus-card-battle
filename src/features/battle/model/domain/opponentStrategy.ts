@@ -120,7 +120,7 @@ function evaluateKnownClash(
   const { playerBonus, enemyBonus } = getEffectiveBonusStates(player, playerMove.card, enemy, enemyMove.card);
   const playerAbilityBlocked = isAbilityBlocked(
     playerMove.card,
-    enemyBonus.active && enemyBonus.bonus.id === "stop-opponent-ability",
+    enemyBonus.stopsAbility,
     {
       owner: player,
       opponent: enemy,
@@ -131,7 +131,7 @@ function evaluateKnownClash(
   );
   const enemyAbilityBlocked = isAbilityBlocked(
     enemyMove.card,
-    playerBonus.active && playerBonus.bonus.id === "stop-opponent-ability",
+    playerBonus.stopsAbility,
     {
       owner: enemy,
       opponent: player,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cards } from "@/features/battle/model/cards";
 import { clanList } from "@/features/battle/model/clans";
 import { BattleCard } from "@/features/battle/ui/components/BattleCard";
@@ -345,7 +345,7 @@ export function CollectionDeckScreen(props: CollectionDeckScreenProps) {
             Нічого не знайдено
           </div>
         ) : (
-          <div className="grid gap-1.5 sm:gap-2.5 grid-cols-3 sm:grid-cols-6 lg:grid-cols-8">
+          <div className="mx-auto grid w-full max-w-[1100px] gap-1.5 sm:gap-2.5 grid-cols-3 sm:grid-cols-6 lg:grid-cols-8">
             {visibleCards.map((card) => {
               const owned = getOwnedCount(ownedCards, card.id);
               const inDeck = deckIndexById.has(card.id);
@@ -371,21 +371,21 @@ export function CollectionDeckScreen(props: CollectionDeckScreenProps) {
                       Закрито
                     </span>
                   )}
+                  {/* Hidden visual badges (deck-slot index, owned count); kept
+                      as data attributes for tests/state without overlay clutter. */}
                   {inDeck && (
                     <span
-                      className="absolute top-1 right-1 z-10 inline-flex items-center justify-center h-5 min-w-5 px-1 rounded bg-bg/85 border border-accent text-accent text-[11px] tabular-nums"
+                      hidden
+                      data-deck-slot={slotIndex}
                       aria-label={`У колоді, слот ${slotIndex}`}
-                    >
-                      {slotIndex}
-                    </span>
+                    />
                   )}
                   {owned > 0 && (
                     <span
+                      hidden
                       data-testid={`collection-owned-count-${card.id}`}
-                      className="absolute bottom-1 left-1 z-10 inline-flex items-center justify-center h-5 px-1.5 rounded bg-bg/85 border border-accent-quiet text-ink-mute text-[10px] tabular-nums"
-                    >
-                      ×{owned}
-                    </span>
+                      data-owned={owned}
+                    />
                   )}
                 </article>
               );
@@ -523,23 +523,71 @@ function DropdownChip({
   onChange: (next: string) => void;
 }) {
   const current = options.find((o) => o.value === value);
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [open]);
+
   return (
-    <label className="relative inline-flex items-center gap-1 text-ink-mute text-[12px] cursor-pointer hover:text-ink">
-      <span>{label}</span>
-      <span className="text-ink">{current?.label ?? value}</span>
-      <span aria-hidden>▾</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="absolute inset-0 opacity-0 cursor-pointer"
+    <div ref={rootRef} className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={cn(
+          "inline-flex items-center gap-1.5 px-2 py-1 rounded text-[12px] transition-colors",
+          "text-ink-mute hover:text-ink hover:bg-accent/8",
+          open && "text-ink bg-accent/10",
+        )}
       >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-    </label>
+        <span>{label}</span>
+        <span className="text-ink">{current?.label ?? value}</span>
+        <span aria-hidden className={cn("transition-transform text-[10px]", open && "rotate-180")}>▾</span>
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          className="absolute left-0 top-full z-30 mt-1.5 min-w-[140px] rounded-md border border-accent-quiet bg-surface-raised py-1 shadow-[0_12px_24px_rgba(0,0,0,0.5)] animate-[fadeIn_120ms_ease-out]"
+        >
+          {options.map((opt) => {
+            const active = opt.value === value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                role="option"
+                aria-selected={active}
+                onClick={() => {
+                  onChange(opt.value);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "block w-full px-3 py-1.5 text-left text-[12px] transition-colors",
+                  active ? "text-accent bg-accent/10" : "text-ink-mute hover:text-ink hover:bg-accent/6",
+                )}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 

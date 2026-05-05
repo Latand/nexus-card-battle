@@ -1,6 +1,7 @@
 import Image from "next/image";
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { cn } from "@/shared/lib/cn";
+import { FALLBACK_PORTRAIT_URL } from "../../model/cards";
 import type { Card, Rarity } from "../../model/types";
 import { CardTooltip } from "./CardTooltip";
 import { ClanGlyph, getClanColor } from "./ClanGlyph";
@@ -11,7 +12,9 @@ const rarityLabels: Record<Rarity, string> = {
   Unique: "UNIQ",
   Legend: "LEGEND",
 };
-const FRAME_URL = "/nexus-assets/cards/nexus-card-frame-generated.png";
+// Frame is now an RGBA PNG with the art region punched as a transparent
+// rectangle, so the character image rendered UNDER it shows through cleanly.
+const FRAME_URL = "/nexus-assets/cards/nexus-card-frame-alpha.png";
 
 export function BattleCard({
   card,
@@ -32,15 +35,15 @@ export function BattleCard({
   const abilityDescription = card.ability.description;
   const bonusName = card.bonus.name;
   const bonusDescription = card.bonus.description;
+  // Article surface holds only the rarity-tinted backdrop. The card frame is
+  // now a separate overlay layer (z-2) with an alpha-cut hole in the art
+  // region — the character image (z-1) shows through that hole cleanly.
   const style = {
     containerType: "inline-size",
     "--accent": card.accent,
-    backgroundImage: [
-      `linear-gradient(180deg, color-mix(in srgb, ${card.accent}, transparent 82%), transparent 30%, color-mix(in srgb, ${card.accent}, transparent 88%))`,
-      `url('${FRAME_URL}')`,
-    ].join(", "),
+    backgroundImage: `linear-gradient(180deg, color-mix(in srgb, ${card.accent}, transparent 82%), transparent 30%, color-mix(in srgb, ${card.accent}, transparent 88%))`,
     backgroundPosition: "center",
-    backgroundSize: "100% 100%, 100% 100%",
+    backgroundSize: "100% 100%",
     backgroundRepeat: "no-repeat",
     boxShadow:
       `0 0 0 1px color-mix(in srgb, ${card.accent}, #f8e7aa 20%), ` +
@@ -54,15 +57,16 @@ export function BattleCard({
         // aspect-[2/3] only stays intact when no min-height is set: any min-h
         // larger than width × 1.5 forces the browser to widen the card to
         // satisfy aspect-ratio, causing it to overflow its container. Parents
-        // size the card via width (or container width) only.
-        "relative aspect-[2/3] w-full overflow-hidden rounded-[10px] text-left",
+        // size the card via width (or container width) only. Default cap of
+        // 220px keeps cards from stretching across wide viewports.
+        "relative aspect-[2/3] w-full max-w-[220px] mx-auto overflow-hidden rounded-[10px] text-left",
         compact && "compact battle-card-face--compact w-[min(216px,24vw)]",
         className,
       )}
       style={style}
     >
-      <div className="battle-card-meta absolute left-[14.7%] top-[4.4%] z-[3] grid h-[5.6%] w-[70.6%] items-center px-[3%]">
-        <span className="min-w-0 truncate text-[clamp(4px,3.85cqw,10px)] font-black uppercase tracking-[0.1em] text-[#f0d68f]">
+      <div className="battle-card-meta absolute left-[14.7%] top-[4.4%] z-[3] grid h-[5.6%] w-[70.6%] place-items-center px-[3%]">
+        <span className="min-w-0 truncate text-center text-[clamp(4px,3.85cqw,10px)] font-black uppercase tracking-[0.1em] text-[#f0d68f]">
           {rarityLabels[card.rarity]}
         </span>
       </div>
@@ -80,18 +84,17 @@ export function BattleCard({
         <ClanGlyph clan={card.clan} className="h-[78%] w-[78%]" strokeBoost />
       </span>
 
-      <div
-        className="battle-card-art absolute left-[11%] top-[11.1%] z-[1] h-[39.5%] w-[78%] overflow-hidden rounded-[6px]"
-        style={{ background: card.portrait }}
-      >
-        <Image
-          src={card.artUrl}
-          alt=""
-          fill
-          sizes="220px"
-          className="object-cover object-top opacity-82 mix-blend-screen"
-        />
+      <div className="battle-card-art absolute left-[9.5%] top-[9.8%] z-[1] h-[42.5%] w-[81%] overflow-hidden bg-bg">
+        <CardArtImage src={card.artUrl} fallbackBg={card.portrait} />
       </div>
+
+      {/* Frame overlay — sits above the character image so its alpha cutout
+          masks the image into the art region. Below all chrome (z-3+). */}
+      <div
+        aria-hidden
+        className="absolute inset-0 z-[2] pointer-events-none bg-no-repeat bg-center bg-[length:100%_100%]"
+        style={{ backgroundImage: `url('${FRAME_URL}')` }}
+      />
 
       <div className="battle-card-name absolute left-[8.5%] top-[54.6%] z-[3] grid h-[6.4%] w-[83%] place-items-center overflow-hidden px-[4%] text-[clamp(5px,5.2cqw,16px)] font-black leading-none text-[#fff6d0] [text-shadow:0_2px_0_rgba(0,0,0,0.95),0_0_8px_rgba(0,0,0,0.72)]">
         <span className="block w-full overflow-hidden text-ellipsis whitespace-nowrap text-center">{card.name}</span>
@@ -182,6 +185,30 @@ function TraitSlot({
           <span className="battle-card-trait-text block w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-center font-black uppercase tracking-[0.01em] [text-shadow:0_1px_0_rgba(0,0,0,0.95),0_0_6px_rgba(0,0,0,0.7)]">{title}</span>
         </span>
       </CardTooltip>
+    </div>
+  );
+}
+
+// Falls back to the legacy portrait + gradient backdrop when a per-card image
+// hasn't been generated yet (rollout is progressive). Real portraits render
+// clean — no tint, no white-spot placeholder.
+function CardArtImage({ src, fallbackBg }: { src: string; fallbackBg: string }) {
+  const [errored, setErrored] = useState(false);
+  const resolved = errored ? FALLBACK_PORTRAIT_URL : src;
+  return (
+    <div className="absolute inset-0" style={errored ? { background: fallbackBg } : undefined}>
+      <Image
+        key={resolved}
+        src={resolved}
+        alt=""
+        fill
+        sizes="220px"
+        className={cn(
+          "object-cover object-top",
+          errored ? "opacity-82 mix-blend-screen" : "opacity-100",
+        )}
+        onError={() => setErrored(true)}
+      />
     </div>
   );
 }

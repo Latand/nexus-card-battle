@@ -280,6 +280,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
           active: isClanBonusActive(game.player, selected),
           bonus: selected.bonus,
           card: selected,
+          stopsAbility: false,
         },
       })
     : { attack: 0, damage: 0 };

@@ -7,30 +7,40 @@ export type BonusState = {
   card: Card;
   copiedFrom?: string;
   blockedBy?: string;
+  stopsAbility: boolean;
 };
+
+export function bonusHasEffect(bonus: Bonus, key: string) {
+  return bonus.effects.some((effect) => effect.key === key);
+}
 
 export function getEffectiveBonusStates(player: Fighter, playerCard: Card, enemy: Fighter, enemyCard: Card) {
   let playerBonus = getBonusState(player, playerCard, enemyCard);
   let enemyBonus = getBonusState(enemy, enemyCard, playerCard);
 
-  const playerStopsBonus = playerBonus.active && playerBonus.bonus.id === "stop-opponent-bonus";
-  const enemyStopsBonus = enemyBonus.active && enemyBonus.bonus.id === "stop-opponent-bonus";
+  // Resolve stop-bonus from BOTH sides simultaneously (use post-copy bonuses
+  // so chameleon's copied stop-bonus also cancels). Identify by effect key —
+  // legacy bonus.id is unstable Cyrillic.
+  const playerStopsBonus = playerBonus.active && bonusHasEffect(playerBonus.bonus, "stop-bonus");
+  const enemyStopsBonus = enemyBonus.active && bonusHasEffect(enemyBonus.bonus, "stop-bonus");
 
-  if (enemyStopsBonus) playerBonus = { ...playerBonus, active: false, blockedBy: enemyCard.name };
-  if (playerStopsBonus) enemyBonus = { ...enemyBonus, active: false, blockedBy: playerCard.name };
+  if (enemyStopsBonus) playerBonus = { ...playerBonus, active: false, blockedBy: enemyCard.name, stopsAbility: false };
+  if (playerStopsBonus) enemyBonus = { ...enemyBonus, active: false, blockedBy: playerCard.name, stopsAbility: false };
 
   return { playerBonus, enemyBonus };
 }
 
 function getBonusState(fighter: Fighter, card: Card, opponentCard: Card): BonusState {
   const active = isClanBonusActive(fighter, card);
-  const copiedBonus = active && card.bonus.id === "copy-opponent-bonus";
+  const copiedBonus = active && bonusHasEffect(card.bonus, "copy-bonus");
+  const bonus = copiedBonus ? opponentCard.bonus : card.bonus;
 
   return {
     active,
-    bonus: copiedBonus ? opponentCard.bonus : card.bonus,
+    bonus,
     card,
     copiedFrom: copiedBonus ? opponentCard.clan : undefined,
+    stopsAbility: active && bonusHasEffect(bonus, "stop-ability"),
   };
 }
 

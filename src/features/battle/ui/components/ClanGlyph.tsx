@@ -2,6 +2,32 @@
 
 import type { CSSProperties, ReactNode } from "react";
 
+// URL-safe slug per clan — file lives at /nexus-assets/clans/{slug}.webp.
+const clanSlugs: Record<string, string> = {
+  "[Da:Hack]": "da-hack",
+  Aliens: "aliens",
+  Workers: "workers",
+  Micron: "micron",
+  Street: "street",
+  Kingpin: "kingpin",
+  Circus: "circus",
+  Gamblers: "gamblers",
+  Saints: "saints",
+  Fury: "fury",
+  SymBio: "symbio",
+  Deviants: "deviants",
+  Mafia: "mafia",
+  Damned: "damned",
+  PSI: "psi",
+  Enigma: "enigma",
+  Toyz: "toyz",
+  Alpha: "alpha",
+  Metropolis: "metropolis",
+  Chasers: "chasers",
+  Халифат: "kalifat",
+  Nemos: "nemos",
+};
+
 // Canonical color per clan. Picked so the two clans in every booster pair
 // (see boosterCatalog) contrast clearly even at small sizes.
 export const clanColors: Record<string, string> = {
@@ -40,27 +66,29 @@ type ClanGlyphProps = {
   strokeBoost?: boolean;
 };
 
-export function ClanGlyph({ clan, className, size, strokeBoost }: ClanGlyphProps) {
-  const style: CSSProperties | undefined = size ? { width: size, height: size } : undefined;
-
+export function ClanGlyph({ clan, className, size }: ClanGlyphProps) {
+  const slug = clanSlugs[clan];
+  const color = clanColors[clan] ?? "#cbbd99";
+  const style: CSSProperties = {
+    backgroundColor: color,
+    WebkitMaskImage: slug ? `url('/nexus-assets/clans/${slug}.webp')` : undefined,
+    maskImage: slug ? `url('/nexus-assets/clans/${slug}.webp')` : undefined,
+    WebkitMaskRepeat: "no-repeat",
+    maskRepeat: "no-repeat",
+    WebkitMaskPosition: "center",
+    maskPosition: "center",
+    WebkitMaskSize: "contain",
+    maskSize: "contain",
+    ...(size ? { width: size, height: size } : {}),
+  };
   return (
-    <svg
-      viewBox={strokeBoost ? "8 8 80 80" : "0 0 96 96"}
+    <span
+      role="img"
+      aria-label={clan}
+      data-clan-glyph={clan}
       className={className}
       style={style}
-      aria-hidden="true"
-      data-clan-glyph={clan}
-    >
-      <g
-        stroke="currentColor"
-        strokeWidth={strokeBoost ? 6 : 3}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      >
-        {renderGlyph(clan)}
-      </g>
-    </svg>
+    />
   );
 }
 
