@@ -53,6 +53,8 @@ type LocalPhase = "intro" | "fight" | "death" | "barrage" | "resolve";
 type ProjectileSpec = {
   id: number;
   side: "player" | "enemy"; // which side fired (defender = the other)
+  clan: string;
+  target: "card" | "body";
   durationMs: number;
   fromX: number;
   fromY: number;
@@ -227,10 +229,15 @@ export function ClashOverlay({
   const playerSlotRef = useRef<HTMLDivElement | null>(null);
   const enemySlotRef = useRef<HTMLDivElement | null>(null);
 
-  function pushProjectile(side: "player" | "enemy", durationMs: number) {
+  function getProjectileClan(side: "player" | "enemy") {
+    return side === "player" ? playerCard.clan : enemyCard.clan;
+  }
+
+  function pushProjectile(side: "player" | "enemy", durationMs: number, target: "card" | "body") {
     const fromEl = side === "player" ? playerSlotRef.current : enemySlotRef.current;
     const toEl = side === "player" ? enemySlotRef.current : playerSlotRef.current;
     if (!fromEl || !toEl) return;
+    const clan = getProjectileClan(side);
     const fromRect = fromEl.getBoundingClientRect();
     const toRect = toEl.getBoundingClientRect();
     // Center of source/target in viewport coords; projectile centered there.
@@ -239,7 +246,8 @@ export function ClashOverlay({
     const toX = toRect.left + toRect.width / 2;
     const toY = toRect.top + toRect.height / 2;
     const id = (projectileIdRef.current += 1);
-    setProjectiles((list) => [...list, { id, side, durationMs, fromX, fromY, toX, toY }]);
+    playSound("projectileLaunch", 0.45, { clan });
+    setProjectiles((list) => [...list, { id, side, clan, target, durationMs, fromX, fromY, toX, toY }]);
   }
 
   const exchangesRef = useRef<Exchange[]>([]);
@@ -349,7 +357,7 @@ export function ClashOverlay({
 
       timeouts.push(
         setTimeout(() => {
-          pushProjectile(attackerSide, flight);
+          pushProjectile(attackerSide, flight, "card");
         }, launchOffset),
       );
 
@@ -369,7 +377,7 @@ export function ClashOverlay({
             setEnemyJolt((n) => n + 1);
           }
           setCardHp(runningCardHp);
-          playSound("hit");
+          playSound("projectileCardImpact", 0.52, { clan: getProjectileClan(attackerSide) });
         }, launchOffset + flight),
       );
 
@@ -406,14 +414,13 @@ export function ClashOverlay({
             if (impactAt > lastImpactAt) lastImpactAt = impactAt;
             timeouts.push(
               setTimeout(() => {
-                pushProjectile(winnerSide, flight);
-                playSound("projectileLaunch", 0.45);
+                pushProjectile(winnerSide, flight, "body");
               }, launchAt),
             );
             timeouts.push(
               setTimeout(() => {
                 setProjectileImpacts((n) => n + 1);
-                playSound("projectileImpact", 0.5);
+                playSound("projectileBodyImpact", 0.55, { clan: getProjectileClan(winnerSide) });
                 const remaining = Math.max(0, startHp - (i + 1));
                 onProjectileImpactRef.current?.(loserSide, i + 1, remaining);
               }, impactAt),
@@ -871,7 +878,7 @@ function ProjectileFlight({ spec, kind }: { spec: ProjectileSpec; kind: number }
   const dx = spec.toX - spec.fromX;
   const dy = spec.toY - spec.fromY;
   const direction: 1 | -1 = spec.side === "player" ? -1 : 1;
-  const size = 30 + (spec.id % 4) * 6;
+  const size = 42 + (spec.id % 4) * 7;
   // Slight vertical arc via small midpoint offset (simulates throwing arc).
   // We achieve it with two CSS variables, but a single straight transition is
   // visually fine for the speed range. Keep it simple.
@@ -879,6 +886,8 @@ function ProjectileFlight({ spec, kind }: { spec: ProjectileSpec; kind: number }
     <i
       data-testid="attack-projectile"
       data-projectile-side={spec.side}
+      data-projectile-target={spec.target}
+      data-projectile-clan={spec.clan}
       className="absolute opacity-100"
       style={{
         left: `${spec.fromX - size / 2}px`,
@@ -891,7 +900,7 @@ function ProjectileFlight({ spec, kind }: { spec: ProjectileSpec; kind: number }
         willChange: "transform, opacity",
       }}
     >
-      <ProjectileSprite kind={kind} direction={direction} scale={1.05} />
+      <ProjectileSprite kind={kind} clan={spec.clan} direction={direction} scale={1.12} />
     </i>
   );
 }

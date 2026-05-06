@@ -175,6 +175,8 @@ export type RoundState = {
   enemyCardId?: string;
   playerEnergyBid: number;
   enemyEnergyBid: number;
+  playerDamageBoost?: boolean;
+  enemyDamageBoost?: boolean;
   clash?: Clash;
 };
 
@@ -219,6 +221,7 @@ export type GameState = {
   enemy: Fighter;
   round: RoundState;
   first: Side;
+  turnDeadlineAt?: number;
   lastClash?: Clash;
   matchResult?: MatchResult;
   rewards?: RewardSummary;

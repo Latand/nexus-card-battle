@@ -155,7 +155,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   // always starts fresh and never reads/writes the persistence slot.
   const [game, setGame] = useState<GameState>(() => {
     if (!isHumanMatch) {
-      const persisted = loadBattleSession();
+      const persisted = normalizeLoadedAiGame(loadBattleSession());
       if (persisted && !persisted.matchResult) return persisted;
     }
     if (!initialGame) {
@@ -453,10 +453,12 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
               setGame((value) => ({
                 ...value,
                 phase: "player_turn",
+                turnDeadlineAt: startTurnDeadline(),
                 round: {
                   ...value.round,
                   enemyCardId: enemyMove.card.id,
                   enemyEnergyBid: enemyMove.energy ?? value.round.enemyEnergyBid,
+                  enemyDamageBoost: enemyMove.damageBoost,
                 },
               }));
               return;
@@ -484,10 +486,12 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
               return {
                 ...value,
                 phase: "player_turn",
+                turnDeadlineAt: startTurnDeadline(),
                 round: {
                   ...value.round,
                   enemyCardId: enemyMove.card.id,
                   enemyEnergyBid: enemyMove.energy,
+                  enemyDamageBoost: enemyMove.damageBoost,
                 },
               };
             });
@@ -496,16 +500,58 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
         }
 
         setEnemyLockedMove(null);
-        setGame((value) => ({ ...value, phase: "player_turn" }));
+        setGame((value) => ({ ...value, phase: "player_turn", turnDeadlineAt: startTurnDeadline() }));
       }, PHASE_TIMING_MS.round_intro);
     }
 
     if (game.phase === "opponent_turn") {
       if (isHumanMatch) return;
+      if (!pending && aiMoveRequestIdRef.current === 0 && game.first === "player" && game.round.playerCardId) {
+        const playerCard = findCardInHand(game.player.hand, game.round.playerCardId);
+        if (!playerCard) return;
+
+        const requestId = ++aiMoveRequestIdRef.current;
+        chooseAiEnemyMove(game, playerCard).then((enemyMove) => {
+          if (!isCurrentAiMoveRequest(requestId, game.round.round)) return;
+
+          playOpponentMoveCue(soundCueRef, game.round.round, enemyMove.card.id);
+          const outcome = resolveRound(
+            game.player,
+            game.enemy,
+            playerCard,
+            game.round.playerEnergyBid,
+            Boolean(game.round.playerDamageBoost),
+            game.first,
+            game.round.round,
+            enemyMove,
+          );
+
+          setPending(outcome);
+          setRoundWinnerCardIds((value) => addRoundWinnerCardId(value, outcome.clash));
+          setEnemyLockedMove(enemyMove);
+          setGame((value) => {
+            if (value.round.round !== game.round.round || value.phase !== "opponent_turn") return value;
+
+            return {
+              ...value,
+              phase: "battle_intro",
+              turnDeadlineAt: undefined,
+              round: {
+                ...value.round,
+                enemyCardId: enemyMove.card.id,
+                enemyEnergyBid: enemyMove.energy,
+                enemyDamageBoost: enemyMove.damageBoost,
+                clash: outcome.clash,
+              },
+            };
+          });
+        });
+        return;
+      }
       if (!pending) return;
 
       return schedule(() => {
-        setGame((value) => ({ ...value, phase: "battle_intro" }));
+        setGame((value) => ({ ...value, phase: "battle_intro", turnDeadlineAt: undefined }));
       }, PHASE_TIMING_MS.opponent_turn);
     }
 
@@ -557,6 +603,26 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   }, [game, humanStatus, isHumanMatch, pending, clashOverlayDone]);
 
   useEffect(() => {
+    if (isHumanMatch || pending || !["battle_intro", "damage_apply"].includes(game.phase)) return;
+
+    const restored = rebuildPendingOutcomeFromRound(game);
+    if (!restored) return;
+
+    setPending(restored.outcome);
+    setEnemyLockedMove(restored.enemyMove);
+    setRoundWinnerCardIds((value) => addRoundWinnerCardId(value, restored.outcome.clash));
+    setGame((value) => ({
+      ...value,
+      phase: "battle_intro",
+      turnDeadlineAt: undefined,
+      round: {
+        ...value.round,
+        clash: restored.outcome.clash,
+      },
+    }));
+  }, [game, isHumanMatch, pending]);
+
+  useEffect(() => {
     if (isHumanMatch) return;
     if (game.phase !== "match_result" && game.phase !== "reward_summary") return;
     if (!game.matchResult) return;
@@ -592,29 +658,36 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   }, [game.matchResult, game.phase, isHumanMatch, onPlayerUpdated, playerIdentity]);
 
   useEffect(() => {
-    let startedAt = 0;
-    const resetHandle = window.setTimeout(() => {
-      startedAt = Date.now();
-      setTurnSeconds(TURN_SECONDS);
-    }, 0);
-
     if (!playerDecisionActive) {
-      return () => window.clearTimeout(resetHandle);
+      setTurnSeconds(TURN_SECONDS);
+      return;
     }
 
+    const deadlineAt = game.turnDeadlineAt ?? startTurnDeadline();
+    if (!game.turnDeadlineAt) {
+      setGame((value) =>
+        ["player_turn", "card_preview"].includes(value.phase) && !value.turnDeadlineAt
+          ? { ...value, turnDeadlineAt: deadlineAt }
+          : value,
+      );
+    }
+
+    const updateSeconds = () => {
+      const elapsedMs = deadlineAt - Date.now();
+      setTurnSeconds(Math.max(0, Math.ceil(elapsedMs / 1000)));
+    };
+
     const interval = window.setInterval(() => {
-      if (startedAt === 0) return;
-      const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
-      setTurnSeconds(Math.max(0, TURN_SECONDS - elapsedSeconds));
+      updateSeconds();
     }, 250);
-    const timeout = window.setTimeout(() => autoSubmitRef.current(), TURN_SECONDS * 1000);
+    updateSeconds();
+    const timeout = window.setTimeout(() => autoSubmitRef.current(), Math.max(0, deadlineAt - Date.now()));
 
     return () => {
-      window.clearTimeout(resetHandle);
       window.clearInterval(interval);
       window.clearTimeout(timeout);
     };
-  }, [game.round.round, playerDecisionActive]);
+  }, [game.round.round, game.turnDeadlineAt, playerDecisionActive]);
 
   function confirmSelection() {
     if (!selected) return;
@@ -648,10 +721,12 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       setGame((value) => ({
         ...value,
         phase: "opponent_turn",
+        turnDeadlineAt: undefined,
         round: {
           ...value.round,
           playerCardId: card.id,
           playerEnergyBid: legalEnergy,
+          playerDamageBoost: effectiveBoost,
         },
       }));
 
@@ -679,10 +754,12 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
           return {
             ...value,
             phase: "battle_intro",
+            turnDeadlineAt: undefined,
             round: {
               ...value.round,
               enemyCardId: enemyMove.card.id,
               enemyEnergyBid: enemyMove.energy,
+              enemyDamageBoost: enemyMove.damageBoost,
               clash: outcome.clash,
             },
           };
@@ -711,12 +788,15 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setGame((value) => ({
       ...value,
       phase: knownEnemyMove ? "battle_intro" : "opponent_turn",
+      turnDeadlineAt: undefined,
       round: {
         ...value.round,
         playerCardId: card.id,
         enemyCardId: enemyMove.card.id,
         playerEnergyBid: legalEnergy,
         enemyEnergyBid: enemyMove.energy,
+        playerDamageBoost: effectiveBoost,
+        enemyDamageBoost: enemyMove.damageBoost,
         clash: outcome.clash,
       },
     }));
@@ -750,12 +830,15 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setGame((value) => ({
       ...value,
       phase: "opponent_turn",
+      turnDeadlineAt: undefined,
       round: {
         ...value.round,
         playerCardId: card.id,
         enemyCardId: enemyLockedMove?.card.id ?? value.round.enemyCardId,
         playerEnergyBid: legalEnergy,
         enemyEnergyBid: enemyLockedMove?.energy ?? value.round.enemyEnergyBid,
+        playerDamageBoost: boosted,
+        enemyDamageBoost: enemyLockedMove?.damageBoost ?? value.round.enemyDamageBoost,
       },
     }));
   }
@@ -898,10 +981,12 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setGame((value) => ({
       ...value,
       phase: "player_turn",
+      turnDeadlineAt: startTurnDeadline(),
       round: {
         ...value.round,
         enemyCardId: enemyMove.card.id,
         enemyEnergyBid: enemyMove.energy ?? value.round.enemyEnergyBid,
+        enemyDamageBoost: enemyMove.damageBoost,
       },
     }));
   }
@@ -957,12 +1042,15 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       ...value,
       first,
       phase: "battle_intro",
+      turnDeadlineAt: undefined,
       round: {
         ...value.round,
         playerCardId: playerCard.id,
         enemyCardId: enemyCard.id,
         playerEnergyBid: playerMove.energy,
         enemyEnergyBid: opponentMove.energy,
+        playerDamageBoost: playerMove.boosted,
+        enemyDamageBoost: opponentMove.boosted,
         clash: outcome.clash,
       },
     }));
@@ -995,6 +1083,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setGame((value) => ({
       ...value,
       phase: "reward_summary",
+      turnDeadlineAt: undefined,
       matchResult,
     }));
   }
@@ -1600,6 +1689,61 @@ function buildHumanHand(cardIds: string[]) {
 
 function findCardInHand(hand: Card[], cardId: string) {
   return hand.find((card) => card.id === cardId);
+}
+
+function startTurnDeadline() {
+  return Date.now() + TURN_SECONDS * 1000;
+}
+
+function normalizeLoadedAiGame(game: GameState | null): GameState | null {
+  if (!game) return null;
+
+  if (game.phase === "card_preview") {
+    return {
+      ...game,
+      phase: "player_turn",
+      round: {
+        ...game.round,
+        playerCardId: undefined,
+        playerEnergyBid: 0,
+        playerDamageBoost: false,
+      },
+    };
+  }
+
+  if (game.phase === "player_turn" && !game.turnDeadlineAt) {
+    return { ...game, turnDeadlineAt: startTurnDeadline() };
+  }
+
+  return game;
+}
+
+function rebuildPendingOutcomeFromRound(game: GameState) {
+  const playerCardId = game.round.playerCardId;
+  const enemyCardId = game.round.enemyCardId;
+  if (!playerCardId || !enemyCardId) return null;
+
+  const playerCard = findCardInHand(game.player.hand, playerCardId);
+  const enemyCard = findCardInHand(game.enemy.hand, enemyCardId);
+  if (!playerCard || !enemyCard) return null;
+
+  const enemyMove: EnemyMove = {
+    card: enemyCard,
+    energy: game.round.enemyEnergyBid,
+    damageBoost: Boolean(game.round.enemyDamageBoost),
+  };
+  const outcome = resolveRound(
+    game.player,
+    game.enemy,
+    playerCard,
+    game.round.playerEnergyBid,
+    Boolean(game.round.playerDamageBoost),
+    game.first,
+    game.round.round,
+    enemyMove,
+  );
+
+  return { outcome, enemyMove };
 }
 
 function createKnownEnemyMoveFromHumanMove(game: GameState, move: HumanFirstMove): KnownEnemyMove | null {

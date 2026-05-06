@@ -37,6 +37,7 @@ export function createInitialGame(options: CreateInitialGameOptions = {}): GameS
     ),
     round: createRound(1),
     first: "player",
+    turnDeadlineAt: undefined,
   };
 }
 
@@ -57,6 +58,7 @@ export function applyOutcome(state: GameState, outcome: Outcome): GameState {
     player: outcome.nextPlayer,
     enemy: outcome.nextEnemy,
     first: otherSide(state.first),
+    turnDeadlineAt: undefined,
     lastClash: outcome.clash,
     matchResult: outcome.matchResult,
     rewards: outcome.rewards,
@@ -66,6 +68,8 @@ export function applyOutcome(state: GameState, outcome: Outcome): GameState {
       enemyCardId: outcome.clash.enemyCard.id,
       playerEnergyBid: outcome.clash.playerEnergy,
       enemyEnergyBid: outcome.clash.enemyEnergy,
+      playerDamageBoost: outcome.clash.boostedDamage,
+      enemyDamageBoost: false,
       clash: outcome.clash,
     },
   };
@@ -77,6 +81,7 @@ export function startNextRound(state: GameState): GameState {
   return {
     ...state,
     phase: "round_intro",
+    turnDeadlineAt: undefined,
     round: createRound(nextRound),
   };
 }

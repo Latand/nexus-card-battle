@@ -183,6 +183,16 @@ body {
   touch-action: manipulation;
 }
 
+.card-pick-modal-panel {
+  height: auto;
+}
+
+.selection-dialog [data-testid="selection-ok"] {
+  min-width: 132px;
+  white-space: nowrap;
+  word-break: keep-all;
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -350,15 +360,91 @@ a {
 @keyframes nexus-projectile-spin {
   0% {
     filter: brightness(1.02) saturate(1.08);
-    transform: scaleX(var(--sprite-flip)) rotate(0deg) scale(var(--sprite-scale));
+    transform: scaleX(var(--sprite-flip)) rotate(0deg) scaleX(calc(var(--sprite-scale) * 1.08)) scaleY(calc(var(--sprite-scale) * 0.94));
   }
-  48% {
+  24% {
+    filter: brightness(1.26) saturate(1.2);
+    transform: scaleX(var(--sprite-flip)) rotate(calc(var(--sprite-turn) * 0.24)) scaleX(calc(var(--sprite-scale) * 0.92)) scaleY(calc(var(--sprite-scale) * 1.16));
+  }
+  52% {
     filter: brightness(1.38) saturate(1.28);
-    transform: scaleX(var(--sprite-flip)) rotate(calc(var(--sprite-turn) / 2)) scale(calc(var(--sprite-scale) * 1.12));
+    transform: scaleX(var(--sprite-flip)) rotate(calc(var(--sprite-turn) * 0.52)) scaleX(calc(var(--sprite-scale) * 1.14)) scaleY(calc(var(--sprite-scale) * 0.9));
+  }
+  76% {
+    filter: brightness(1.22) saturate(1.18);
+    transform: scaleX(var(--sprite-flip)) rotate(calc(var(--sprite-turn) * 0.76)) scaleX(calc(var(--sprite-scale) * 0.96)) scaleY(calc(var(--sprite-scale) * 1.08));
   }
   100% {
     filter: brightness(1.02) saturate(1.08);
-    transform: scaleX(var(--sprite-flip)) rotate(var(--sprite-turn)) scale(var(--sprite-scale));
+    transform: scaleX(var(--sprite-flip)) rotate(var(--sprite-turn)) scaleX(calc(var(--sprite-scale) * 1.08)) scaleY(calc(var(--sprite-scale) * 0.94));
+  }
+}
+
+@keyframes nexus-projectile-frames {
+  0%,
+  30% {
+    background-position: 0% 0;
+  }
+  33.333%,
+  63.333% {
+    background-position: 50% 0;
+  }
+  66.667%,
+  100% {
+    background-position: 100% 0;
+  }
+}
+
+.nexus-projectile-aura,
+.nexus-projectile-streak {
+  position: absolute;
+  pointer-events: none;
+  display: block;
+}
+
+.nexus-projectile-aura {
+  inset: -28%;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle, rgb(var(--projectile-glow-rgb) / 0.36) 0%, rgb(var(--projectile-glow-rgb) / 0.18) 34%, transparent 68%);
+  filter: blur(3px) saturate(1.2);
+  mix-blend-mode: screen;
+  animation: nexus-projectile-aura 360ms ease-in-out infinite;
+}
+
+.nexus-projectile-streak {
+  left: -44%;
+  top: 39%;
+  width: 72%;
+  height: 22%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent 0%, rgb(var(--projectile-glow-rgb) / 0.42) 42%, rgb(var(--projectile-glow-rgb) / 0.08) 100%);
+  filter: blur(3px);
+  transform-origin: right center;
+  animation: nexus-projectile-streak 360ms ease-in-out infinite;
+}
+
+@keyframes nexus-projectile-aura {
+  0%,
+  100% {
+    opacity: 0.54;
+    transform: scale(0.9);
+  }
+  45% {
+    opacity: 0.92;
+    transform: scale(1.18);
+  }
+}
+
+@keyframes nexus-projectile-streak {
+  0%,
+  100% {
+    opacity: 0.32;
+    transform: translateX(3px) scaleX(0.68);
+  }
+  48% {
+    opacity: 0.82;
+    transform: translateX(-5px) scaleX(1.12);
   }
 }
 
@@ -911,19 +997,42 @@ a {
 }
 
 @media (max-width: 620px) and (orientation: portrait) {
+  :is(.card-pick-modal-panel--mobile) {
+    inset: auto 12px 12px 12px !important;
+    height: auto !important;
+    max-height: calc(var(--app-height) - 24px) !important;
+    width: auto !important;
+    border-bottom-width: 1px !important;
+    border-radius: 16px !important;
+  }
+
   :is(.selection-dialog) {
-    max-height: calc(100dvh - 16px);
+    height: auto !important;
+    max-height: calc(var(--app-height) - 24px);
     min-height: 0 !important;
-    grid-template-rows: auto auto minmax(92px, 1fr);
-    align-items: center;
-    gap: 7px !important;
     overflow: hidden;
-    padding: 10px !important;
+  }
+
+  :is(.selection-dialog) > header {
+    padding: 10px 14px 4px !important;
+  }
+
+  :is(.selection-dialog) > div:nth-of-type(1) {
+    flex: 0 1 auto !important;
+    padding: 0 14px 10px !important;
+  }
+
+  :is(.selection-dialog) > div:nth-of-type(1) > div:first-child {
+    gap: 12px !important;
   }
 
   :is(.selection-card) :is(.battle-card-face) {
-    width: min(132px, 42dvw) !important;
-    min-height: 178px !important;
+    width: min(126px, 36dvw) !important;
+    min-height: 168px !important;
+  }
+
+  :is(.selection-dialog) [data-testid="card-pick-hidden-enemy"] {
+    width: min(126px, 36dvw) !important;
   }
 
   :is(.selection-controls) {
@@ -941,6 +1050,26 @@ a {
     font-size: 18px !important;
   }
 
+  :is(.selection-dialog) > div:last-child {
+    border-top-color: rgb(145 118 50 / 0.28) !important;
+  }
+
+  :is(.selection-dialog) > div:last-child > div {
+    display: flex;
+    justify-content: center;
+    padding: 10px 14px 12px !important;
+  }
+
+  :is(.selection-dialog) button[data-testid="selection-ok"] {
+    width: min(220px, 100%) !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    padding: 0 22px !important;
+    font-size: 14px !important;
+    letter-spacing: 0.14em !important;
+    line-height: 1 !important;
+  }
+
   :is(.selection-enemy) {
     min-height: 104px !important;
     width: min(260px, 100%);
@@ -954,15 +1083,35 @@ a {
 }
 
 @media (max-width: 620px) and (orientation: portrait) and (max-height: 640px) {
+  :is(.card-pick-modal-panel--mobile) {
+    inset-inline: 8px !important;
+    bottom: 8px !important;
+    max-height: calc(var(--app-height) - 16px) !important;
+  }
+
   :is(.selection-dialog) {
-    grid-template-rows: auto auto minmax(58px, 1fr);
-    gap: 4px !important;
-    padding: 8px !important;
+    max-height: calc(var(--app-height) - 16px);
+  }
+
+  :is(.selection-dialog) > header {
+    padding-top: 8px !important;
+  }
+
+  :is(.selection-dialog) > div:nth-of-type(1) {
+    padding-bottom: 8px !important;
+  }
+
+  :is(.selection-dialog) hr {
+    margin-block: 8px !important;
   }
 
   :is(.selection-card) :is(.battle-card-face) {
-    width: min(118px, 39dvw) !important;
-    min-height: 158px !important;
+    width: min(112px, 35dvw) !important;
+    min-height: 150px !important;
+  }
+
+  :is(.selection-dialog) [data-testid="card-pick-hidden-enemy"] {
+    width: min(112px, 35dvw) !important;
   }
 
   :is(.selection-controls) {
@@ -984,6 +1133,11 @@ a {
     font-size: 16px !important;
   }
 
+  :is(.selection-dialog) button[data-testid="selection-ok"] {
+    height: 38px !important;
+    min-height: 38px !important;
+  }
+
   :is(.selection-enemy) {
     min-height: 68px !important;
     max-height: 86px;
@@ -1001,18 +1155,43 @@ a {
 }
 
 @media (orientation: landscape) and (max-height: 430px) {
+  :is(.card-pick-modal-panel--mobile) {
+    inset: 8px auto auto 50% !important;
+    transform: translateX(-50%);
+    height: auto !important;
+    max-height: calc(var(--app-height) - 16px) !important;
+    width: min(620px, calc(100dvw - 16px)) !important;
+    border-bottom-width: 1px !important;
+    border-radius: 16px !important;
+  }
+
   :is(.selection-dialog) {
+    height: auto !important;
+    max-height: calc(var(--app-height) - 16px);
     min-height: 0 !important;
-    height: min(360px, calc(100dvh - 12px));
-    grid-template-columns: minmax(122px, 170px) minmax(170px, 188px) minmax(104px, 150px) !important;
-    gap: 8px !important;
-    padding: 10px 14px !important;
     overflow: hidden;
   }
 
+  :is(.selection-dialog) > header {
+    padding: 8px 14px 2px !important;
+  }
+
+  :is(.selection-dialog) > div:nth-of-type(1) {
+    flex: 0 1 auto !important;
+    padding: 0 14px 8px !important;
+  }
+
+  :is(.selection-dialog) > div:nth-of-type(1) > div:first-child {
+    gap: 14px !important;
+  }
+
   :is(.selection-card) :is(.battle-card-face) {
-    width: min(170px, 20dvw) !important;
-    min-height: 238px !important;
+    width: min(124px, 18dvw) !important;
+    min-height: 166px !important;
+  }
+
+  :is(.selection-dialog) [data-testid="card-pick-hidden-enemy"] {
+    width: min(124px, 18dvw) !important;
   }
 
   :is(.selection-controls) {
@@ -1029,6 +1208,21 @@ a {
     font-size: 18px !important;
   }
 
+  :is(.selection-dialog) > div:last-child > div {
+    display: flex;
+    justify-content: center;
+    padding: 8px 14px !important;
+  }
+
+  :is(.selection-dialog) button[data-testid="selection-ok"] {
+    width: min(200px, 100%) !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    font-size: 13px !important;
+    letter-spacing: 0.14em !important;
+    line-height: 1 !important;
+  }
+
   :is(.selection-enemy) {
     min-height: 172px !important;
     max-height: 240px;
@@ -1036,7 +1230,49 @@ a {
   }
 
   :is(.selection-enemy) :is(.battle-card-face) {
-    width: min(128px, 15dvw) !important;
-    min-height: 178px !important;
+    width: min(118px, 15dvw) !important;
+    min-height: 158px !important;
+  }
+}
+
+@media (min-width: 621px) and (max-width: 900px) {
+  :is(.card-pick-modal-panel) {
+    max-width: min(560px, calc(100dvw - 48px)) !important;
+  }
+
+  :is(.selection-dialog) > header {
+    padding: 12px 22px 6px !important;
+  }
+
+  :is(.selection-dialog) > div:nth-of-type(1) {
+    flex: 0 1 auto !important;
+    padding-inline: 22px !important;
+    padding-bottom: 12px !important;
+  }
+
+  :is(.selection-dialog) > div:nth-of-type(1) > div:first-child {
+    gap: 18px !important;
+  }
+
+  :is(.selection-card) :is(.battle-card-face) {
+    width: min(152px, 24dvw) !important;
+    min-height: 204px !important;
+  }
+
+  :is(.selection-dialog) [data-testid="card-pick-hidden-enemy"] {
+    width: min(152px, 24dvw) !important;
+  }
+
+  :is(.selection-dialog) > div:last-child > div {
+    display: flex;
+    justify-content: center;
+    padding: 12px 22px 14px !important;
+  }
+
+  :is(.selection-dialog) button[data-testid="selection-ok"] {
+    width: min(240px, 100%) !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    line-height: 1 !important;
   }
 }
