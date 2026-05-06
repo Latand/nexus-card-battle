@@ -41,7 +41,7 @@ export type BoosterCatalogItem = BoosterResponse & {
   paid: {
     crystalCost: number;
     canOpen: boolean;
-    disabledReason?: "insufficient_crystals";
+    disabledReason?: "insufficient_crystals" | "group_booster_empty";
   };
 };
 

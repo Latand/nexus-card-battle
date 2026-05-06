@@ -48,7 +48,8 @@ export function getBoosterCatalogForPlayerWithBoosters(profile: PlayerBoosterCat
     const opened = openedBoosterIds.has(booster.id);
     const starterEligible = !booster.group && (booster.cardCount ?? 5) >= 4;
     const canOpen = starterEligible && profile.starterFreeBoostersRemaining > 0 && !opened;
-    const canOpenPaid = profile.crystals >= PAID_BOOSTER_CRYSTAL_COST;
+    const groupBoosterEmpty = Boolean(booster.group) && (booster.cardCount ?? 0) <= 0;
+    const canOpenPaid = profile.crystals >= PAID_BOOSTER_CRYSTAL_COST && !groupBoosterEmpty;
 
     return {
       ...serializeBooster(booster),
@@ -60,7 +61,7 @@ export function getBoosterCatalogForPlayerWithBoosters(profile: PlayerBoosterCat
       paid: {
         crystalCost: PAID_BOOSTER_CRYSTAL_COST,
         canOpen: canOpenPaid,
-        disabledReason: canOpenPaid ? undefined : "insufficient_crystals",
+        disabledReason: canOpenPaid ? undefined : groupBoosterEmpty ? "group_booster_empty" : "insufficient_crystals",
       },
     };
   });

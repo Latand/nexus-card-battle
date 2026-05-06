@@ -3,6 +3,11 @@ import type { PlayerIdentity, PlayerProfile } from "@/features/player/profile/ty
 import type { BoosterCatalogItem, BoosterOpeningRecord, BoosterResponse } from "./types";
 
 export type BoosterCatalogResponse = {
+  boosters: BoosterCatalogItem[];
+  player?: PlayerProfile;
+};
+
+export type PublicBoosterCatalogResponse = {
   boosters: BoosterResponse[];
 };
 
@@ -19,12 +24,28 @@ export type OpenStarterBoosterResponse = {
   crystalCost?: number;
 };
 
-export async function fetchBoosterCatalog(groupContext?: string | null): Promise<BoosterCatalogResponse> {
-  const query = groupContext ? `?groupContext=${encodeURIComponent(groupContext)}` : "";
-  const response = await fetch(`/api/boosters${query}`, {
-    method: "GET",
-  });
-  const body = (await response.json().catch(() => undefined)) as Partial<BoosterCatalogResponse> & {
+export function fetchBoosterCatalog(identity: PlayerIdentity, groupContext?: string | null): Promise<BoosterCatalogResponse>;
+export function fetchBoosterCatalog(groupContext?: string | null): Promise<PublicBoosterCatalogResponse>;
+export async function fetchBoosterCatalog(
+  identityOrGroupContext?: PlayerIdentity | string | null,
+  groupContext?: string | null,
+): Promise<BoosterCatalogResponse | PublicBoosterCatalogResponse> {
+  const identity = isPlayerIdentity(identityOrGroupContext) ? identityOrGroupContext : null;
+  const resolvedGroupContext = identity ? groupContext : typeof identityOrGroupContext === "string" ? identityOrGroupContext : null;
+  const response = identity
+    ? await fetch("/api/boosters", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ identity, ...(resolvedGroupContext ? { groupContext: resolvedGroupContext } : {}) }),
+      })
+    : await fetch(`/api/boosters${resolvedGroupContext ? `?groupContext=${encodeURIComponent(resolvedGroupContext)}` : ""}`, {
+        method: "GET",
+      });
+  const body = (await response.json().catch(() => undefined)) as {
+    boosters?: BoosterCatalogItem[] | BoosterResponse[];
+    player?: PlayerProfile;
     message?: string;
   };
 
@@ -38,6 +59,7 @@ export async function fetchBoosterCatalog(groupContext?: string | null): Promise
 
   return {
     boosters: body.boosters,
+    ...(body.player ? { player: body.player } : {}),
   };
 }
 
@@ -122,4 +144,10 @@ export async function openPaidBooster(identity: PlayerIdentity, boosterId: strin
     player: body.player,
     crystalCost: body.crystalCost,
   };
+}
+
+function isPlayerIdentity(value: unknown): value is PlayerIdentity {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const mode = (value as { mode?: unknown }).mode;
+  return mode === "guest" || mode === "telegram";
 }

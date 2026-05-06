@@ -6,6 +6,7 @@ import { BattleCard } from "@/features/battle/ui/components/BattleCard";
 import { fetchBoosterCatalog, openPaidBooster } from "@/features/boosters/client";
 import {
   PAID_BOOSTER_CRYSTAL_COST,
+  type BoosterCatalogItem,
   type BoosterResponse,
 } from "@/features/boosters/types";
 import type { PlayerIdentity, PlayerProfile } from "@/features/player/profile/types";
@@ -38,6 +39,7 @@ type RevealState = {
   booster: BoosterResponse;
   cards: Card[];
 };
+type PaidDisabledReason = NonNullable<BoosterCatalogItem["paid"]["disabledReason"]>;
 
 export function BoosterShopModal({
   open,
@@ -50,7 +52,7 @@ export function BoosterShopModal({
   groupContext,
 }: BoosterShopModalProps) {
   const isMobile = useIsMobile();
-  const [boosters, setBoosters] = useState<BoosterResponse[] | null>(null);
+  const [boosters, setBoosters] = useState<BoosterCatalogItem[] | null>(null);
   const [status, setStatus] = useState<ShopStatus>({ kind: "idle" });
   const [reveal, setReveal] = useState<RevealState | null>(null);
 
@@ -58,10 +60,19 @@ export function BoosterShopModal({
     if (!open) return;
 
     let cancelled = false;
-    setBoosters(null);
-    setReveal(null);
-    setStatus({ kind: "loading" });
-    void fetchBoosterCatalog(groupContext)
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setBoosters(playerIdentity ? null : []);
+      setReveal(null);
+      setStatus(playerIdentity ? { kind: "loading" } : { kind: "idle" });
+    });
+    if (!playerIdentity) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void fetchBoosterCatalog(playerIdentity, groupContext)
       .then((response) => {
         if (cancelled) return;
         setBoosters(response.boosters);
@@ -78,13 +89,15 @@ export function BoosterShopModal({
     return () => {
       cancelled = true;
     };
-  }, [groupContext, open]);
+  }, [groupContext, open, playerIdentity]);
 
   const handleOpenBooster = useCallback(
     (boosterId: string) => {
       if (!playerIdentity) return;
       if (status.kind === "opening") return;
       if (profileCrystals < PAID_BOOSTER_CRYSTAL_COST) return;
+      const booster = boosters?.find((item) => item.id === boosterId);
+      if (booster?.paid.canOpen === false) return;
 
       setStatus({ kind: "opening", boosterId });
       void openPaidBooster(playerIdentity, boosterId, groupContext)
@@ -112,6 +125,7 @@ export function BoosterShopModal({
       onCrystalsUpdated,
       onProfileChange,
       groupContext,
+      boosters,
       playerIdentity,
       profileCrystals,
       status.kind,
@@ -199,9 +213,14 @@ export function BoosterShopModal({
               {boosters.map((booster) => {
                 const opening =
                   status.kind === "opening" && status.boosterId === booster.id;
-                const insufficient = profileCrystals < PAID_BOOSTER_CRYSTAL_COST;
+                const paidDisabled = booster.paid.canOpen === false;
+                const paidDisabledReason = paidDisabled ? booster.paid.disabledReason : undefined;
+                const insufficient =
+                  paidDisabledReason === "insufficient_crystals" ||
+                  profileCrystals < booster.paid.crystalCost;
                 const disabled =
                   !playerIdentity ||
+                  paidDisabled ||
                   insufficient ||
                   opening ||
                   status.kind === "opening";
@@ -212,6 +231,7 @@ export function BoosterShopModal({
                       opening={opening}
                       disabled={disabled}
                       insufficient={insufficient}
+                      disabledReason={paidDisabledReason}
                       onOpen={() => handleOpenBooster(booster.id)}
                     />
                   </li>
@@ -230,15 +250,18 @@ function BoosterRow({
   opening,
   disabled,
   insufficient,
+  disabledReason,
   onOpen,
 }: {
-  booster: BoosterResponse;
+  booster: BoosterCatalogItem;
   opening: boolean;
   disabled: boolean;
   insufficient: boolean;
+  disabledReason?: PaidDisabledReason;
   onOpen: () => void;
 }) {
   const special = booster.presentation === "special" || booster.presentation === "group";
+  const disabledCopy = getPaidBoosterDisabledCopy(disabledReason);
   return (
     <article
       data-testid={`booster-shop-item-${booster.id}`}
@@ -257,13 +280,21 @@ function BoosterRow({
         <span className={cn("mt-0.5 block truncate text-[11px] uppercase tracking-[0.16em]", special ? "text-cool" : "text-cool")}>
           {booster.clans.join(" · ")}
         </span>
+        {disabledCopy && (
+          <span
+            data-testid={`booster-shop-disabled-reason-${booster.id}`}
+            className="mt-1 block truncate text-[11px] uppercase tracking-[0.12em] text-ink-mute"
+          >
+            {disabledCopy}
+          </span>
+        )}
       </div>
       <button
         type="button"
         data-testid={`booster-shop-open-${booster.id}`}
         onClick={onOpen}
         disabled={disabled}
-        title={insufficient ? "Недостатньо кристалів" : undefined}
+        title={getPaidBoosterDisabledTitle(disabledReason, insufficient)}
         className={cn(
           "shrink-0 inline-flex items-center justify-center gap-1 px-3 h-9 rounded-md",
           "text-[12px] font-medium uppercase tracking-[0.12em] border transition-colors",
@@ -274,15 +305,28 @@ function BoosterRow({
       >
         {opening ? (
           "Відкриття…"
+        ) : disabledReason === "group_booster_empty" ? (
+          "Немає карт"
         ) : (
           <>
-            <span className="tabular-nums">{PAID_BOOSTER_CRYSTAL_COST}</span>
+            <span className="tabular-nums">{booster.paid.crystalCost}</span>
             <CrystalGlyph className="text-[#1a1408]" />
           </>
         )}
       </button>
     </article>
   );
+}
+
+function getPaidBoosterDisabledCopy(reason?: PaidDisabledReason) {
+  if (reason === "group_booster_empty") return "Пул ще порожній";
+  return undefined;
+}
+
+function getPaidBoosterDisabledTitle(reason: PaidDisabledReason | undefined, insufficient: boolean) {
+  if (reason === "group_booster_empty") return "У груповому бустері ще немає карт";
+  if (insufficient) return "Недостатньо кристалів";
+  return undefined;
 }
 
 function RevealPanel({

@@ -131,7 +131,7 @@ test("loads the full active card base beyond the first grid page", async ({ page
   await expect(page.getByTestId("collection-load-more")).toHaveCount(0);
 });
 
-test("opens an already known booster again for 100 crystals from the collection screen", async ({ page }) => {
+test("opens an already known booster again for 100 crystals from the booster modal", async ({ page }) => {
   const identity: PlayerIdentity = { mode: "guest", guestId: "guest-paid-booster-e2e" };
   const drawnCards = cards.filter((card) => !PROFILE_OWNED_CARD_IDS.includes(card.id)).slice(0, 5);
   let requestedSource: unknown;
@@ -141,6 +141,31 @@ test("opens an already known booster again for 100 crystals from the collection 
     crystals: 100,
     openedBoosterIds: ["neon-breach", "factory-shift"],
     starterFreeBoostersRemaining: 0,
+  });
+
+  await page.route("**/api/boosters**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        boosters: [
+          {
+            id: "neon-breach",
+            name: "Neon Breach",
+            clans: ["[Da:Hack]", "Aliens"],
+            starter: {
+              opened: true,
+              canOpen: false,
+              disabledReason: "already_opened",
+            },
+            paid: {
+              crystalCost: 100,
+              canOpen: true,
+            },
+          },
+        ],
+      }),
+    });
   });
 
   await page.route("**/api/player/open-booster", async (route) => {
@@ -196,12 +221,14 @@ test("opens an already known booster again for 100 crystals from the collection 
   });
 
   await page.goto("/");
-  await page.getByTestId("paid-booster-open-neon-breach").click();
+  await page.getByTestId("topbar-open-boosters").click();
+  await page.getByTestId("booster-shop-open-neon-breach").click();
 
   expect(requestedSource).toBe("paid_crystals");
-  await expect(page.getByTestId("paid-booster-reveal")).toBeVisible();
+  await expect(page.getByTestId("booster-shop-reveal")).toBeVisible();
   await expect(page.getByTestId("player-hud-sidebar")).toHaveAttribute("data-profile-crystals", "0");
-  await expect(page.getByTestId("paid-booster-open-neon-breach")).toBeDisabled();
+  await expect(page.getByTestId("booster-shop-open-neon-breach")).toBeDisabled();
+  await expect(page.getByTestId("booster-shop-open-neon-breach")).toHaveAttribute("title", "Недостатньо кристалів");
 });
 
 test("does not keep a stale group booster visible after group context becomes invalid", async ({ page }) => {
@@ -217,8 +244,10 @@ test("does not keep a stale group booster visible after group context becomes in
 
   await page.route("**/api/boosters**", async (route) => {
     boosterCatalogRequests += 1;
-    const url = new URL(route.request().url());
-    const groupContext = url.searchParams.get("groupContext");
+    const request = route.request();
+    const groupContext = request.method() === "POST"
+      ? (request.postDataJSON() as { groupContext?: string }).groupContext
+      : new URL(request.url()).searchParams.get("groupContext");
 
     if (groupContext === "valid-group-context") {
       await route.fulfill({
@@ -232,6 +261,14 @@ test("does not keep a stale group booster visible after group context becomes in
               clans: ["VibeCoders"],
               cardCount: 4,
               presentation: "special",
+              starter: {
+                opened: false,
+                canOpen: true,
+              },
+              paid: {
+                crystalCost: 100,
+                canOpen: true,
+              },
             },
             {
               id: "group--100valid",
@@ -240,6 +277,15 @@ test("does not keep a stale group booster visible after group context becomes in
               cardCount: 4,
               presentation: "group",
               groupChatId: "-100valid",
+              starter: {
+                opened: false,
+                canOpen: false,
+                disabledReason: "no_starter_boosters_remaining",
+              },
+              paid: {
+                crystalCost: 100,
+                canOpen: true,
+              },
             },
           ],
         }),
@@ -270,6 +316,61 @@ test("does not keep a stale group booster visible after group context becomes in
   await expect(page.getByTestId("booster-shop-list")).toHaveCount(0);
   await expect(page.getByTestId("booster-shop-item-group--100valid")).toHaveCount(0);
   expect(boosterCatalogRequests).toBeGreaterThanOrEqual(2);
+});
+
+test("disables an empty group booster in the paid booster modal", async ({ page }) => {
+  const identity: PlayerIdentity = { mode: "guest", guestId: "guest-empty-group-booster-e2e" };
+
+  await mockDeckReadyProfile(page, {
+    identity,
+    crystals: 100,
+    openedBoosterIds: ["neon-breach", "factory-shift"],
+    starterFreeBoostersRemaining: 0,
+  });
+
+  await page.route("**/api/boosters**", async (route) => {
+    const request = route.request();
+    const groupContext = request.method() === "POST"
+      ? (request.postDataJSON() as { groupContext?: string }).groupContext
+      : new URL(request.url()).searchParams.get("groupContext");
+
+    expect(groupContext).toBe("valid-empty-group-context");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        boosters: [
+          {
+            id: "group--100empty",
+            name: "Empty Group",
+            clans: ["Empty Group"],
+            cardCount: 0,
+            presentation: "group",
+            groupChatId: "-100empty",
+            starter: {
+              opened: false,
+              canOpen: false,
+              disabledReason: "no_starter_boosters_remaining",
+            },
+            paid: {
+              crystalCost: 100,
+              canOpen: false,
+              disabledReason: "group_booster_empty",
+            },
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.goto("/?groupContext=valid-empty-group-context");
+  await page.getByTestId("topbar-open-boosters").click();
+
+  await expect(page.getByTestId("booster-shop-item-group--100empty")).toBeVisible();
+  await expect(page.getByTestId("booster-shop-disabled-reason-group--100empty")).toHaveText("Пул ще порожній");
+  await expect(page.getByTestId("booster-shop-open-group--100empty")).toBeDisabled();
+  await expect(page.getByTestId("booster-shop-open-group--100empty")).toHaveText("Немає карт");
+  await expect(page.getByTestId("booster-shop-open-group--100empty")).toHaveAttribute("title", "У груповому бустері ще немає карт");
 });
 
 test("blocks overlapping deck edits and rolls a failed save back to the confirmed profile deck", async ({ page }) => {

@@ -129,6 +129,27 @@ describe("booster catalog", () => {
     expect(otherBody.boosters.some((booster) => booster.id === groupBoosterId("-100visible"))).toBe(false);
   });
 
+  test("marks an empty group booster as unavailable even when the player has crystals", async () => {
+    const store = new MemoryBoosterOpeningStore();
+    store.seedProfile(guestIdentity, { crystals: 100, starterFreeBoostersRemaining: 0 });
+    const group = store.seedGroup("-100empty", []);
+    const context = signGroupLaunchContext({ chatId: "-100empty", now: new Date("2099-05-06T10:00:00.000Z") });
+
+    const response = await postCatalog(store, guestIdentity, context);
+    const body = (await response.json()) as { boosters: BoosterCatalogItem[]; player: PlayerProfile };
+    const groupBooster = body.boosters.find((booster) => booster.id === group.boosterId);
+
+    expect(response.status).toBe(200);
+    expect(groupBooster).toMatchObject({
+      id: group.boosterId,
+      paid: {
+        crystalCost: 100,
+        canOpen: false,
+        disabledReason: "group_booster_empty",
+      },
+    });
+  });
+
   test("includes signed group booster metadata on the public paid-shop catalog GET", async () => {
     const store = new MemoryBoosterOpeningStore();
     const group = store.seedGroup("-100shop", ["shop-a", "shop-b", "shop-c", "shop-d"]);
