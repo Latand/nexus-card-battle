@@ -34,6 +34,7 @@ type TelegramWindow = Window & {
     WebApp?: {
       initData?: string;
       ready?: () => void;
+      expand?: () => void;
       platform?: string;
       unlockOrientation?: () => void;
       disableVerticalSwipes?: () => void;
@@ -137,6 +138,8 @@ export function GameRoot() {
     if (webApp) {
       document.documentElement.dataset.telegramWebapp = "true";
       webApp.ready?.();
+      webApp.expand?.();
+      webApp.disableVerticalSwipes?.();
       applyTelegramChromeColors(webApp);
       releaseTelegramOrientationLock(webApp);
       webApp.onEvent?.("viewportChanged", syncViewportHeight);

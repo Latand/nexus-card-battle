@@ -88,8 +88,8 @@ test("Telegram WebApp mobile keeps portrait usable and closes lobby chat cleanly
   expect(bootstrap.calls?.lockOrientation).toBe(0);
   expect(bootstrap.calls?.screenLock).toBe(0);
   expect(bootstrap.calls?.requestFullscreen).toBe(0);
-  expect(bootstrap.calls?.disableVerticalSwipes).toBe(0);
-  expect(bootstrap.calls?.expand).toBe(0);
+  expect(bootstrap.calls?.disableVerticalSwipes).toBe(1);
+  expect(bootstrap.calls?.expand).toBe(1);
   expect(bootstrap.appHeight).toBe("700px");
   expect(bootstrap.telegramWebapp).toBe("true");
 
