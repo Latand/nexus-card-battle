@@ -7,7 +7,7 @@ import { cardIds } from "@/features/battle/model/cardIds";
 import { STARTER_BOOSTER_CARD_COUNT } from "@/features/boosters/types";
 import { getOwnedCardIds } from "@/features/inventory/inventoryOps";
 import { DEFAULT_PLAYER_AVATAR_URL, readTelegramPhotoUrl, resolveAvatarUrl, useTelegramAvatar } from "@/features/player/profile/avatar";
-import { fetchPlayerProfile, resolveClientPlayerIdentity, savePlayerAvatar, savePlayerDeck } from "@/features/player/profile/client";
+import { fetchPlayerProfile, savePlayerAvatar, savePlayerDeck } from "@/features/player/profile/client";
 import { STARTER_FREE_BOOSTERS, type PlayerIdentity, type PlayerProfile } from "@/features/player/profile/types";
 import { useOnlineCount } from "@/features/presence/client";
 import { AtmosphericBackground } from "@/shared/ui/v2/AtmosphericBackground";
@@ -109,20 +109,19 @@ export function GameRoot() {
 
   useEffect(() => {
     let disposed = false;
-    const identity = resolveClientPlayerIdentity();
 
-    void fetchPlayerProfile(identity)
+    void fetchPlayerProfile()
       .then((profile) => {
         if (disposed) return;
         lastConfirmedDeckIdsRef.current = getConfirmedDeckIds(profile, allCardIds);
-        setPlayerIdentity(identity);
+        setPlayerIdentity(profile.identity);
         setPlayerProfile(profile);
         setProfileStatus("ready");
         setDeckSaveStatus("idle");
       })
       .catch(() => {
         if (disposed) return;
-        setPlayerIdentity(identity);
+        setPlayerIdentity(null);
         setPlayerProfile(null);
         setProfileStatus("unavailable");
         lastConfirmedDeckIdsRef.current = [];

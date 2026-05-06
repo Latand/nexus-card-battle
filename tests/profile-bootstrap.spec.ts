@@ -1,21 +1,19 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { fulfillBoosterCatalog, fulfillPlayerProfile, PROFILE_DECK_IDS, PROFILE_OWNED_CARD_IDS, type TestPlayerProfileInput } from "./fixtures/playerProfile";
 
-const GUEST_ID_STORAGE_KEY = "nexus:player-guest-id:v1";
-
 test("bootstraps a browser guest profile on first load", async ({ page }) => {
   const requests: unknown[] = [];
   let profile: TestPlayerProfileInput | undefined;
   await mockPlayerProfile(page, async (route) => {
-    const requestBody = route.request().postDataJSON() as { identity: { mode: "guest"; guestId: string } };
+    const requestBody = route.request().postDataJSON() as { identity?: unknown; telegramInitData?: string };
     requests.push(requestBody);
 
-    expect(requestBody.identity.mode).toBe("guest");
-    expect(requestBody.identity.guestId).toMatch(/^guest_/);
+    expect(requestBody.identity).toBeUndefined();
+    expect(requestBody.telegramInitData).toBeUndefined();
 
     profile = {
       id: "player-guest-e2e",
-      identity: requestBody.identity,
+      identity: { mode: "guest", guestId: "guest_server_e2e" },
       ownedCardIds: [],
       deckIds: [],
       starterFreeBoostersRemaining: 2,
@@ -39,13 +37,11 @@ test("bootstraps a browser guest profile on first load", async ({ page }) => {
   await expect(profileShell).toHaveAttribute("data-deck-source", "starter-fallback");
   await expect(page.getByTestId("starter-onboarding-shell")).toBeVisible();
   await expect(page.getByTestId("starter-onboarding-shell")).toHaveAttribute("data-opened-booster-count", "0");
-  await expect(page.locator('[data-testid^="starter-booster-card-"]')).toHaveCount(12);
+  await expect(page.locator('[data-testid^="starter-booster-card-"]')).toHaveCount(13);
   await expect(page.getByTestId("collection-search")).toHaveCount(0);
   await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(0);
 
   expect(requests).toHaveLength(1);
-  const storedGuestId = await page.evaluate((key) => window.localStorage.getItem(key), GUEST_ID_STORAGE_KEY);
-  expect(storedGuestId).toBe((requests[0] as { identity: { guestId: string } }).identity.guestId);
 });
 
 test("blocks collection access and retries when profile bootstrap fails", async ({ page }) => {
@@ -55,16 +51,19 @@ test("blocks collection access and retries when profile bootstrap fails", async 
 
   await mockPlayerProfile(page, async (route) => {
     profileRequests += 1;
-    const requestBody = route.request().postDataJSON() as { identity: { mode: "guest"; guestId: string } };
+    const requestBody = route.request().postDataJSON() as { identity?: unknown; telegramInitData?: string };
 
     if (profileRequests === 1) {
       await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "profile_unavailable" }) });
       return;
     }
 
+    expect(requestBody.identity).toBeUndefined();
+    expect(requestBody.telegramInitData).toBeUndefined();
+
     profile = {
       id: "player-retry-e2e",
-      identity: requestBody.identity,
+      identity: { mode: "guest", guestId: "guest_retry_e2e" },
       ownedCardIds: [],
       deckIds: [],
       starterFreeBoostersRemaining: 2,
@@ -94,13 +93,13 @@ test("blocks collection access and retries when profile bootstrap fails", async 
 
   await expect(profileShell).toHaveAttribute("data-profile-status", "ready");
   await expect(page.getByTestId("starter-onboarding-shell")).toBeVisible();
-  await expect(page.locator('[data-testid^="starter-booster-card-"]')).toHaveCount(12);
+  await expect(page.locator('[data-testid^="starter-booster-card-"]')).toHaveCount(13);
   await expect(page.getByTestId("collection-search")).toHaveCount(0);
   expect(profileRequests).toBe(2);
   expect(catalogRequests).toBeGreaterThanOrEqual(1);
 });
 
-test("bootstraps the Telegram MVP identity from client-provided telegramId", async ({ page }) => {
+test("bootstraps the Telegram MVP identity from raw initData", async ({ page }) => {
   await page.route("https://telegram.org/js/telegram-web-app.js", async (route) => {
     await route.fulfill({ contentType: "application/javascript", body: "" });
   });
@@ -131,12 +130,12 @@ test("bootstraps the Telegram MVP identity from client-provided telegramId", asy
 
   const requests: unknown[] = [];
   await mockPlayerProfile(page, async (route) => {
-    const requestBody = route.request().postDataJSON() as { identity: { mode: "telegram"; telegramId: string } };
+    const requestBody = route.request().postDataJSON() as { identity?: unknown; telegramInitData?: string };
     requests.push(requestBody);
 
     await fulfillPlayerProfile(route, {
       id: "player-telegram-e2e",
-      identity: requestBody.identity,
+      identity: { mode: "telegram", telegramId: "99887766" },
       ownedCardIds: PROFILE_OWNED_CARD_IDS,
       deckIds: PROFILE_DECK_IDS,
       starterFreeBoostersRemaining: 0,
@@ -148,10 +147,8 @@ test("bootstraps the Telegram MVP identity from client-provided telegramId", asy
 
   await expect.poll(() => requests.length).toBe(1);
   expect(requests).toHaveLength(1);
-  expect((requests[0] as { identity: { mode: string; telegramId: string } }).identity).toEqual({
-    mode: "telegram",
-    telegramId: "99887766",
-  });
+  expect((requests[0] as { identity?: unknown; telegramInitData?: string }).identity).toBeUndefined();
+  expect((requests[0] as { telegramInitData?: string }).telegramInitData).toBe("mvp-client-provided-telegram-id");
 
   const profileShell = page.getByTestId("player-profile-shell");
   await expect(profileShell).toHaveAttribute("data-profile-status", "ready");

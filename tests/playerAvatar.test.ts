@@ -16,6 +16,7 @@ import {
   type PlayerProfile,
   type StoredPlayerProfile,
 } from "../src/features/player/profile/types";
+import { createPlayerSessionCookie } from "../src/features/player/profile/auth";
 
 describe("resolveAvatarUrl priority", () => {
   test("prefers the persisted profile avatarUrl over the live Telegram photo", () => {
@@ -166,13 +167,13 @@ describe("handlePlayerAvatarPost", () => {
     expect(store.snapshot(identity)?.avatarUrl).toBeUndefined();
   });
 
-  test("rejects a missing identity with a 400 invalid_identity", async () => {
+  test("rejects a missing authenticated session with a 401 auth_required", async () => {
     const store = new MemoryAvatarStore();
     const response = await postAvatar(store, { avatarUrl: "https://t.me/i/userpic/abc.jpg" });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(401);
     const body = (await response.json()) as { error: string };
-    expect(body.error).toBe("invalid_identity");
+    expect(body.error).toBe("auth_required");
   });
 });
 
@@ -211,9 +212,27 @@ function postAvatar(store: PlayerAvatarStore, body: unknown) {
   return handlePlayerAvatarPost(
     new Request("http://localhost/api/player/avatar", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(body),
       body: JSON.stringify(body),
     }),
     store,
   );
+}
+
+function authHeaders(body: unknown) {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (isRequestBodyWithIdentity(body)) {
+    headers.Cookie = createPlayerSessionCookie(body.identity);
+  }
+  return headers;
+}
+
+function isRequestBodyWithIdentity(body: unknown): body is { identity: PlayerIdentity } {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return false;
+  const identity = (body as { identity?: unknown }).identity;
+  if (typeof identity !== "object" || identity === null || Array.isArray(identity)) return false;
+  const mode = (identity as { mode?: unknown }).mode;
+  if (mode === "telegram") return typeof (identity as { telegramId?: unknown }).telegramId === "string";
+  if (mode === "guest") return typeof (identity as { guestId?: unknown }).guestId === "string";
+  return false;
 }

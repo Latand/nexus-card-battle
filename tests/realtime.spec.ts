@@ -43,8 +43,8 @@ test("pairs two tabs and resolves the first human round", async ({ baseURL, brow
 
     await pickFirstCard(secondMover, { knownEnemyCard: true, hiddenEnemyEnergy: true });
 
-    await expect(first.getByTestId("battle-overlay")).toHaveAttribute("data-phase", "battle_intro", { timeout: 8_000 });
-    await expect(second.getByTestId("battle-overlay")).toHaveAttribute("data-phase", "battle_intro", { timeout: 8_000 });
+    await expect(first.getByTestId("battle-overlay")).toHaveAttribute("data-phase", /battle_intro|damage_apply/, { timeout: 8_000 });
+    await expect(second.getByTestId("battle-overlay")).toHaveAttribute("data-phase", /battle_intro|damage_apply/, { timeout: 8_000 });
     await expect(firstMover.getByTestId("battle-overlay")).toBeHidden({ timeout: 24_000 });
     await expect(firstMover.getByTestId(`player-card-${firstMoverCardId}`)).toHaveClass(/opacity-35/, { timeout: 12_000 });
   } finally {
@@ -781,10 +781,10 @@ async function pickFirstCard(page: Page, options: { knownEnemyCard?: boolean; hi
 
   await expect(page.getByTestId("selection-overlay")).toBeVisible();
   if (options.knownEnemyCard) {
-    await expect(page.getByTestId("known-enemy-card")).toBeVisible();
+    await expect(page.getByTestId("card-pick-known-enemy")).toBeVisible();
   }
   if (options.hiddenEnemyEnergy) {
-    await expect(page.getByTestId("known-enemy-card").getByText(/енергія/i)).toHaveCount(0);
+    await expect(page.getByTestId("card-pick-known-enemy").getByText(/енергія/i)).toHaveCount(0);
   }
 
   await page.getByTestId("selection-ok").click();

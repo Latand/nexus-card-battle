@@ -27,6 +27,7 @@ type TelegramProfileWindow = Window & {
           id?: number | string;
         };
       };
+      initData?: string;
     };
   };
 };
@@ -46,13 +47,17 @@ export function resolveClientPlayerIdentity(): PlayerIdentity {
   };
 }
 
-export async function fetchPlayerProfile(identity: PlayerIdentity = resolveClientPlayerIdentity()): Promise<PlayerProfile> {
+export async function fetchPlayerProfile(identity?: PlayerIdentity): Promise<PlayerProfile> {
+  const telegramInitData = identity?.mode === "telegram" || !identity ? readTelegramInitData() : undefined;
   const response = await fetch("/api/player", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ identity }),
+    body: JSON.stringify({
+      ...(identity ? { identity } : {}),
+      ...(telegramInitData ? { telegramInitData } : {}),
+    }),
   });
 
   if (!response.ok) {
@@ -169,6 +174,16 @@ function readTelegramId() {
   if (telegramId === undefined || telegramId === null) return undefined;
 
   const value = String(telegramId).trim();
+  return value || undefined;
+}
+
+function readTelegramInitData() {
+  if (typeof window === "undefined") return undefined;
+
+  const initData = (window as TelegramProfileWindow).Telegram?.WebApp?.initData;
+  if (typeof initData !== "string") return undefined;
+
+  const value = initData.trim();
   return value || undefined;
 }
 
