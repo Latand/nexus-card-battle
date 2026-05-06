@@ -21,6 +21,7 @@ export type ScoreOptions = {
 };
 
 export type ScoreResult = {
+  baseAttack: number;
   attack: number;
   damage: number;
   effectiveEnergy: number;
@@ -78,7 +79,8 @@ export function score(card: Card, energy: number, _first: boolean, options: Scor
     }
   }
 
-  let attack = power * effectiveEnergy;
+  const baseAttack = power * effectiveEnergy;
+  let attack = baseAttack;
 
   for (const effect of rules) {
     const rule = effect.rule;
@@ -118,6 +120,7 @@ export function score(card: Card, energy: number, _first: boolean, options: Scor
   }
 
   return {
+    baseAttack,
     attack,
     damage,
     effectiveEnergy,

@@ -24,10 +24,28 @@ export function getEffectiveBonusStates(player: Fighter, playerCard: Card, enemy
   const playerStopsBonus = playerBonus.active && bonusHasEffect(playerBonus.bonus, "stop-bonus");
   const enemyStopsBonus = enemyBonus.active && bonusHasEffect(enemyBonus.bonus, "stop-bonus");
 
-  if (enemyStopsBonus) playerBonus = { ...playerBonus, active: false, blockedBy: enemyCard.name, stopsAbility: false };
-  if (playerStopsBonus) enemyBonus = { ...enemyBonus, active: false, blockedBy: playerCard.name, stopsAbility: false };
+  if (enemyStopsBonus) playerBonus = blockBonusEffects(playerBonus, enemyCard.name);
+  if (playerStopsBonus) enemyBonus = blockBonusEffects(enemyBonus, playerCard.name);
 
   return { playerBonus, enemyBonus };
+}
+
+function blockBonusEffects(state: BonusState, blockedBy: string): BonusState {
+  if (!state.active) return state;
+
+  const effects = state.bonus.effects.filter((effect) => effect.unblockable);
+  const removedAny = effects.length !== state.bonus.effects.length;
+
+  if (effects.length === 0) {
+    return { ...state, active: false, blockedBy: removedAny ? blockedBy : state.blockedBy, stopsAbility: false };
+  }
+
+  return {
+    ...state,
+    bonus: { ...state.bonus, effects },
+    blockedBy: removedAny ? blockedBy : state.blockedBy,
+    stopsAbility: bonusHasEffect({ ...state.bonus, effects }, "stop-ability"),
+  };
 }
 
 function getBonusState(fighter: Fighter, card: Card, opponentCard: Card): BonusState {

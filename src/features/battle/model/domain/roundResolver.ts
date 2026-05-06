@@ -98,8 +98,8 @@ export function resolveRound(
   let playerAttack = playerScore.attack;
   let enemyAttack = enemyScore.attack;
 
-  enemyAttack = applyQueuedNumberEffects(enemyAttack, playerScore.opponentAttackEffects, "enemy", effects, enemyScore.effectiveEnergy);
-  playerAttack = applyQueuedNumberEffects(playerAttack, enemyScore.opponentAttackEffects, "player", effects, playerScore.effectiveEnergy);
+  enemyAttack = applyQueuedNumberEffects(enemyAttack, playerScore.opponentAttackEffects, "enemy", effects, enemyScore.effectiveEnergy, enemyScore.baseAttack);
+  playerAttack = applyQueuedNumberEffects(playerAttack, enemyScore.opponentAttackEffects, "player", effects, playerScore.effectiveEnergy, playerScore.baseAttack);
 
   const tie = resolveTie({
     playerAttack,
@@ -177,23 +177,26 @@ function applyQueuedNumberEffects(
   target: Side,
   effects: ResolvedEffect[],
   targetEnergy?: number,
+  targetBaseAttack?: number,
 ) {
   // Order matters when multiple reduce_with_min effects are present: applying
   // them in the wrong order can leave value stuck above the lowest available
-  // floor (each rule's `min` is checked independently). Sort reductions by
-  // `min` descending so the floor of every rule is reachable.
-  const ordered = [...queuedEffects].sort((a, b) => {
-    const aReduce = a.rule.mode === "reduce_with_min";
-    const bReduce = b.rule.mode === "reduce_with_min";
-    if (!aReduce || !bReduce) return 0;
-    return (b.rule.min ?? 0) - (a.rule.min ?? 0);
-  });
+  // floor (each rule's `min` is checked independently). Power changes also
+  // need to happen before flat attack changes so +attack is not treated as
+  // temporary card power.
+  const ordered = [...queuedEffects].sort(compareQueuedNumberEffects);
+  let baseAttack = targetBaseAttack;
 
   return ordered.reduce((currentValue, effect) => {
-    const nextValue =
-      effect.rule.stat === "power" && targetEnergy !== undefined
-        ? applyPowerEffectToAttack(currentValue, targetEnergy, effect.rule)
-        : applyNumericEffect(currentValue, effect.rule);
+    let nextValue: number;
+
+    if (effect.rule.stat === "power" && targetEnergy !== undefined) {
+      const powerResult = applyPowerEffectToAttack(currentValue, targetEnergy, effect.rule, baseAttack);
+      nextValue = powerResult.attack;
+      baseAttack = powerResult.baseAttack;
+    } else {
+      nextValue = applyNumericEffect(currentValue, effect.rule);
+    }
 
     if (nextValue !== currentValue) {
       effects.push(createEffectLog(effect.rule, effect.source, target, nextValue - currentValue));
@@ -203,12 +206,33 @@ function applyQueuedNumberEffects(
   }, value);
 }
 
-function applyPowerEffectToAttack(attack: number, energy: number, rule: QueuedEffect["rule"]) {
-  if (energy <= 0) return attack;
+function compareQueuedNumberEffects(a: QueuedEffect, b: QueuedEffect) {
+  const phaseDiff = getNumberEffectPhase(a) - getNumberEffectPhase(b);
+  if (phaseDiff !== 0) return phaseDiff;
 
-  const currentPower = Math.max(0, Math.round(attack / energy));
+  const aReduce = a.rule.mode === "reduce_with_min";
+  const bReduce = b.rule.mode === "reduce_with_min";
+  if (aReduce && bReduce && a.rule.stat === b.rule.stat) {
+    return (b.rule.min ?? 0) - (a.rule.min ?? 0);
+  }
+
+  return 0;
+}
+
+function getNumberEffectPhase(effect: QueuedEffect) {
+  return effect.rule.stat === "power" ? 0 : 1;
+}
+
+function applyPowerEffectToAttack(attack: number, energy: number, rule: QueuedEffect["rule"], baseAttack = attack) {
+  if (energy <= 0) return { attack, baseAttack };
+
+  const currentPower = Math.max(0, Math.round(baseAttack / energy));
   const nextPower = applyNumericEffect(currentPower, rule);
-  return nextPower * energy;
+  const nextBaseAttack = nextPower * energy;
+  return {
+    attack: attack + nextBaseAttack - baseAttack,
+    baseAttack: nextBaseAttack,
+  };
 }
 
 function applyMirrorDamageEffects(
