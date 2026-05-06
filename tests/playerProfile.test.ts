@@ -19,6 +19,7 @@ import {
 import { computeSellRevenue } from "../src/features/economy/sellPricing";
 import { addToInventory, getOwnedCount, getSellableCount, removeFromInventory } from "../src/features/inventory/inventoryOps";
 import { computeLevelFromXp, createNewStoredPlayerProfile, isSamePlayerIdentity, type PlayerIdentity, type PlayerProfile, type StoredPlayerProfile } from "../src/features/player/profile/types";
+import { createPlayerSessionCookie } from "../src/features/player/profile/auth";
 import { computeLevelUpBonusForRange } from "../src/features/player/profile/progression";
 import { mergeOwnedCardsWithLegacyIds } from "../src/features/player/profile/mongo";
 import { getMilestonesCrossed, pickMilestoneRewards } from "../src/features/economy/milestones";
@@ -62,7 +63,12 @@ describe("player profile API", () => {
       },
     });
 
-    const lookup = await handlePlayerProfileGet(new Request("http://localhost/api/player?mode=guest&guestId=guest-alpha"), store);
+    const lookup = await handlePlayerProfileGet(
+      new Request("http://localhost/api/player?mode=guest&guestId=guest-alpha", {
+        headers: authHeaders({ identity: { mode: "guest", guestId: "guest-alpha" } }),
+      }),
+      store,
+    );
     const lookupBody = await readPlayerResponse(lookup);
     expect(lookupBody.player.id).toBe(body.player.id);
   });
@@ -310,13 +316,13 @@ describe("player match-finished API (PvE)", () => {
     expect(body.error).toBe("invalid_match");
   });
 
-  test("rejects a missing identity with a 400 invalid_identity", async () => {
+  test("rejects a missing authenticated session with a 401 auth_required", async () => {
     const store = new MemoryPlayerProfileStore();
     const response = await postMatchFinished(store, { mode: "pve", result: "win" });
     const body = (await response.json()) as { error: string };
 
-    expect(response.status).toBe(400);
-    expect(body.error).toBe("invalid_identity");
+    expect(response.status).toBe(401);
+    expect(body.error).toBe("auth_required");
   });
 
   test("applyAndSummarizeMatchRewards persists a PvP win and returns the authoritative summary", async () => {
@@ -1119,9 +1125,7 @@ function postProfile(store: PlayerProfileStore, body: unknown) {
   return handlePlayerProfilePost(
     new Request("http://localhost/api/player", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: authHeaders(body),
       body: JSON.stringify(body),
     }),
     store,
@@ -1132,9 +1136,7 @@ function postMatchFinished(store: PlayerMatchRewardsStore, body: unknown) {
   return handlePlayerMatchFinishedPost(
     new Request("http://localhost/api/player/match-finished", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: authHeaders(body),
       body: JSON.stringify(body),
     }),
     store,
@@ -1145,9 +1147,7 @@ function postDeck(store: PlayerDeckStore, body: unknown) {
   return handlePlayerDeckSavePost(
     new Request("http://localhost/api/player/deck", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: authHeaders(body),
       body: JSON.stringify(body),
     }),
     store,
@@ -1158,13 +1158,29 @@ function postSell(store: PlayerSellStore, body: unknown) {
   return handlePlayerSellPost(
     new Request("http://localhost/api/player/sell", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: authHeaders(body),
       body: JSON.stringify(body),
     }),
     store,
   );
+}
+
+function authHeaders(body: unknown) {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (isRequestBodyWithIdentity(body)) {
+    headers.Cookie = createPlayerSessionCookie(body.identity);
+  }
+  return headers;
+}
+
+function isRequestBodyWithIdentity(body: unknown): body is { identity: PlayerIdentity } {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return false;
+  const identity = (body as { identity?: unknown }).identity;
+  if (typeof identity !== "object" || identity === null || Array.isArray(identity)) return false;
+  const mode = (identity as { mode?: unknown }).mode;
+  if (mode === "telegram") return typeof (identity as { telegramId?: unknown }).telegramId === "string";
+  if (mode === "guest") return typeof (identity as { guestId?: unknown }).guestId === "string";
+  return false;
 }
 
 function createOwnedDeckProfile() {

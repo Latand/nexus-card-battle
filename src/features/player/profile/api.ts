@@ -4,7 +4,6 @@ import {
   type PlayerIdentity,
   type PlayerProfile,
   type StoredPlayerProfile,
-  parsePlayerIdentity,
   toPlayerProfile,
 } from "./types";
 import { cards } from "@/features/battle/model/cards";
@@ -14,6 +13,7 @@ import { computeMatchRewards, type MatchResultBucket } from "./progression";
 import { computeLevelFromXp } from "./types";
 import type { MilestoneCardReward, RewardSummary } from "@/features/battle/model/types";
 import type { RandomSource } from "@/features/economy/milestones";
+import { PlayerAuthError, resolveAuthenticatedPlayerIdentity, type PlayerAuthResult } from "./auth";
 
 export type SellErrorCode = "invalid_card_id" | "invalid_sell_count" | "insufficient_stock" | "card_in_deck";
 
@@ -69,10 +69,11 @@ export type PlayerSellStore = PlayerProfileStore & {
 export async function handlePlayerProfilePost(request: Request, store: PlayerProfileStore) {
   try {
     const body = await readJsonObject(request);
-    const identity = parsePlayerIdentity(body.identity);
+    const auth = resolveAuthenticatedPlayerIdentity(request, body, { allowGuestCreation: true });
+    const identity = auth.identity;
     const profile = await store.findOrCreateByIdentity(identity);
 
-    return playerProfileResponse(toPlayerProfile(profile));
+    return playerProfileResponse(toPlayerProfile(profile), auth);
   } catch (error) {
     return playerProfileErrorResponse(error);
   }
@@ -80,12 +81,7 @@ export async function handlePlayerProfilePost(request: Request, store: PlayerPro
 
 export async function handlePlayerProfileGet(request: Request, store: PlayerProfileStore) {
   try {
-    const url = new URL(request.url);
-    const mode = url.searchParams.get("mode");
-    const identity =
-      mode === "telegram"
-        ? parsePlayerIdentity({ mode, telegramId: url.searchParams.get("telegramId") })
-        : parsePlayerIdentity({ mode, guestId: url.searchParams.get("guestId") });
+    const { identity } = resolveAuthenticatedPlayerIdentity(request);
     const profile = await store.findOrCreateByIdentity(identity);
 
     return playerProfileResponse(toPlayerProfile(profile));
@@ -97,7 +93,7 @@ export async function handlePlayerProfileGet(request: Request, store: PlayerProf
 export async function handlePlayerAvatarPost(request: Request, store: PlayerAvatarStore) {
   try {
     const body = await readJsonObject(request);
-    const identity = parsePlayerIdentity(body.identity);
+    const { identity } = resolveAuthenticatedPlayerIdentity(request, body);
     const avatarUrl = normalizeAvatarUrl(body.avatarUrl);
     if (avatarUrl === undefined) {
       throw new PlayerAvatarValidationError("avatarUrl must be a valid https URL.");
@@ -113,7 +109,7 @@ export async function handlePlayerAvatarPost(request: Request, store: PlayerAvat
 export async function handlePlayerSellPost(request: Request, store: PlayerSellStore) {
   try {
     const body = await readJsonObject(request);
-    const identity = parsePlayerIdentity(body.identity);
+    const { identity } = resolveAuthenticatedPlayerIdentity(request, body);
     const cardId = parseSellCardId(body.cardId);
     const count = parseSellCount(body.count);
 
@@ -149,7 +145,7 @@ function parseSellCount(value: unknown): number {
 export async function handlePlayerMatchFinishedPost(request: Request, store: PlayerMatchRewardsStore) {
   try {
     const body = await readJsonObject(request);
-    const identity = parsePlayerIdentity(body.identity);
+    const { identity } = resolveAuthenticatedPlayerIdentity(request, body);
     const mode = parseMatchMode(body.mode);
     const result = parseMatchResult(body.result);
     const opponentEloBefore = parseOptionalRating(body.opponentEloBefore);
@@ -328,7 +324,7 @@ class PlayerAvatarValidationError extends Error {
 export async function handlePlayerDeckSavePost(request: Request, store: PlayerDeckStore) {
   try {
     const body = await readJsonObject(request);
-    const identity = parsePlayerIdentity(body.identity);
+    const { identity } = resolveAuthenticatedPlayerIdentity(request, body);
     const deckIds = parseDeckIds(body.deckIds);
     const profile = await store.findOrCreateByIdentity(identity);
 
@@ -341,18 +337,29 @@ export async function handlePlayerDeckSavePost(request: Request, store: PlayerDe
   }
 }
 
-function playerProfileResponse(player: PlayerProfile) {
+function playerProfileResponse(player: PlayerProfile, auth?: PlayerAuthResult) {
   return Response.json(
     { player },
     {
       headers: {
         "Cache-Control": "no-store",
+        ...(auth?.setCookie ? { "Set-Cookie": auth.setCookie } : {}),
       },
     },
   );
 }
 
 function playerProfileErrorResponse(error: unknown) {
+  if (error instanceof PlayerAuthError) {
+    return Response.json(
+      {
+        error: error.code,
+        message: error.message,
+      },
+      { status: error.status, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
   if (error instanceof SellError) {
     return Response.json(
       {

@@ -14,6 +14,11 @@ const {
   parsePlayerIdentity,
   toPlayerProfile,
 } = require("./src/features/player/profile/types.ts");
+const {
+  assertClaimedIdentityMatchesSession,
+  createPlayerSessionCookie,
+  readPlayerSessionIdentity,
+} = require("./src/features/player/profile/auth.ts");
 const { getOwnedCardIds, addToInventory } = require("./src/features/inventory/inventoryOps.ts");
 const { computeLevelUpBonusForRange } = require("./src/features/player/profile/progression.ts");
 const { applyAndSummarizeMatchRewards, applyPvpMatchRewardsForBothSides } = require("./src/features/player/profile/api.ts");
@@ -100,12 +105,13 @@ app.prepare().then(() => {
     });
   });
 
-  wss.on("connection", (ws) => {
+  wss.on("connection", (ws, request) => {
     const session = {
       id: createId("tab"),
       ws,
       alive: true,
       user: null,
+      authenticatedIdentity: readPlayerSessionIdentity(request.headers.cookie),
       guestName: createGuestSessionName(),
       queuedDeckIds: [],
       queuedCollectionIds: [],
@@ -193,7 +199,7 @@ function handleSocketMessage(session, message) {
   }
 
   if (message.type === "set_user") {
-    session.user = sanitizeUser(message.user);
+    session.user = sanitizeSessionUser(session, message.user);
     send(session, { type: "session", clientId: session.id, playerName: getSessionDisplayName(session) });
     return;
   }
@@ -256,7 +262,7 @@ function publishChatMessage(session, message) {
 async function joinHumanQueue(session, message) {
   const clientDeckIds = sanitizeStringArray(message.deckIds);
   const clientCollectionIds = sanitizeStringArray(message.collectionIds);
-  session.user = sanitizeUser(message.user);
+  session.user = sanitizeSessionUser(session, message.user);
 
   const deckError = validateKnownCardIds(clientDeckIds, "deck");
   if (deckError) {
@@ -283,9 +289,9 @@ async function joinHumanQueue(session, message) {
     return;
   }
 
-  const identity = parseSocketPlayerIdentity(message.identity);
+  const identity = parseAuthenticatedSocketIdentity(session, message.identity);
   if (!identity) {
-    sendError(session, "Player identity is required for arena matchmaking.");
+    sendError(session, "Authenticated player session is required for arena matchmaking.");
     return;
   }
 
@@ -297,7 +303,7 @@ async function joinHumanQueue(session, message) {
   }
 
   if (clientDeckIds.length > 0 && !sameStringArray(clientDeckIds, profileLoadout.deckIds)) {
-    sendError(session, "Arena deck must match the saved profile deck.");
+    sendError(session, "PvP deck must match the saved profile deck.");
     return;
   }
 
@@ -382,6 +388,43 @@ function reenqueueWithCapturedElo(session, eloRating) {
     eloRating,
     payload: { identity: session.queuedIdentity },
   });
+}
+
+function parseAuthenticatedSocketIdentity(session, value) {
+  if (!session.authenticatedIdentity && testPlayerProfileStore) {
+    return parseSocketPlayerIdentity(value);
+  }
+
+  if (!session.authenticatedIdentity) return null;
+
+  const claimedIdentity = parseSocketPlayerIdentity(value);
+  try {
+    assertClaimedIdentityMatchesSession(claimedIdentity || undefined, session.authenticatedIdentity);
+  } catch {
+    return null;
+  }
+
+  return session.authenticatedIdentity;
+}
+
+function sanitizeSessionUser(session, value) {
+  const user = sanitizeUser(value);
+  if (!user) return null;
+
+  if (session.authenticatedIdentity?.mode === "telegram") {
+    return {
+      ...user,
+      telegramId: session.authenticatedIdentity.telegramId,
+    };
+  }
+
+  if (session.authenticatedIdentity?.mode === "guest") {
+    const { telegramId, ...guestUser } = user;
+    void telegramId;
+    return Object.keys(guestUser).length > 0 ? guestUser : null;
+  }
+
+  return user;
 }
 
 function createMatch(left, right) {
@@ -1146,6 +1189,7 @@ function handleTestProfileRequest(request, response) {
       response.statusCode = 200;
       response.setHeader("cache-control", "no-store");
       response.setHeader("content-type", "application/json");
+      response.setHeader("set-cookie", createPlayerSessionCookie(identity));
       response.end(JSON.stringify({ player: seededProfile }));
     })
     .catch((error) => {

@@ -23,6 +23,8 @@ Defaults:
 - Override with `APP_HOST` and `APP_PORT`
 - App MongoDB URI: `mongodb://mongo:27017/nexus-card-battle`
 - Override the app database by setting `MONGODB_URI` before `docker compose up`
+- Telegram Mini App auth requires `TELEGRAM_BOT_TOKEN`
+- Player session cookies are signed with `NEXUS_SESSION_SECRET`; set it to a long random value before production deploys
 
 The app waits for the Compose MongoDB healthcheck before starting. When `MONGODB_URI` is not set in the shell, the app uses the in-Compose `mongo` hostname. To use an external MongoDB instance instead:
 

@@ -6,6 +6,7 @@ import { getBoosterById } from "../src/features/boosters/catalog";
 import { BoosterOpeningError, chooseStarterWeightedRarity, prepareStarterBoosterOpening, type RandomSource } from "../src/features/boosters/opening";
 import type { BoosterCatalogItem, BoosterOpeningRecord, BoosterOpeningStore, StoredBoosterOpeningRecord } from "../src/features/boosters/types";
 import { addToInventory, getOwnedCount } from "../src/features/inventory/inventoryOps";
+import { createPlayerSessionCookie } from "../src/features/player/profile/auth";
 import { createNewStoredPlayerProfile, isSamePlayerIdentity, type PlayerIdentity, type PlayerProfile, type StoredPlayerProfile } from "../src/features/player/profile/types";
 
 const guestIdentity: PlayerIdentity = {
@@ -579,9 +580,20 @@ function postRequest(url: string, body: unknown) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...(isRequestBodyWithIdentity(body) ? { Cookie: createPlayerSessionCookie(body.identity) } : {}),
     },
     body: JSON.stringify(body),
   });
+}
+
+function isRequestBodyWithIdentity(body: unknown): body is { identity: PlayerIdentity } {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return false;
+  const identity = (body as { identity?: unknown }).identity;
+  if (typeof identity !== "object" || identity === null || Array.isArray(identity)) return false;
+  const mode = (identity as { mode?: unknown }).mode;
+  if (mode === "telegram") return typeof (identity as { telegramId?: unknown }).telegramId === "string";
+  if (mode === "guest") return typeof (identity as { guestId?: unknown }).guestId === "string";
+  return false;
 }
 
 function sequenceRng(values: number[]): RandomSource {

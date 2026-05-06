@@ -1,6 +1,7 @@
 import { cards as activeCards } from "@/features/battle/model/cards";
 import type { Card } from "@/features/battle/model/types";
-import { PlayerIdentityValidationError, parsePlayerIdentity, toPlayerProfile } from "@/features/player/profile/types";
+import { PlayerAuthError, resolveAuthenticatedPlayerIdentity, type PlayerAuthResult } from "@/features/player/profile/auth";
+import { PlayerIdentityValidationError, toPlayerProfile } from "@/features/player/profile/types";
 import { getBoosterCatalogForPlayer, getBoosterCatalogResponse, validateBoosterCatalog } from "./catalog";
 import { BoosterOpeningError, preparePaidBoosterOpening, prepareStarterBoosterOpening, type RandomSource } from "./opening";
 import type { BoosterOpeningRecord, BoosterOpeningStore, StoredBoosterOpeningRecord } from "./types";
@@ -18,13 +19,14 @@ export async function handleBoosterCatalogPost(request: Request, store: BoosterO
   try {
     validateBoosterCatalog();
     const body = await readJsonObject(request);
-    const identity = parsePlayerIdentity(body.identity);
+    const auth = resolveAuthenticatedPlayerIdentity(request, body, { allowGuestCreation: true });
+    const identity = auth.identity;
     const profile = toPlayerProfile(await store.findOrCreateByIdentity(identity));
 
     return noStoreJson({
       boosters: getBoosterCatalogForPlayer(profile),
       player: profile,
-    });
+    }, auth);
   } catch (error) {
     return boosterApiErrorResponse(error);
   }
@@ -41,7 +43,7 @@ export async function handleStarterBoosterOpenPost(
   try {
     validateBoosterCatalog();
     const body = await readJsonObject(request);
-    return await openStarterBooster(body, store, options);
+    return await openStarterBooster(request, body, store, options);
   } catch (error) {
     return boosterApiErrorResponse(error);
   }
@@ -61,16 +63,17 @@ export async function handleBoosterOpenPost(
     const source = parseOpeningSource(body.source ?? body.purchaseMode);
 
     if (source === "paid_crystals") {
-      return await openPaidBooster(body, store, options);
+      return await openPaidBooster(request, body, store, options);
     }
 
-    return await openStarterBooster(body, store, options);
+    return await openStarterBooster(request, body, store, options);
   } catch (error) {
     return boosterApiErrorResponse(error);
   }
 }
 
 async function openStarterBooster(
+  request: Request,
   body: Record<string, unknown>,
   store: BoosterOpeningStore,
   options: {
@@ -78,7 +81,7 @@ async function openStarterBooster(
     now?: () => Date;
   },
 ) {
-  const identity = parsePlayerIdentity(body.identity);
+  const { identity } = resolveAuthenticatedPlayerIdentity(request, body);
   const boosterId = parseBoosterId(body.boosterId);
   const profile = toPlayerProfile(await store.findOrCreateByIdentity(identity));
   const prepared = prepareStarterBoosterOpening({
@@ -104,6 +107,7 @@ async function openStarterBooster(
 }
 
 async function openPaidBooster(
+  request: Request,
   body: Record<string, unknown>,
   store: BoosterOpeningStore,
   options: {
@@ -111,7 +115,7 @@ async function openPaidBooster(
     now?: () => Date;
   },
 ) {
-  const identity = parsePlayerIdentity(body.identity);
+  const { identity } = resolveAuthenticatedPlayerIdentity(request, body);
   const boosterId = parseBoosterId(body.boosterId);
   const profile = toPlayerProfile(await store.findOrCreateByIdentity(identity));
   const prepared = preparePaidBoosterOpening({
@@ -183,17 +187,30 @@ function serializeOpeningRecord(opening: StoredBoosterOpeningRecord): BoosterOpe
   };
 }
 
-function noStoreJson(body: unknown, init?: ResponseInit) {
+function noStoreJson(body: unknown, init?: ResponseInit | PlayerAuthResult, auth?: PlayerAuthResult) {
+  const responseInit = isAuthResult(init) ? undefined : init;
+  const authResult = isAuthResult(init) ? init : auth;
   return Response.json(body, {
-    ...init,
+    ...responseInit,
     headers: {
-      ...init?.headers,
+      ...responseInit?.headers,
       "Cache-Control": "no-store",
+      ...(authResult?.setCookie ? { "Set-Cookie": authResult.setCookie } : {}),
     },
   });
 }
 
 function boosterApiErrorResponse(error: unknown) {
+  if (error instanceof PlayerAuthError) {
+    return noStoreJson(
+      {
+        error: error.code,
+        message: error.message,
+      },
+      { status: error.status },
+    );
+  }
+
   if (error instanceof PlayerIdentityValidationError) {
     return noStoreJson(
       {
@@ -252,4 +269,8 @@ async function readJsonObject(request: Request) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isAuthResult(value: unknown): value is PlayerAuthResult {
+  return isRecord(value) && "identity" in value;
 }
