@@ -52,7 +52,7 @@ type BattleGameProps = {
 };
 
 type HumanMatchStatus = "idle" | "connecting" | "queued" | "matched" | "opponent_left" | "forfeit" | "error" | "closed";
-const BOT_FALLBACK_DELAY_MS = 1_800;
+const BOT_FALLBACK_DELAY_MS = 5_000;
 
 type HumanMove = {
   cardId: string;
@@ -181,6 +181,8 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const [humanSessionId, setHumanSessionId] = useState("");
   const [humanSessionName, setHumanSessionName] = useState("");
   const [humanOnlineCount, setHumanOnlineCount] = useState<number | null>(null);
+  const [matchmakingQueuedAt, setMatchmakingQueuedAt] = useState<number | null>(null);
+  const [matchmakingWaitingSeconds, setMatchmakingWaitingSeconds] = useState(0);
   const [humanChatMessages, setHumanChatMessages] = useState<HumanChatMessage[]>([]);
   const [humanChatDraft, setHumanChatDraft] = useState("");
   // Lobby chat for the matchmaking screen — at queue time there is no opponent
@@ -256,6 +258,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       setHumanSessionId("");
       setHumanSessionName("");
       setHumanOnlineCount(null);
+      setMatchmakingQueuedAt(null);
       setHumanChatMessages([]);
       setHumanChatDraft("");
     }, 0);
@@ -292,11 +295,13 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     socket.addEventListener("close", () => {
       if (disposed) return;
       setHumanStatus("closed");
+      setMatchmakingQueuedAt(null);
     });
 
     socket.addEventListener("error", () => {
       if (disposed) return;
       setHumanStatus("error");
+      setMatchmakingQueuedAt(null);
     });
 
     return () => {
@@ -326,6 +331,22 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
 
     return () => window.clearTimeout(fallbackTimer);
   }, [humanStatus, isHumanMatch, onSwitchMode]);
+
+  useEffect(() => {
+    if (!isHumanMatch || humanStatus !== "queued" || matchmakingQueuedAt === null) {
+      setMatchmakingWaitingSeconds(0);
+      return;
+    }
+
+    const updateWaitingSeconds = () => {
+      setMatchmakingWaitingSeconds(Math.max(0, Math.floor((Date.now() - matchmakingQueuedAt) / 1000)));
+    };
+
+    updateWaitingSeconds();
+    const interval = window.setInterval(updateWaitingSeconds, 250);
+
+    return () => window.clearInterval(interval);
+  }, [humanStatus, isHumanMatch, matchmakingQueuedAt]);
 
   const selected = getSelectedCard(game.player, selectedId) ?? game.player.hand[0];
   const boostCost = damageBoost ? DAMAGE_BOOST_COST : 0;
@@ -770,6 +791,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     if (message.type === "queued") {
       setHumanStatus("queued");
       setHumanMessage("");
+      setMatchmakingQueuedAt(Date.now());
       return;
     }
 
@@ -777,9 +799,10 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       const nextMatch = normalizeHumanMatch(message);
 
       if (!nextMatch) {
-        setHumanStatus("error");
-        setHumanMessage("Сервер арени надіслав матч без потрібних даних.");
-        return;
+      setHumanStatus("error");
+      setHumanMessage("Сервер арени надіслав матч без потрібних даних.");
+      setMatchmakingQueuedAt(null);
+      return;
       }
 
       const nextGame = createHumanGame(nextMatch, playerName || humanSessionNameRef.current);
@@ -800,6 +823,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       setTurnSeconds(TURN_SECONDS);
       setHumanStatus("matched");
       setHumanMessage("");
+      setMatchmakingQueuedAt(null);
       setPersistedRewards(null);
       setPersistedRewardsError(null);
       return;
@@ -948,6 +972,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     const matchResult: MatchResult = won ? "player" : "enemy";
 
     setMatchInfo(null);
+    setMatchmakingQueuedAt(null);
     setPending(null);
     setEnemyLockedMove(null);
     setRoundWinnerCardIds(new Set());
@@ -967,6 +992,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
 
     setHumanStatus(isSocketOpen(socket) ? "queued" : "closed");
     setHumanMessage("");
+    setMatchmakingQueuedAt(isSocketOpen(socket) ? Date.now() : null);
     setMatchInfo(null);
     setPending(null);
     setEnemyLockedMove(null);
@@ -1083,6 +1109,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setRoundWinnerCardIds(new Set());
     setSelectionOpen(false);
     setTurnSeconds(TURN_SECONDS);
+    setMatchmakingQueuedAt(null);
     setPersistedRewards(null);
     setPersistedRewardsError(null);
     persistedMatchSignatureRef.current = null;
@@ -1097,6 +1124,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
 
     setHumanStatus("connecting");
     setHumanMessage("");
+    setMatchmakingQueuedAt(null);
     onSwitchMode?.("human");
   }
 
@@ -1215,7 +1243,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
           deckSize={matchmakingDeckSize}
           elo={playerEloRating ?? 0}
           onlineCount={humanOnlineCount}
-          waitingSeconds={Math.max(0, TURN_SECONDS - turnSeconds)}
+          waitingSeconds={matchmakingWaitingSeconds}
           playerName={humanDisplayName}
           statusMessage={humanMessage || undefined}
           chat={{
