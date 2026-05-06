@@ -80,6 +80,7 @@ export function BattleHand({ side, cards, active, onSelect, className }: BattleH
             data-card-id={card.id}
             data-side={side}
             data-state={stateValue}
+            data-selected={selected ? "true" : undefined}
             role={isPlayer ? "button" : undefined}
             tabIndex={isPlayer ? (cardDisabled ? -1 : 0) : -1}
             aria-pressed={isPlayer ? Boolean(selected) : undefined}
@@ -92,7 +93,6 @@ export function BattleHand({ side, cards, active, onSelect, className }: BattleH
               "outline-none",
               interactive && "cursor-pointer hover:-translate-y-0.5",
               !interactive && isPlayer && "cursor-not-allowed",
-              selected && "-translate-y-1",
               played && !isPlayer && "translate-y-2 scale-[1.04] drop-shadow-[0_18px_24px_rgba(255,74,66,0.45)]",
               used && "opacity-35 saturate-50 grayscale pointer-events-none",
             )}

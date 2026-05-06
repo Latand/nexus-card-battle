@@ -499,10 +499,17 @@ a {
 
 .battle-hand {
   --battle-card-w: min(184px, 21vw, 18dvh);
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, var(--battle-card-w)));
+  justify-content: center;
+  justify-items: center;
   margin-block: 0 !important;
   align-self: center;
-  width: min(860px, 100%) !important;
+  width: fit-content !important;
   max-width: 100%;
+  margin-inline: auto;
+  column-gap: var(--battle-hand-gap, 12px) !important;
+  row-gap: 0 !important;
 }
 
 .battle-hand-card {
@@ -511,6 +518,18 @@ a {
   width: min(var(--battle-card-w), 100%);
   max-width: var(--battle-card-w) !important;
   min-width: 0;
+}
+
+.battle-hand-card[data-selected="true"] {
+  z-index: 2;
+}
+
+.battle-hand--player .battle-hand-card[data-selected="true"] {
+  transform: translateY(clamp(-14px, -1.8dvh, -7px)) scale(1.035) !important;
+}
+
+.battle-hand--enemy .battle-hand-card[data-selected="true"] {
+  transform: translateY(clamp(7px, 1.8dvh, 14px)) scale(1.035) !important;
 }
 
 .battle-hand .battle-card-face {
@@ -605,7 +624,7 @@ a {
 
   .battle-hand {
     --battle-card-w: min(154px, calc((100dvw - 30px) / 4), 18dvh);
-    gap: 3px !important;
+    --battle-hand-gap: 3px;
     padding: 3px !important;
   }
 
@@ -680,6 +699,7 @@ a {
 @media (max-width: 360px) and (orientation: portrait) {
   .battle-hand {
     gap: 3px !important;
+    --battle-hand-gap: 3px;
     padding-inline: 4px !important;
   }
 
@@ -743,7 +763,7 @@ a {
 
   .battle-hand {
     --battle-card-w: min(132px, calc((100dvw - 70px) / 4), 25.5dvh);
-    gap: 5px !important;
+    --battle-hand-gap: 5px;
     padding: 2px 6px !important;
   }
 
@@ -858,7 +878,7 @@ a {
 
   .battle-hand {
     --battle-card-w: min(124px, calc((100dvw - 58px) / 4), 27dvh);
-    gap: 4px !important;
+    --battle-hand-gap: 4px;
     padding-block: 1px !important;
   }
 
