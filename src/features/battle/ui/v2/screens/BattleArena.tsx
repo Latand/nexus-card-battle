@@ -41,6 +41,7 @@ export type BattleArenaProps = {
   player: Fighter;
   enemy: Fighter;
   mode: "ai" | "pvp";
+  playerElo?: number;
   pvpIdentity?: BattleArenaPvpIdentity;
 
   /** Center stage variant. If omitted, derives from `game.phase`. */
@@ -111,6 +112,7 @@ export function BattleArena({
   player,
   enemy,
   mode,
+  playerElo,
   pvpIdentity,
   centerVariant,
   playerHand,
@@ -227,7 +229,7 @@ export function BattleArena({
           mode={mode}
           energy={{ value: player.energy, max: playerEnergyMax }}
           hp={{ value: player.hp, max: playerHpMax }}
-          identity={{ name: player.name }}
+          identity={{ name: player.name, elo: playerElo }}
           roundNumber={game.round.round}
           damageFlash={playerDamageFlash}
           statuses={player.statuses}

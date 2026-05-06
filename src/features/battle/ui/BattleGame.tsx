@@ -1438,6 +1438,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
               : game.enemy
           }
           mode={arenaMode}
+          playerElo={playerEloRating}
           centerVariant={centerVariant}
           playerHand={playerHandCards}
           enemyHand={enemyHandCards}

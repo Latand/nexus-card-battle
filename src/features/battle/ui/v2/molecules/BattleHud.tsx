@@ -106,7 +106,7 @@ export function BattleHud({
 }: BattleHudProps) {
   const isOpponent = side === "opponent";
   const isPvpOpponent = isOpponent && mode === "pvp";
-  const showOpponentRating = isOpponent && identity.elo !== undefined;
+  const showRating = identity.elo !== undefined;
   const energyTestId = isOpponent ? "battle-hud-opponent-energy" : "battle-hud-player-energy";
   const hpTestId = isOpponent ? "battle-hud-opponent-hp" : "battle-hud-player-hp";
   const hudTestId = isOpponent ? "battle-hud-opponent" : "battle-hud-player";
@@ -236,10 +236,10 @@ export function BattleHud({
               ) : null}
             </div>
           ) : null}
-          {showOpponentRating ? (
+          {showRating ? (
             <span
-              data-testid="battle-hud-opponent-elo"
-              className="hidden sm:inline-flex items-center px-2 h-5 text-[10px] font-mono tabular-nums uppercase tracking-wider text-cool border border-cool/60 rounded-full"
+              data-testid={isOpponent ? "battle-hud-opponent-elo" : "battle-hud-player-elo"}
+              className="hidden sm:inline-flex items-center px-1 h-5 text-[10px] font-mono tabular-nums uppercase tracking-wider text-cool"
             >
               ELO {identity.elo}
             </span>
