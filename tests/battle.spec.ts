@@ -98,6 +98,21 @@ test("starts AI battles from the saved owned profile deck", async ({ page }) => 
   await expect.poll(() => readSavedDeckIds(page)).toEqual(legacyDeckIds);
 });
 
+test("returns from an active battle to the collection deck screen", async ({ page }) => {
+  await mockDeckReadyProfile(page);
+  await page.goto("/");
+
+  await expect(page.getByTestId("collection-search")).toBeVisible();
+  await page.getByTestId("play-selected-deck").click();
+  await expect(page.getByTestId("battle-arena")).toBeVisible({ timeout: 10_000 });
+
+  await page.getByTestId("battle-hud-open-decks").click();
+
+  await expect(page).not.toHaveURL(/screen=battle/);
+  await expect(page.getByTestId("collection-search")).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(9);
+});
+
 test("plays a complete state-machine battle", async ({ page }) => {
   await mockDeckReadyProfile(page);
   await page.goto("/");

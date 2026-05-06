@@ -527,7 +527,9 @@ function CollectionCardTile({ card, locked }: { card: Card; locked: boolean }) {
         locked ? "saturate-[0.45] opacity-75" : "hover:brightness-110",
       )}
     >
-      <BattleCard card={card} />
+      <div className="pointer-events-none">
+        <BattleCard card={card} />
+      </div>
     </div>
   );
 }

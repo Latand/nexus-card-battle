@@ -1264,6 +1264,20 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setGame((value) => (value.phase === "card_preview" ? { ...value, phase: "player_turn" } : value));
   }
 
+  function openCollectionFromBattle() {
+    setSelectionOpen(false);
+    setSurrenderConfirmOpen(false);
+    setPending(null);
+    setEnemyLockedMove(null);
+    setClashOverlayDone(false);
+    setHudHpOverride({});
+    if (!isHumanMatch) {
+      clearBattleSession();
+      aiMoveRequestIdRef.current += 1;
+    }
+    onOpenCollection?.();
+  }
+
   function surrenderMatch() {
     if (!canSurrender) return;
     setSurrenderConfirmOpen(true);
@@ -1474,7 +1488,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
           onToggleBoost={toggleBoost}
           onConfirmPick={confirmSelection}
           onCancelPick={closeSelection}
-          onLeave={onOpenCollection ?? (() => {})}
+          onLeave={openCollectionFromBattle}
           onSurrender={surrenderMatch}
           canSurrender={canSurrender}
           onOpenDecks={() => {
@@ -1482,7 +1496,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
             // exposes onOpenCollection (which both Leaves the match AND opens
             // the collection/deck screen) — there is no dedicated deck modal
             // route yet. Falling back to onOpenCollection so the button works.
-            (onOpenCollection ?? (() => {}))();
+            openCollectionFromBattle();
           }}
         />
       )}
@@ -1497,7 +1511,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
         avatarUrl={avatarUrl}
         errorText={persistedRewardsError ?? undefined}
         onPlayAgain={startArenaSearch}
-        onGoToCollection={onOpenCollection ?? (() => {})}
+        onGoToCollection={openCollectionFromBattle}
       />
 
       <SurrenderConfirmModal
