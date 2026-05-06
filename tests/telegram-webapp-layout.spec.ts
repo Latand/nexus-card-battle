@@ -83,13 +83,18 @@ test("Telegram WebApp mobile keeps portrait usable and closes lobby chat cleanly
   const bootstrap = await page.evaluate(() => ({
     calls: window.__tgCalls,
     appHeight: getComputedStyle(document.documentElement).getPropertyValue("--app-height").trim(),
+    telegramWebapp: document.documentElement.dataset.telegramWebapp,
   }));
   expect(bootstrap.calls?.lockOrientation).toBe(0);
   expect(bootstrap.calls?.screenLock).toBe(0);
-  expect(bootstrap.calls?.requestFullscreen).toBe(1);
-  expect(bootstrap.calls?.disableVerticalSwipes).toBe(1);
-  expect(bootstrap.calls?.expand).toBe(1);
+  expect(bootstrap.calls?.requestFullscreen).toBe(0);
+  expect(bootstrap.calls?.disableVerticalSwipes).toBe(0);
+  expect(bootstrap.calls?.expand).toBe(0);
   expect(bootstrap.appHeight).toBe("700px");
+  expect(bootstrap.telegramWebapp).toBe("true");
+
+  await expect(page.locator(".battle-card-face").first()).toBeVisible();
+  await expect(page.locator(".battle-card-face").first()).toHaveCSS("box-shadow", "none");
 
   await page.getByTestId("lobby-bubble-v2").click();
   await expect(page.getByTestId("lobby-chat")).toBeVisible();

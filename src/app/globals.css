@@ -145,6 +145,10 @@ body {
   overflow-x: hidden;
 }
 
+html[data-telegram-webapp="true"] .battle-card-face {
+  box-shadow: none !important;
+}
+
 body {
   min-height: 100%;
   display: flex;

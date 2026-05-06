@@ -34,11 +34,7 @@ type TelegramWindow = Window & {
     WebApp?: {
       initData?: string;
       ready?: () => void;
-      expand?: () => void;
-      isFullscreen?: boolean;
       platform?: string;
-      isVersionAtLeast?: (version: string) => boolean;
-      requestFullscreen?: () => void;
       unlockOrientation?: () => void;
       disableVerticalSwipes?: () => void;
       setHeaderColor?: (color: string) => void;
@@ -139,12 +135,10 @@ export function GameRoot() {
     syncViewportHeight();
 
     if (webApp) {
+      document.documentElement.dataset.telegramWebapp = "true";
       webApp.ready?.();
-      webApp.expand?.();
-      webApp.disableVerticalSwipes?.();
       applyTelegramChromeColors(webApp);
       releaseTelegramOrientationLock(webApp);
-      requestTelegramFullscreen(webApp);
       webApp.onEvent?.("viewportChanged", syncViewportHeight);
     }
 
@@ -157,6 +151,9 @@ export function GameRoot() {
       window.removeEventListener("resize", syncViewportHeight);
       window.visualViewport?.removeEventListener?.("resize", syncViewportHeight);
       webApp?.offEvent?.("viewportChanged", syncViewportHeight);
+      if (webApp) {
+        document.documentElement.removeAttribute("data-telegram-webapp");
+      }
     };
   }, []);
 
@@ -581,16 +578,6 @@ function getTelegramWebApp() {
   return webApp?.initData ? webApp : undefined;
 }
 
-function requestTelegramFullscreen(webApp: TelegramWebApp) {
-  if (!webApp || webApp.isFullscreen || !canUseTelegramVersion(webApp, "8.0")) return;
-
-  try {
-    webApp.requestFullscreen?.();
-  } catch {
-    // Fullscreen can be unsupported on a Telegram client even when the JS bridge exists.
-  }
-}
-
 function releaseTelegramOrientationLock(webApp: TelegramWebApp) {
   for (const unlock of [
     () => webApp.unlockOrientation?.(),
@@ -601,16 +588,6 @@ function releaseTelegramOrientationLock(webApp: TelegramWebApp) {
     } catch {
       // Some clients only allow unlock from a prior explicit lock or not at all.
     }
-  }
-}
-
-function canUseTelegramVersion(webApp: TelegramWebApp, version: string) {
-  if (!webApp?.isVersionAtLeast) return false;
-
-  try {
-    return webApp.isVersionAtLeast(version);
-  } catch {
-    return false;
   }
 }
 
