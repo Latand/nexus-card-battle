@@ -1,7 +1,7 @@
 import { cards } from "@/features/battle/model/cards";
 import type { Bonus, EffectCondition, EffectMode, EffectOutcomeCondition, EffectSpec, EffectTarget, StatusKind } from "@/features/battle/model/types";
 import { toPlayerProfile, type PlayerIdentity, type PlayerProfile } from "@/features/player/profile/types";
-import { IntegrationAssetError, ingestRemoteImage, type FetchAsset } from "./assets";
+import { IntegrationAssetError, ingestRemoteImage, type FetchAsset, type HostLookup } from "./assets";
 import {
   groupBoosterId,
   groupCardId,
@@ -40,7 +40,7 @@ export async function handleGroupUpsertPut(
   request: Request,
   context: { params: Promise<{ chatId: string }> | { chatId: string } },
   store: IntegrationStore,
-  options: { fetcher?: FetchAsset } = {},
+  options: { fetcher?: FetchAsset; lookupHost?: HostLookup } = {},
 ) {
   try {
     requireIntegrationAuth(request);
@@ -55,6 +55,7 @@ export async function handleGroupUpsertPut(
       ownerId: chatId,
       assetId: "glyph",
       fetcher: options.fetcher,
+      lookupHost: options.lookupHost,
     });
 
     const group = await store.upsertGroup({
@@ -71,7 +72,7 @@ export async function handleGroupUpsertPut(
   }
 }
 
-export async function handleGroupCardPost(request: Request, store: IntegrationStore, options: { fetcher?: FetchAsset } = {}) {
+export async function handleGroupCardPost(request: Request, store: IntegrationStore, options: { fetcher?: FetchAsset; lookupHost?: HostLookup } = {}) {
   try {
     requireIntegrationAuth(request);
     const body = await readJsonObject(request);
@@ -97,6 +98,7 @@ export async function handleGroupCardPost(request: Request, store: IntegrationSt
       ownerId: chatId,
       assetId: idempotencyKey,
       fetcher: options.fetcher,
+      lookupHost: options.lookupHost,
     });
 
     const result = await store.createGroupCard({

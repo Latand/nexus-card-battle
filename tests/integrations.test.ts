@@ -139,6 +139,7 @@ describe("integration API", () => {
           retryFetched = true;
           return new Response("missing", { status: 404 });
         },
+        lookupHost: testAssetLookup,
       },
     );
     const firstBody = (await first.json()) as { card: { id: string }; idempotent: boolean };
@@ -240,7 +241,7 @@ describe("integration API", () => {
     const badImage = await handleGroupCardPost(
       jsonRequest("http://localhost/api/integrations/group-cards", cardBody({ chatId: "-100atomic", idempotencyKey: "bad-image" }), authHeaders()),
       store,
-      { fetcher: async () => new Response("not image") },
+      { fetcher: async () => new Response("not image"), lookupHost: testAssetLookup },
     );
     const badWeight = await postCard(store, { chatId: "-100atomic", idempotencyKey: "bad-weight", dropWeight: 0 });
 
@@ -342,7 +343,7 @@ function putGroup(store: IntegrationStore, chatId: string, overrides: Partial<{ 
     ),
     { params: { chatId } },
     store,
-    { fetcher: imageFetcher() },
+    { fetcher: imageFetcher(), lookupHost: testAssetLookup },
   );
 }
 
@@ -350,7 +351,7 @@ function postCard(store: IntegrationStore, overrides: Partial<Record<string, unk
   return handleGroupCardPost(
     jsonRequest("http://localhost/api/integrations/group-cards", cardBody(overrides), authHeaders()),
     store,
-    { fetcher: imageFetcher() },
+    { fetcher: imageFetcher(), lookupHost: testAssetLookup },
   );
 }
 
@@ -398,4 +399,8 @@ function imageFetcher() {
       headers: { "Content-Type": "image/png" },
     });
   };
+}
+
+async function testAssetLookup() {
+  return [{ address: "93.184.216.34", family: 4 }];
 }
