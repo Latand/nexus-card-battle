@@ -43,7 +43,7 @@ export function BattleHand({ side, cards, active, onSelect, className }: BattleH
       className={cn(
         "battle-hand",
         isPlayer ? "battle-hand--player" : "battle-hand--enemy",
-        "flex w-full items-stretch justify-center gap-1.5 sm:gap-4 px-2 sm:px-4",
+        "flex w-full items-stretch justify-center gap-1 sm:gap-3 px-1 sm:px-3",
         className,
       )}
     >
@@ -88,7 +88,7 @@ export function BattleHand({ side, cards, active, onSelect, className }: BattleH
             onKeyDown={interactive ? handleKey : undefined}
             className={cn(
               "battle-hand-card",
-              "relative flex-1 min-w-0 max-w-[184px] transition-all duration-200 ease-out",
+              "relative flex-none w-[min(204px,calc((100vw-20px)/4))] min-w-0 transition-all duration-200 ease-out",
               "outline-none",
               interactive && "cursor-pointer hover:-translate-y-0.5",
               !interactive && isPlayer && "cursor-not-allowed",

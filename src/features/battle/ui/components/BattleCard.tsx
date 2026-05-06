@@ -60,14 +60,14 @@ export function BattleCard({
         // satisfy aspect-ratio, causing it to overflow its container. Parents
         // size the card via width (or container width) only. Default cap of
         // 220px keeps cards from stretching across wide viewports.
-        "relative aspect-[2/3] w-full max-w-[220px] mx-auto overflow-hidden rounded-[10px] text-left",
-        compact && "compact battle-card-face--compact w-[min(216px,24vw)]",
+        "relative aspect-[2/3] w-full max-w-[240px] mx-auto overflow-hidden rounded-[10px] text-left",
+        compact && "compact battle-card-face--compact max-w-[224px]",
         className,
       )}
       style={style}
     >
       <div className="battle-card-meta absolute left-[14.7%] top-[4.4%] z-[3] grid h-[5.6%] w-[70.6%] place-items-center px-[3%]">
-        <span className="min-w-0 truncate text-center text-[clamp(4px,3.85cqw,10px)] font-black uppercase tracking-[0.1em] text-[#f0d68f]">
+        <span className="min-w-0 truncate text-center text-[clamp(5px,4.25cqw,11px)] font-black uppercase tracking-[0.08em] text-[#f0d68f]">
           {rarityLabels[card.rarity]}
         </span>
       </div>
@@ -97,7 +97,7 @@ export function BattleCard({
         style={{ backgroundImage: `url('${FRAME_URL}')` }}
       />
 
-      <div className="battle-card-name absolute left-[8.5%] top-[54.6%] z-[3] grid h-[6.4%] w-[83%] place-items-center overflow-hidden px-[4%] text-[clamp(5px,5.2cqw,16px)] font-black leading-none text-[#fff6d0] [text-shadow:0_2px_0_rgba(0,0,0,0.95),0_0_8px_rgba(0,0,0,0.72)]">
+      <div className="battle-card-name absolute left-[8.5%] top-[54.6%] z-[3] grid h-[6.4%] w-[83%] place-items-center overflow-hidden px-[4%] text-[clamp(6px,5.9cqw,17px)] font-black leading-none text-[#fff6d0] [text-shadow:0_2px_0_rgba(0,0,0,0.95),0_0_8px_rgba(0,0,0,0.72)]">
         <span className="block w-full overflow-hidden text-ellipsis whitespace-nowrap text-center">{card.name}</span>
       </div>
 
@@ -140,7 +140,7 @@ function StatSocket({
   return (
     <b
       className={cn(
-        "battle-card-stat absolute z-[3] grid aspect-square w-[14.2%] -translate-x-1/2 -translate-y-1/2 place-items-center text-center text-[clamp(7px,9.4cqw,29px)] font-black leading-none",
+        "battle-card-stat absolute z-[3] grid aspect-square w-[14.2%] -translate-x-1/2 -translate-y-1/2 place-items-center text-center text-[clamp(8px,10.8cqw,32px)] font-black leading-none",
         tone === "power"
           ? "battle-card-stat--power text-[#ffe08a] [text-shadow:0_2px_0_rgba(0,0,0,0.95),0_0_8px_rgba(255,224,138,0.42)]"
           : "battle-card-stat--damage text-[#ff7668] [text-shadow:0_2px_0_rgba(0,0,0,0.95),0_0_8px_rgba(255,92,72,0.42)]",
@@ -182,7 +182,7 @@ function TraitSlot({
       style={{ top }}
     >
       <CardTooltip className="block h-full w-full min-w-0" eyebrow={eyebrow} title={title} description={description}>
-        <span className="grid h-full w-full min-w-0 place-items-center overflow-hidden px-[2.1%] text-center text-[clamp(5.5px,4.9cqw,12px)] leading-none">
+        <span className="grid h-full w-full min-w-0 place-items-center overflow-hidden px-[2.1%] text-center text-[clamp(6px,5.4cqw,13px)] leading-none">
           <span className="battle-card-trait-text block w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-center font-black uppercase tracking-[0.01em] [text-shadow:0_1px_0_rgba(0,0,0,0.95),0_0_6px_rgba(0,0,0,0.7)]">{title}</span>
         </span>
       </CardTooltip>

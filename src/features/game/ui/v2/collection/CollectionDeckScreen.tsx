@@ -373,13 +373,13 @@ export function CollectionDeckScreen(props: CollectionDeckScreenProps) {
         </button>
       </div>
 
-      <div className="flex-1 px-3 sm:px-6 pb-6">
+      <div className="flex-1 px-2 sm:px-5 pb-6">
         {visibleCards.length === 0 ? (
           <div data-testid="collection-empty" className="text-ink-mute text-[13px] py-12 text-center">
             Нічого не знайдено
           </div>
         ) : (
-          <div className="mx-auto grid w-full max-w-[1100px] gap-1.5 sm:gap-2.5 grid-cols-3 sm:grid-cols-6 lg:grid-cols-8">
+          <div className="mx-auto grid w-full max-w-[1280px] gap-1 sm:gap-2.5 grid-cols-4 sm:grid-cols-5 lg:grid-cols-7">
             {visibleCards.map((card) => {
               const owned = getOwnedCount(ownedCards, card.id);
               const inDeck = deckIndexById.has(card.id);
