@@ -14,11 +14,12 @@ export type BattleArenaPvpIdentity = {
   level?: number;
   avatarUrl?: string;
   elo?: number;
+  modelLabel?: string;
   online?: "online" | "reconnecting" | "disconnected";
 };
 
 export type BattleArenaSplash =
-  | { phase: "match_intro"; opponentName: string; mode: "ai" | "pvp" }
+  | { phase: "match_intro"; opponentName: string; mode: "ai" | "pvp"; aiModelLabel?: string }
   | { phase: "round_intro"; round: number }
   | { phase: "match_result"; title: string; subtitle?: string };
 
@@ -84,8 +85,6 @@ export type BattleArenaProps = {
   onCancelPick: () => void;
   onLeave: () => void;
   onOpenDecks?: () => void;
-  onResetAi?: () => void;
-  onResetPvp?: () => void;
 
   /** Active hand ring (player|enemy|null). */
   activeHand?: "player" | "enemy" | null;
@@ -137,8 +136,6 @@ export function BattleArena({
   onCancelPick,
   onLeave,
   onOpenDecks,
-  onResetAi,
-  onResetPvp,
   activeHand,
   playerDamageFlash,
   enemyDamageFlash,
@@ -149,7 +146,12 @@ export function BattleArena({
   const opponentIdentity =
     mode === "pvp" && pvpIdentity
       ? pvpIdentity
-      : { name: enemy.name, level: enemy.aiProfile?.level };
+      : {
+          name: enemy.name,
+          level: enemy.aiProfile?.level,
+          elo: enemy.aiProfile?.eloRating,
+          modelLabel: enemy.aiProfile?.modelLabel,
+        };
 
   const variant = centerVariant ?? defaultCenterVariant(game, mode, enemy.name);
   const turnWarningActive = Boolean(timer?.warning);
@@ -220,8 +222,6 @@ export function BattleArena({
           roundNumber={game.round.round}
           damageFlash={playerDamageFlash}
           statuses={player.statuses}
-          onResetAi={onResetAi}
-          onResetPvp={onResetPvp}
         />
       </div>
 
@@ -333,7 +333,9 @@ function splashCopy(splash: BattleArenaSplash) {
   if (splash.phase === "match_intro") {
     return {
       title: "БІЙ",
-      subtitle: `Суперник: ${splash.opponentName}`,
+      subtitle: splash.mode === "ai" && splash.aiModelLabel
+        ? `Суперник: ${splash.opponentName} · модель ${splash.aiModelLabel}`
+        : `Суперник: ${splash.opponentName}`,
     };
   }
   if (splash.phase === "round_intro") {

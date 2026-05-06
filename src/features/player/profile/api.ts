@@ -38,8 +38,8 @@ export type ApplyMatchRewardsInput = {
   // Baseline match crystals (NOT the level-up bonus — that is recomputed
   // inside the store from the authoritative post-$inc totalXp).
   matchCrystals: number;
-  // Absolute post-match ELO. PvE callers omit this; PvP callers pass the
-  // value computed against an authoritative pre-match opponent snapshot.
+  // Absolute post-match ELO. Rated AI and live arena callers pass the value
+  // computed against an authoritative pre-match opponent snapshot.
   eloRating?: number;
   // Test-mode hook: deterministic RNG for the milestone card pick. Production
   // omits it and the store falls back to Math.random.

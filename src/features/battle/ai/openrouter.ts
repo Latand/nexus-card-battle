@@ -2,9 +2,10 @@ import { isClanBonusActive } from "../model/clans";
 import { BASE_ATTACK_ENERGY, DAMAGE_BOOST_COST, MAX_ROUNDS } from "../model/constants";
 import { chooseEnemyMove, type EnemyMove } from "../model/game";
 import type { Card, EffectSpec, Fighter } from "../model/types";
+import { DEFAULT_OPENROUTER_MODEL } from "./modelInfo";
 import type { BattleAiFighter, BattleAiMoveRequest, BattleAiMoveResponse } from "./publicState";
 
-export const DEFAULT_OPENROUTER_MODEL = "openai/gpt-5.4-nano";
+export { DEFAULT_OPENROUTER_MODEL } from "./modelInfo";
 const OPENROUTER_CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_TIMEOUT_MS = 60_000;
 const OPENROUTER_REASONING_TOKENS = 5_000;

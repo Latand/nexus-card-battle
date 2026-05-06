@@ -335,7 +335,6 @@ export function CollectionDeckScreen({
             deckStats={deckStats}
             canPlay={canPlay}
             canRemove={canRemoveCard}
-            onPlayAi={() => onPlay(deckIds, "ai")}
             onPlayHuman={() => onPlay(deckIds, "human")}
             onSelect={setSelectedId}
             onRemove={removeCard}
@@ -706,7 +705,6 @@ function DeckDock({
   canRemove,
   canEdit,
   deckSaveStatus,
-  onPlayAi,
   onPlayHuman,
   onSelect,
   onRemove,
@@ -719,7 +717,6 @@ function DeckDock({
   canRemove: boolean;
   canEdit: boolean;
   deckSaveStatus: "idle" | "saving" | "saved" | "error";
-  onPlayAi: () => void;
   onPlayHuman: () => void;
   onSelect: (cardId: string) => void;
   onRemove: (cardId: string) => void;
@@ -791,25 +788,10 @@ function DeckDock({
           )}
           type="button"
           disabled={!canPlay}
-          onClick={onPlayAi}
+          onClick={onPlayHuman}
           data-testid="play-selected-deck"
         >
-          Грати
-        </button>
-
-        <button
-          className={cn(
-            "min-h-[44px] rounded-md px-5 text-sm font-black uppercase transition",
-            canPlay
-              ? "bg-[linear-gradient(180deg,#68e5f5,#218aa3_56%,#0d4151)] text-[#061116] hover:brightness-110"
-              : "cursor-not-allowed bg-white/5 text-[#7e7668]",
-          )}
-          type="button"
-          disabled={!canPlay}
-          onClick={onPlayHuman}
-          data-testid="play-human-match"
-        >
-          PvP
+          На арену
         </button>
 
         <div className="grid grid-cols-3 gap-2 max-[720px]:col-span-2">

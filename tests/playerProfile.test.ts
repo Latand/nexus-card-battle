@@ -472,6 +472,21 @@ describe("player match-finished API (PvE)", () => {
     expect(result.persisted.eloRating).toBe(1000);
   });
 
+  test("rated AI matches use the same ELO formula as PvP against the bot's deck rating", async () => {
+    const identityAi: PlayerIdentity = { mode: "guest", guestId: "guest-ai-rated-elo" };
+    const store = new MemoryPlayerProfileStore();
+
+    const result = await applyAndSummarizeMatchRewards(store, identityAi, {
+      mode: "pve",
+      result: "win",
+      opponentEloBefore: 1000,
+    });
+
+    expect(result.summary.deltaElo).toBe(16);
+    expect(result.summary.newTotals.eloRating).toBe(1016);
+    expect(result.persisted.eloRating).toBe(1016);
+  });
+
   test("two concurrent PvE wins racing across a level threshold add 2x deltaXp and pay the bonus exactly once", async () => {
     // Both callers' pre-call view says "I crossed level 2"; the persistence
     // layer must still pay the bonus only once.

@@ -45,7 +45,7 @@ export function MatchEndOverlay({
 }: MatchEndOverlayProps) {
   const isVictory = variant === "victory";
   const title = isVictory ? "ПЕРЕМОГА" : "ПОРАЗКА";
-  const replayLabel = mode === "pvp" ? "РЕВАНШ" : "ГРАТИ ЩЕ";
+  const replayLabel = "НА АРЕНУ";
   const eloLabel =
     rewards.elo.delta === 0
       ? "0"

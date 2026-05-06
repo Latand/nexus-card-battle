@@ -280,8 +280,7 @@ export function StarterBoosterOnboarding({
             cards={deckCards}
             openedBoosterCount={openedCount}
             canPlay={isStarterKitReady(profileForDisplay)}
-            onPlayAi={() => onPlayDeck(deckIds, "ai")}
-            onPlayHuman={() => onPlayDeck(deckIds, "human")}
+            onPlayArena={() => onPlayDeck(deckIds, "human")}
             onEdit={() => onEditDeck(deckIds)}
           />
         )}

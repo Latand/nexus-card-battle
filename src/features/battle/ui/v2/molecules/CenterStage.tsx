@@ -4,7 +4,7 @@ export type CenterStageVariant =
   | { kind: "your_turn"; subtitle?: string }
   | { kind: "opponent_thinking" }
   | { kind: "round_intro"; round: number }
-  | { kind: "match_intro"; opponentName: string; mode: "ai" | "pvp" }
+  | { kind: "match_intro"; opponentName: string; mode: "ai" | "pvp"; aiModelLabel?: string }
   | {
       kind: "round_result";
       winner: "player" | "opponent" | "draw";
@@ -80,8 +80,13 @@ function renderInner(variant: CenterStageVariant) {
           <p className={SUBTITLE_CLASS}>
             Суперник: <span className="text-ink/90">{variant.opponentName}</span>
             <span className="ml-2 inline-flex items-center px-1.5 h-4 text-[9px] uppercase tracking-wider rounded border border-accent-quiet text-accent/80 align-middle">
-              {variant.mode === "pvp" ? "PvP" : "AI"}
+              {variant.mode === "pvp" ? "LIVE" : "BOT"}
             </span>
+            {variant.mode === "ai" && variant.aiModelLabel ? (
+              <span className="ml-2 inline-flex items-center px-1.5 h-4 text-[9px] uppercase tracking-wider rounded border border-cool/60 text-cool align-middle">
+                {variant.aiModelLabel}
+              </span>
+            ) : null}
           </p>
         </>
       );

@@ -5,6 +5,7 @@ import { makeFighter } from "../src/features/battle/model/domain/fighters";
 import { findCard } from "../src/features/battle/model/domain/decks";
 import { chooseEnemyMove } from "../src/features/battle/model/domain/opponentStrategy";
 import type { Card, Fighter } from "../src/features/battle/model/types";
+import { DEFAULT_BATTLE_AI_MODEL_LABEL } from "../src/features/battle/ai/modelInfo";
 
 describe("AI opponents", () => {
   test("AI mode exposes ten named opponents with distinct valid decks", () => {
@@ -12,10 +13,12 @@ describe("AI opponents", () => {
     expect(new Set(aiOpponents.map((opponent) => opponent.id)).size).toBe(10);
     expect(new Set(aiOpponents.map((opponent) => opponent.name)).size).toBe(10);
     expect(new Set(aiOpponents.map((opponent) => opponent.deckIds.join("|"))).size).toBe(10);
+    expect(new Set(aiOpponents.map((opponent) => opponent.eloRating)).size).toBe(10);
 
     for (const opponent of aiOpponents) {
       expect(opponent.name.trim()).not.toBe("");
       expect(opponent.level).toBeGreaterThanOrEqual(1);
+      expect(opponent.eloRating).toBeGreaterThanOrEqual(800);
       expect(opponent.deckIds.length).toBeGreaterThanOrEqual(9);
       expect(new Set(opponent.deckIds).size).toBe(opponent.deckIds.length);
       expect(opponent.deckIds.every((cardId) => opponent.collectionIds.includes(cardId))).toBe(true);
@@ -30,6 +33,8 @@ describe("AI opponents", () => {
     expect(game.enemy.name).toBe(opponent.name);
     expect(game.enemy.title).toBe(opponent.title);
     expect(game.enemy.aiProfile?.opponentId).toBe(opponent.id);
+    expect(game.enemy.aiProfile?.eloRating).toBe(opponent.eloRating);
+    expect(game.enemy.aiProfile?.modelLabel).toBe("GPT-5.4 Nano");
     expect(game.enemy.deck.cardIds).toEqual(opponent.deckIds);
   });
 
@@ -128,6 +133,8 @@ function fighterWithHand(
           style: "balanced",
           aggression: 0.55,
           riskTolerance: 0.45,
+          eloRating: 1300,
+          modelLabel: DEFAULT_BATTLE_AI_MODEL_LABEL,
           ...aiProfile,
         }
       : undefined,

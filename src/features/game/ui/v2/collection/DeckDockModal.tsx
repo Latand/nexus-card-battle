@@ -143,7 +143,7 @@ export function DeckDockModal({
               type="button"
               data-testid="deck-dock-play-ai"
               disabled={!canPlay}
-              onClick={() => onPlay("ai")}
+              onClick={() => onPlay("human")}
               className={cn(
                 "inline-flex items-center justify-center px-5 h-9 rounded-md text-[12px] font-medium tracking-[0.16em] uppercase border transition-colors",
                 canPlay
@@ -151,21 +151,7 @@ export function DeckDockModal({
                   : "bg-accent/30 border-accent-quiet text-[#1a1408]/60 cursor-not-allowed",
               )}
             >
-              ГРАТИ
-            </button>
-            <button
-              type="button"
-              data-testid="deck-dock-play-human"
-              disabled={!canPlay}
-              onClick={() => onPlay("human")}
-              className={cn(
-                "inline-flex items-center justify-center px-5 h-9 rounded-md text-[12px] font-medium tracking-[0.16em] uppercase border transition-colors",
-                canPlay
-                  ? "border-cool text-cool hover:bg-cool/10"
-                  : "border-accent-quiet text-ink-mute cursor-not-allowed",
-              )}
-            >
-              ГРАТИ PvP
+              НА АРЕНУ
             </button>
           </div>
         </footer>

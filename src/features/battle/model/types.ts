@@ -24,6 +24,7 @@ export type FighterAiProfile = {
   aggression: number;
   riskTolerance: number;
   eloRating: number;
+  modelLabel: string;
 };
 
 export type EffectTiming = "control" | "before_attack" | "attack" | "damage" | "after_damage";

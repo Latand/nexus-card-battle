@@ -318,7 +318,7 @@ function StarterDeckReady({
             Колода готова
           </h2>
           <p className="mt-2 max-w-[760px] text-sm font-bold leading-snug text-[#cbbd99] max-[520px]:text-xs">
-            Два різні бустери вже записали карти в профіль. Можна одразу зіграти бій з AI, PvP або підкрутити склад.
+            Два різні бустери вже записали карти в профіль. Можна одразу зайти на арену або підкрутити склад.
           </p>
         </div>
 
@@ -354,25 +354,10 @@ function StarterDeckReady({
             )}
             type="button"
             disabled={!deckReady}
-            onClick={() => onPlayDeck(savedOwnedDeckIds, "ai")}
+            onClick={() => onPlayDeck(savedOwnedDeckIds, "human")}
             data-testid="starter-deck-ready-play"
           >
-            Грати
-          </button>
-
-          <button
-            className={cn(
-              "min-h-[48px] rounded-md border-2 px-5 text-sm font-black uppercase transition",
-              deckReady
-                ? "border-[#65d7e9]/60 bg-[linear-gradient(180deg,#68e5f5,#218aa3_56%,#0d4151)] text-[#061116] hover:brightness-110"
-                : "cursor-not-allowed border-white/10 bg-white/5 text-[#7e7668]",
-            )}
-            type="button"
-            disabled={!deckReady}
-            onClick={() => onPlayDeck(savedOwnedDeckIds, "human")}
-            data-testid="starter-deck-ready-play-human"
-          >
-            PvP
+            На арену
           </button>
 
           <button

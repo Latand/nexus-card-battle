@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { requestBattleAiMove } from "@/features/battle/ai/client";
+import { DEFAULT_BATTLE_AI_MODEL_LABEL } from "@/features/battle/ai/modelInfo";
 import { postMatchFinished } from "@/features/player/profile/client";
 import { useLobbyChat } from "@/features/presence/client";
 import { readStableSessionName, rememberStableSessionName } from "@/features/presence/sessionName";
@@ -28,6 +29,7 @@ import type { Card, Clash, GameState, MatchResult, Outcome, Phase, RewardSummary
 import type { BattleHandCard } from "./v2/molecules/BattleHand";
 import type { CenterStageVariant } from "./v2/molecules/CenterStage";
 import { BattleArena, type BattleArenaClash, type BattleArenaSplash } from "./v2/screens/BattleArena";
+import { playSound } from "./v2/effects/sound";
 import { MatchEndOverlay, type MatchEndRewards } from "./v2/organisms/MatchEndOverlay";
 import {
   MatchmakingScreen,
@@ -50,6 +52,7 @@ type BattleGameProps = {
 };
 
 type HumanMatchStatus = "idle" | "connecting" | "queued" | "matched" | "opponent_left" | "forfeit" | "error" | "closed";
+const BOT_FALLBACK_DELAY_MS = 1_800;
 
 type HumanMove = {
   cardId: string;
@@ -145,8 +148,8 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       return null;
     }
   }, [playerCollectionIds, playerDeckIds, playerName, playerEloRating]);
-  // AI mode resumes mid-match across refresh by hydrating from localStorage.
-  // PvP cannot resume cleanly (server-authoritative + live socket), so it
+  // Bot matches resume mid-match across refresh by hydrating from localStorage.
+  // Live arena matches cannot resume cleanly (server-authoritative + socket), so they
   // always starts fresh and never reads/writes the persistence slot.
   const [game, setGame] = useState<GameState>(() => {
     if (!isHumanMatch) {
@@ -181,7 +184,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const [humanChatMessages, setHumanChatMessages] = useState<HumanChatMessage[]>([]);
   const [humanChatDraft, setHumanChatDraft] = useState("");
   // Lobby chat for the matchmaking screen — at queue time there is no opponent
-  // yet, so we surface the global lobby websocket chat instead of per-match PvP.
+  // yet, so we surface the global lobby websocket chat.
   const [lobbyChatDraft, setLobbyChatDraft] = useState("");
   const lobbyChat = useLobbyChat(playerName);
   const [matchInfo, setMatchInfo] = useState<HumanMatchInfo | null>(null);
@@ -204,6 +207,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const stableHumanNameRef = useRef("");
   const mountedRef = useRef(true);
   const aiMoveRequestIdRef = useRef(0);
+  const soundCueRef = useRef({ turn: "", splash: "", matchEnd: "", opponentMove: "" });
 
   useEffect(() => {
     gameRef.current = game;
@@ -306,6 +310,23 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     };
   }, [isHumanMatch, playerCollectionIds, playerDeckIds, playerIdentity, playerName, telegramPlayer]);
 
+  useEffect(() => {
+    if (!isHumanMatch || humanStatus !== "queued") return;
+
+    const fallbackTimer = window.setTimeout(() => {
+      const socket = socketRef.current;
+      if (isSocketOpen(socket)) {
+        sendSocketMessage(socket, { type: "cancel_queue" });
+        socket.close();
+      }
+      setHumanMessage("На арені зараз немає живого суперника — випускаємо AI-бота.");
+      resetAiMatch();
+      onSwitchMode?.("ai");
+    }, BOT_FALLBACK_DELAY_MS);
+
+    return () => window.clearTimeout(fallbackTimer);
+  }, [humanStatus, isHumanMatch, onSwitchMode]);
+
   const selected = getSelectedCard(game.player, selectedId) ?? game.player.hand[0];
   const boostCost = damageBoost ? DAMAGE_BOOST_COST : 0;
   const maxEnergyForCard = Math.max(0, game.player.energy - boostCost);
@@ -337,6 +358,46 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const turnWarningActive = playerDecisionActive && turnSeconds <= 10;
 
   useEffect(() => {
+    if (humanBlockingOverlay) return;
+
+    const side = game.phase === "player_turn" ? "player" : game.phase === "opponent_turn" ? "opponent" : null;
+    if (!side) return;
+
+    const signature = `${game.round.round}:${side}`;
+    if (soundCueRef.current.turn === signature) return;
+
+    soundCueRef.current.turn = signature;
+    playSound(side === "player" ? "playerTurn" : "opponentTurn", 0.36);
+  }, [game.phase, game.round.round, humanBlockingOverlay]);
+
+  useEffect(() => {
+    if (humanBlockingOverlay) return;
+    if (game.phase !== "match_intro" && game.phase !== "round_intro") return;
+
+    const signature = `${game.phase}:${game.round.round}`;
+    if (soundCueRef.current.splash === signature) return;
+
+    soundCueRef.current.splash = signature;
+    playSound(game.phase === "match_intro" ? "matchStart" : "roundStart", 0.34);
+  }, [game.phase, game.round.round, humanBlockingOverlay]);
+
+  useEffect(() => {
+    if (game.phase !== "reward_summary" || !game.matchResult) return;
+
+    const signature = `${game.matchResult}:${game.round.round}`;
+    if (soundCueRef.current.matchEnd === signature) return;
+
+    soundCueRef.current.matchEnd = signature;
+    if (game.matchResult === "player") {
+      playSound("victory", 0.42);
+    } else if (game.matchResult === "enemy") {
+      playSound("defeat", 0.38);
+    } else {
+      playSound("roundEnd", 0.38);
+    }
+  }, [game.matchResult, game.phase, game.round.round]);
+
+  useEffect(() => {
     if (isHumanMatch && humanStatus !== "matched") return;
 
     if (game.phase === "match_intro") {
@@ -359,6 +420,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
             const enemyMove = remoteMove ? createKnownEnemyMoveFromHumanMove(game, remoteMove) : null;
 
             if (enemyMove) {
+              playOpponentMoveCue(soundCueRef, game.round.round, enemyMove.card.id);
               setEnemyLockedMove(enemyMove);
               setGame((value) => ({
                 ...value,
@@ -386,6 +448,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
           chooseAiEnemyMove(game).then((enemyMove) => {
             if (!isCurrentAiMoveRequest(requestId, game.round.round)) return;
 
+            playOpponentMoveCue(soundCueRef, game.round.round, enemyMove.card.id);
             setEnemyLockedMove(enemyMove);
             setGame((value) => {
               if (value.round.round !== game.round.round || value.first !== "enemy" || value.phase !== "opponent_turn") return value;
@@ -543,6 +606,8 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       return;
     }
 
+    playSound("playerMove", 0.42);
+
     if (game.first === "player") {
       const requestGame = game;
       const requestId = ++aiMoveRequestIdRef.current;
@@ -564,6 +629,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       chooseAiEnemyMove(requestGame, card).then((enemyMove) => {
         if (!isCurrentAiMoveRequest(requestId, requestGame.round.round)) return;
 
+        playOpponentMoveCue(soundCueRef, requestGame.round.round, enemyMove.card.id);
         const outcome = resolveRound(
           requestGame.player,
           requestGame.enemy,
@@ -633,7 +699,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
 
     if (!currentMatch || !isSocketOpen(socket)) {
       setHumanStatus("error");
-      setHumanMessage("PvP-з'єднання ще не готове для ходу.");
+      setHumanMessage("З'єднання арени ще не готове для ходу.");
       return;
     }
 
@@ -648,6 +714,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       },
     });
 
+    playSound("playerMove", 0.42);
     setSelectedId(card.id);
     setSelectionOpen(false);
     setTurnSeconds(TURN_SECONDS);
@@ -711,7 +778,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
 
       if (!nextMatch) {
         setHumanStatus("error");
-        setHumanMessage("PvP-сервер надіслав матч без потрібних даних.");
+        setHumanMessage("Сервер арени надіслав матч без потрібних даних.");
         return;
       }
 
@@ -719,6 +786,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       const firstCard = getAvailableCards(nextGame.player)[0];
 
       clearHumanMessageBuffers();
+      resetSoundCues(soundCueRef);
       activeRewardMatchIdRef.current = nextMatch.matchId;
       setMatchInfo(nextMatch);
       setGame(nextGame);
@@ -766,7 +834,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
 
     if (message.type === "error") {
       setHumanStatus("error");
-      setHumanMessage(typeof message.message === "string" ? message.message : "PvP-сервер повернув помилку.");
+      setHumanMessage(typeof message.message === "string" ? message.message : "Сервер арени повернув помилку.");
     }
   }
 
@@ -784,6 +852,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     if (message.playerId === currentMatch.playerId) return;
 
     remoteFirstMoveRef.current = { round: message.round, move: message.move };
+    playOpponentMoveCue(soundCueRef, message.round, message.move.cardId);
 
     if (currentGame.phase !== "opponent_turn" || currentGame.first !== "enemy") return;
 
@@ -821,7 +890,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     const enemyCard = findCardInHand(currentGame.enemy.hand, opponentMove.cardId);
     if (!playerCard || !enemyCard) {
       setHumanStatus("error");
-      setHumanMessage("Не вдалося зіставити карти PvP-раунду з поточною рукою.");
+      setHumanMessage("Не вдалося зіставити карти раунду з поточною рукою.");
       return;
     }
 
@@ -839,6 +908,9 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       enemyMove,
     );
 
+    if (message.firstPlayerId === currentMatch.playerId) {
+      playOpponentMoveCue(soundCueRef, message.round, opponentMove.cardId);
+    }
     remoteFirstMoveRef.current = null;
     setSelectedId(playerCard.id);
     setSelectionOpen(false);
@@ -995,13 +1067,9 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     };
   });
 
-  function reset() {
+  function resetAiMatch() {
     aiMoveRequestIdRef.current += 1;
-
-    if (isHumanMatch) {
-      restartHumanQueue();
-      return;
-    }
+    resetSoundCues(soundCueRef);
 
     const next = createInitialGame({ playerCollectionIds, playerDeckIds, playerName, playerEloRating });
     const firstCard = getAvailableCards(next.player)[0];
@@ -1012,11 +1080,24 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setDamageBoost(false);
     setPending(null);
     setEnemyLockedMove(null);
+    setRoundWinnerCardIds(new Set());
     setSelectionOpen(false);
     setTurnSeconds(TURN_SECONDS);
     setPersistedRewards(null);
     setPersistedRewardsError(null);
     persistedMatchSignatureRef.current = null;
+  }
+
+  function startArenaSearch() {
+    resetAiMatch();
+    if (isHumanMatch) {
+      restartHumanQueue();
+      return;
+    }
+
+    setHumanStatus("connecting");
+    setHumanMessage("");
+    onSwitchMode?.("human");
   }
 
   function toggleBoost() {
@@ -1052,12 +1133,13 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     played: card.id === enemyPlayedCardId,
   }));
   const arenaMode: "ai" | "pvp" = mode === "human" ? "pvp" : "ai";
+  const aiModelLabel = game.enemy.aiProfile?.modelLabel ?? DEFAULT_BATTLE_AI_MODEL_LABEL;
   const centerVariant = pickCenterStageVariant(game, verdict, arenaMode);
 
   // Splash drives the cover overlay (replaces legacy PhaseOverlay).
   const splash: BattleArenaSplash | undefined = (() => {
     if (game.phase === "match_intro") {
-      return { phase: "match_intro", opponentName: game.enemy.name, mode: arenaMode };
+      return { phase: "match_intro", opponentName: game.enemy.name, mode: arenaMode, aiModelLabel };
     }
     if (game.phase === "round_intro") {
       return { phase: "round_intro", round: game.round.round };
@@ -1203,8 +1285,6 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
             // route yet. Falling back to onOpenCollection so the button works.
             (onOpenCollection ?? (() => {}))();
           }}
-          onResetAi={() => (mode === "ai" ? reset() : onSwitchMode?.("ai"))}
-          onResetPvp={() => (mode === "human" ? reset() : onSwitchMode?.("human"))}
         />
       )}
 
@@ -1217,7 +1297,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
         rewards={matchEndRewards}
         avatarUrl={avatarUrl}
         errorText={persistedRewardsError ?? undefined}
-        onPlayAgain={() => (mode === "ai" ? reset() : onSwitchMode?.("ai") ?? reset())}
+        onPlayAgain={startArenaSearch}
         onGoToCollection={onOpenCollection ?? (() => {})}
       />
 
@@ -1263,7 +1343,12 @@ function pickCenterStageVariant(
 ): CenterStageVariant {
   const phase = game.phase;
   if (phase === "match_intro") {
-    return { kind: "match_intro", opponentName: game.enemy.name, mode: arenaMode };
+    return {
+      kind: "match_intro",
+      opponentName: game.enemy.name,
+      mode: arenaMode,
+      aiModelLabel: game.enemy.aiProfile?.modelLabel ?? DEFAULT_BATTLE_AI_MODEL_LABEL,
+    };
   }
   if (phase === "round_intro") return { kind: "round_intro", round: game.round.round };
   if (phase === "opponent_turn") return { kind: "opponent_thinking" };
@@ -1393,6 +1478,21 @@ function isSocketOpen(socket: WebSocket | null): socket is WebSocket {
 function schedule(callback: () => void, delay: number) {
   const timer = window.setTimeout(callback, delay);
   return () => window.clearTimeout(timer);
+}
+
+function resetSoundCues(soundCueRef: { current: { turn: string; splash: string; matchEnd: string; opponentMove: string } }) {
+  soundCueRef.current = { turn: "", splash: "", matchEnd: "", opponentMove: "" };
+}
+
+function playOpponentMoveCue(
+  soundCueRef: { current: { opponentMove: string } },
+  round: number,
+  cardId: string | undefined,
+) {
+  const signature = `${round}:${cardId ?? "unknown"}`;
+  if (soundCueRef.current.opponentMove === signature) return;
+  soundCueRef.current.opponentMove = signature;
+  playSound("opponentMove", 0.38);
 }
 
 function sanitizeHumanSessionName(value: unknown) {

@@ -46,9 +46,9 @@ export type MatchmakingScreenProps = {
 };
 
 /**
- * Matchmaking + lobby chat screen (B9). Fully controlled — chat state and
- * status both come from the caller so this works for both the global lobby
- * (AI mode pre-game) and per-match PvP queueing.
+ * Arena matchmaking + lobby chat screen (B9). Fully controlled — chat state
+ * and status both come from the caller so this works while the unified arena
+ * looks for a live opponent before falling back to an AI bot.
  */
 export function MatchmakingScreen({
   status,
@@ -178,7 +178,7 @@ function StatusColumn({
             onClick={onRetry}
             className="min-h-[42px] rounded-md border border-accent bg-accent/10 px-5 text-xs font-bold uppercase tracking-[0.18em] text-accent transition hover:bg-accent/20"
           >
-            Знову PvP
+            Знову на арену
           </button>
         ) : null}
         <button
@@ -203,19 +203,19 @@ function statusTitle(status: MatchmakingStatus) {
   if (status === "matched") return "Матч готовий";
   if (status === "opponent_left") return "Суперник вийшов";
   if (status === "forfeit") return "Матч завершено";
-  if (status === "error") return "PvP помилка";
+  if (status === "error") return "Помилка арени";
   if (status === "closed") return "З'єднання закрите";
-  return "PvP";
+  return "Арена";
 }
 
 function statusSubtitle(status: MatchmakingStatus) {
-  if (status === "connecting") return "Підключаємося до живого матчу.";
-  if (status === "queued") return "Чекаємо іншого гравця.";
+  if (status === "connecting") return "Підключаємося до арени.";
+  if (status === "queued") return "Шукаємо живого суперника. Якщо нікого немає, вийде AI-бот.";
   if (status === "preparing") return "Завантажуємо стан матчу...";
   if (status === "matched") return "Матч стартує.";
   if (status === "opponent_left") return "Матч зупинено, бо другий гравець залишив арену.";
   if (status === "forfeit") return "Час ходу вийшов, результат зафіксовано.";
-  if (status === "error") return "Спробуй повернутися до колоди й запустити PvP ще раз.";
+  if (status === "error") return "Спробуй повернутися до колоди й зайти на арену ще раз.";
   if (status === "closed") return "Сервер закрив з'єднання.";
   return "";
 }

@@ -1,4 +1,5 @@
 import { BASE_ATTACK_ENERGY, DAMAGE_BOOST_COST, MAX_ROUNDS } from "../constants";
+import { DEFAULT_BATTLE_AI_MODEL_LABEL } from "@/features/battle/ai/modelInfo";
 import type { Card, Fighter, FighterAiProfile, Side } from "../types";
 import { getEffectiveBonusStates } from "./bonusRules";
 import { getAvailableCards } from "./fighters";
@@ -231,5 +232,6 @@ function normalizeProfile(profile?: FighterAiProfile): FighterAiProfile {
     aggression: profile?.aggression ?? 0.55,
     riskTolerance: profile?.riskTolerance ?? 0.45,
     eloRating: profile?.eloRating ?? 1300,
+    modelLabel: profile?.modelLabel ?? DEFAULT_BATTLE_AI_MODEL_LABEL,
   };
 }

@@ -295,7 +295,7 @@ export function CollectionDeckScreen(props: CollectionDeckScreenProps) {
           data-testid="play-selected-deck"
           data-component="legacy-play-selected-deck"
           disabled={!canPlay}
-          onClick={() => handlePlay("ai")}
+          onClick={() => handlePlay("human")}
           tabIndex={-1}
           className="h-1 w-1 absolute left-0 top-0"
         />

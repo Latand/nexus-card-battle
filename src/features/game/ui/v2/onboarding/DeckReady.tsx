@@ -10,8 +10,7 @@ type DeckReadyProps = {
   cards: Card[];
   openedBoosterCount: number;
   canPlay: boolean;
-  onPlayAi: () => void;
-  onPlayHuman: () => void;
+  onPlayArena: () => void;
   onEdit: () => void;
 };
 
@@ -21,8 +20,7 @@ export function DeckReady({
   cards,
   openedBoosterCount,
   canPlay,
-  onPlayAi,
-  onPlayHuman,
+  onPlayArena,
   onEdit,
 }: DeckReadyProps) {
   const factionCount = new Set(cards.map((card) => card.clan)).size;
@@ -57,24 +55,14 @@ export function DeckReady({
         <button
           type="button"
           data-testid="starter-deck-ready-play"
-          onClick={onPlayAi}
+          onClick={onPlayArena}
           disabled={!canPlay || deckIds.length === 0}
           className="inline-flex h-14 w-[min(360px,calc(100vw-32px))] items-center justify-center rounded-md border border-accent bg-accent text-sm font-medium uppercase tracking-[0.18em] text-[#1a1408] disabled:cursor-not-allowed disabled:opacity-50 hover:brightness-105 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
         >
-          ГРАТИ З ШІ
+          НА АРЕНУ
         </button>
 
         <div className="flex items-center gap-3 text-sm text-ink-mute">
-          <button
-            type="button"
-            data-testid="starter-deck-ready-play-human"
-            onClick={onPlayHuman}
-            disabled={!canPlay || deckIds.length === 0}
-            className="underline-offset-4 hover:text-cool hover:underline disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:underline"
-          >
-            PvP бій
-          </button>
-          <span aria-hidden className="text-ink-mute">·</span>
           <button
             type="button"
             data-testid="starter-deck-ready-edit"

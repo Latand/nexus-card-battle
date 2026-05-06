@@ -17,13 +17,11 @@ export type BattleHudProps = {
     level?: number;
     avatarUrl?: string;
     elo?: number;
+    modelLabel?: string;
     online?: "online" | "reconnecting" | "disconnected";
   };
   roundNumber?: number;
   onOpenDecks?: () => void;
-  /** Player strip only — replaces the legacy bottom AI/PvP toggle pair. */
-  onResetAi?: () => void;
-  onResetPvp?: () => void;
   /** When true, briefly pulses warm-red on the identity area (incoming damage). */
   damageFlash?: boolean;
   /** Active status effects on this side's fighter (poison, blessing, …). */
@@ -98,14 +96,13 @@ export function BattleHud({
   identity,
   roundNumber,
   onOpenDecks,
-  onResetAi,
-  onResetPvp,
   damageFlash,
   statuses,
   className,
 }: BattleHudProps) {
   const isOpponent = side === "opponent";
   const isPvpOpponent = isOpponent && mode === "pvp";
+  const showOpponentRating = isOpponent && identity.elo !== undefined;
   const energyTestId = isOpponent ? "battle-hud-opponent-energy" : "battle-hud-player-energy";
   const hpTestId = isOpponent ? "battle-hud-opponent-hp" : "battle-hud-player-hp";
   const hudTestId = isOpponent ? "battle-hud-opponent" : "battle-hud-player";
@@ -204,7 +201,11 @@ export function BattleHud({
             >
               {identity.name}
             </span>
-            {isPvpOpponent && identity.level !== undefined ? (
+            {isOpponent && identity.modelLabel ? (
+              <span className="hidden sm:inline text-[10px] leading-none text-cool mt-1 truncate">
+                {identity.modelLabel}
+              </span>
+            ) : isPvpOpponent && identity.level !== undefined ? (
               <span className="hidden sm:inline text-[10px] leading-none text-ink-mute mt-1">
                 Lv {identity.level}
               </span>
@@ -230,7 +231,7 @@ export function BattleHud({
               ) : null}
             </div>
           ) : null}
-          {isPvpOpponent && identity.elo !== undefined ? (
+          {showOpponentRating ? (
             <span
               data-testid="battle-hud-opponent-elo"
               className="hidden sm:inline-flex items-center px-2 h-5 text-[10px] font-mono tabular-nums uppercase tracking-wider text-cool border border-cool/60 rounded-full"
@@ -249,7 +250,7 @@ export function BattleHud({
                   : "text-accent border-accent-quiet",
               )}
             >
-              {mode === "pvp" ? "PvP" : "AI"}
+              АРЕНА
             </span>
           ) : null}
           {isOpponent && onOpenDecks ? (
@@ -262,40 +263,6 @@ export function BattleHud({
             >
               <span className="hidden sm:inline">КОЛОДИ</span>
               <span className="sm:hidden" aria-hidden>▦</span>
-            </button>
-          ) : null}
-          {!isOpponent && onResetAi ? (
-            <button
-              type="button"
-              data-testid="battle-hud-reset-ai"
-              data-active={mode === "ai" ? "true" : "false"}
-              aria-label="Бій з AI"
-              onClick={onResetAi}
-              className={cn(
-                "inline-flex items-center px-1.5 sm:px-2 h-6 text-[9px] sm:text-[10px] uppercase tracking-wider rounded border transition-colors shrink-0",
-                mode === "ai"
-                  ? "bg-accent text-bg border-accent"
-                  : "border-accent-quiet text-accent/80 hover:bg-accent/10",
-              )}
-            >
-              AI
-            </button>
-          ) : null}
-          {!isOpponent && onResetPvp ? (
-            <button
-              type="button"
-              data-testid="battle-hud-reset-pvp"
-              data-active={mode === "pvp" ? "true" : "false"}
-              aria-label="Бій з гравцем"
-              onClick={onResetPvp}
-              className={cn(
-                "inline-flex items-center px-1.5 sm:px-2 h-6 text-[9px] sm:text-[10px] uppercase tracking-wider rounded border transition-colors shrink-0",
-                mode === "pvp"
-                  ? "bg-cool text-bg border-cool"
-                  : "border-cool/60 text-cool hover:bg-cool/10",
-              )}
-            >
-              PvP
             </button>
           ) : null}
         </div>
@@ -311,7 +278,7 @@ export function BattleHud({
         }
       `}</style>
 
-      {/* PvP online indicator hugs the right edge just below the strip */}
+      {/* Live-opponent presence hugs the right edge just below the strip */}
       {isPvpOpponent && identity.online ? (
         <div
           data-testid="battle-hud-opponent-presence"

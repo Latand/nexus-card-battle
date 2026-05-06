@@ -1,4 +1,5 @@
 import type { AiDifficulty, AiStyle, FighterAiProfile } from "./types";
+import { DEFAULT_BATTLE_AI_MODEL_LABEL } from "@/features/battle/ai/modelInfo";
 
 export const playerCollectionIds = [
   "alpha",
@@ -48,8 +49,8 @@ export type AiOpponent = {
   aggression: number;
   riskTolerance: number;
   // Fixed ELO per bot — used for matchmaking targeting and to compute the
-  // player's ELO delta after a PvE match. Spaced to span the full ladder
-  // (rookie ~850, grandmaster ~2100) so PvE play meaningfully nudges rating.
+  // player's ELO delta after a rated AI arena match. Spaced to span the full
+  // ladder (rookie ~850, grandmaster ~2100) so bot play meaningfully nudges rating.
   eloRating: number;
   collectionIds: string[];
   deckIds: string[];
@@ -494,6 +495,7 @@ export function toFighterAiProfile(opponent: AiOpponent): FighterAiProfile {
     aggression: opponent.aggression,
     riskTolerance: opponent.riskTolerance,
     eloRating: opponent.eloRating,
+    modelLabel: DEFAULT_BATTLE_AI_MODEL_LABEL,
   };
 }
 

@@ -181,7 +181,7 @@ function handleSocketMessage(session, message) {
 
   if (message.type === "join_human") {
     joinHumanQueue(session, message).catch((error) => {
-      console.error("PvP join failed.", error);
+      console.error("Arena join failed.", error);
       sendError(session, "Player profile is unavailable.");
     });
     return;
@@ -280,7 +280,7 @@ async function joinHumanQueue(session, message) {
 
   const identity = parseSocketPlayerIdentity(message.identity);
   if (!identity) {
-    sendError(session, "Player identity is required for PvP.");
+    sendError(session, "Player identity is required for arena matchmaking.");
     return;
   }
 
@@ -292,7 +292,7 @@ async function joinHumanQueue(session, message) {
   }
 
   if (clientDeckIds.length > 0 && !sameStringArray(clientDeckIds, profileLoadout.deckIds)) {
-    sendError(session, "PvP deck must match the saved profile deck.");
+    sendError(session, "Arena deck must match the saved profile deck.");
     return;
   }
 
@@ -308,7 +308,7 @@ async function joinHumanQueue(session, message) {
   try {
     queueEloRating = toPlayerProfile(profile).eloRating;
   } catch (error) {
-    console.error("PvP queue ELO read failed.", error);
+    console.error("Arena queue ELO read failed.", error);
     sendError(session, "Player profile is unavailable.");
     return;
   }
@@ -567,7 +567,7 @@ function submitMove(session, message) {
 
   if (matchOutcome) {
     finalizePvpMatch(match, matchOutcome).catch((error) => {
-      console.error("PvP reward finalization failed.", error);
+      console.error("Arena reward finalization failed.", error);
     });
     return;
   }
@@ -661,7 +661,7 @@ async function finalizePvpMatch(match, outcome) {
   if (sides.length === 2) {
     outcomes = await applyPvpMatchRewardsForBothSides(store, sides, {
       onEloReadFailure: ({ key, error }) => {
-        console.error("PvP ELO read failed for player.", { playerId: key, error });
+        console.error("Arena ELO read failed for player.", { playerId: key, error });
       },
     });
   } else {
@@ -678,7 +678,7 @@ async function finalizePvpMatch(match, outcome) {
   }
 
   for (const { key, summary, error } of outcomes) {
-    if (error) console.error("PvP reward apply failed for player.", { playerId: key, error });
+    if (error) console.error("Arena reward apply failed for player.", { playerId: key, error });
     const session = sessions.get(key);
     if (!session || !summary) continue;
     send(session, { type: "reward_summary", matchId: match.id, payload: summary });
@@ -771,7 +771,7 @@ function forfeitMatch(match, loserId, reason) {
   });
 
   finalizePvpMatch(match, { matchResult: "player", winnerSessionId: winnerId }).catch((error) => {
-    console.error("PvP forfeit reward finalization failed.", error);
+    console.error("Arena forfeit reward finalization failed.", error);
   });
 }
 
@@ -809,7 +809,7 @@ function forfeitMatchByDisconnect(match, loserId) {
   }
 
   finalizePvpMatch(match, { matchResult: "player", winnerSessionId: winnerId }).catch((error) => {
-    console.error("PvP disconnect reward finalization failed.", error);
+    console.error("Arena disconnect reward finalization failed.", error);
   });
 }
 
@@ -1013,7 +1013,7 @@ function selectBattleHandIds(deckIds) {
 
 function createMatchFighter(session, handIds) {
   const collectionIds = session.queuedCollectionIds.length > 0 ? session.queuedCollectionIds : session.queuedDeckIds;
-  const fighter = makeFighter(session.id, getSessionDisplayName(session), "PvP", collectionIds, session.queuedDeckIds);
+  const fighter = makeFighter(session.id, getSessionDisplayName(session), "Арена", collectionIds, session.queuedDeckIds);
   const hand = handIds
     .map((cardId) => cards.find((card) => card.id === cardId))
     .filter((card) => Boolean(card))

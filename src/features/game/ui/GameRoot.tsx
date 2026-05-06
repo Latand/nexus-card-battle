@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cards } from "@/features/battle/model/cards";
 import { BattleGame } from "@/features/battle/ui/BattleGame";
-import { RealtimeBattleGame } from "@/features/battle/ui/RealtimeBattleGame";
 import { STARTER_BOOSTER_CARD_COUNT } from "@/features/boosters/types";
 import { getOwnedCardIds } from "@/features/inventory/inventoryOps";
 import { DEFAULT_PLAYER_AVATAR_URL, readTelegramPhotoUrl, resolveAvatarUrl, useTelegramAvatar } from "@/features/player/profile/avatar";
@@ -62,7 +61,7 @@ type TelegramWebApp = NonNullable<NonNullable<TelegramWindow["Telegram"]>["WebAp
 export function GameRoot() {
   const allCardIds = useMemo(() => cards.map((card) => card.id), []);
   const [screen, setScreen] = useUrlEnum<"collection" | "battle">("screen", ["collection", "battle"], "collection", "push");
-  const [battleMode, setBattleMode] = useState<BattleMode>("ai");
+  const [battleMode, setBattleMode] = useState<BattleMode>("human");
   const [deckIds, setDeckIds] = useState<string[]>([]);
   const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
   const [playerIdentity, setPlayerIdentity] = useState<PlayerIdentity | null>(null);
@@ -200,7 +199,7 @@ export function GameRoot() {
     setDeckSaveStatus("idle");
     setStarterDeckReadyVisible(isStarterKitReady(nextProfile, allCardIds));
   }, [allCardIds]);
-  const handleStarterDeckPlay = useCallback((starterDeckIds: string[], mode: BattleMode = "ai") => {
+  const handleStarterDeckPlay = useCallback((starterDeckIds: string[], mode: BattleMode = "human") => {
     const sanitizedDeckIds = sanitizeDeckIds(starterDeckIds, ownedCardIds);
     if (sanitizedDeckIds.length < PLAYER_DECK_SIZE) return;
 
@@ -253,7 +252,7 @@ export function GameRoot() {
   const liveTelegramAvatarUrl = useTelegramAvatar();
   const handlePlayFromHud = useCallback(() => {
     if (!deckReadyToPlay || profileDeckIds.length < PLAYER_DECK_SIZE) return;
-    handleSavedDeckPlay(profileDeckIds, "ai");
+    handleSavedDeckPlay(profileDeckIds, "human");
   }, [deckReadyToPlay, handleSavedDeckPlay, profileDeckIds]);
   const hudCanPlay =
     profileStatus === "ready" && deckReadyToPlay && profileDeckIds.length >= PLAYER_DECK_SIZE;
@@ -289,7 +288,8 @@ export function GameRoot() {
   // bounce back to the collection unless we have a persisted session that
   // BattleGame can resume from. Without this guard, BattleGame's createInitialGame
   // throws on the empty placeholder deck.
-  const battleResumable = screen === "battle" && (deckIds.length >= PLAYER_DECK_SIZE || hasBattleSession());
+  const hasPersistedBattleSession = screen === "battle" && hasBattleSession();
+  const battleResumable = screen === "battle" && (deckIds.length >= PLAYER_DECK_SIZE || hasPersistedBattleSession);
   useEffect(() => {
     if (screen !== "battle") return;
     if (profileStatus !== "ready") return;
@@ -299,32 +299,22 @@ export function GameRoot() {
 
   if (screen === "battle" && battleResumable) {
     const persistedAvatarUrl = playerProfile?.avatarUrl;
+    const resolvedBattleMode = battleMode === "ai" || hasPersistedBattleSession ? "ai" : "human";
     return (
       <>
-        {battleMode === "human" ? (
-          <RealtimeBattleGame
-            playerCollectionIds={ownedCardIds}
-            playerDeckIds={deckIds}
-            playerIdentity={playerIdentity ?? undefined}
-            playerName={playerName}
-            telegramPlayer={telegramPlayer}
-            avatarUrl={persistedAvatarUrl}
-            onOpenCollection={() => setScreen("collection")}
-            onSwitchMode={(nextMode) => setBattleMode(nextMode)}
-            onPlayerUpdated={handleBattlePlayerUpdated}
-          />
-        ) : (
-          <BattleGame
-            playerCollectionIds={ownedCardIds}
-            playerDeckIds={deckIds}
-            playerIdentity={playerIdentity ?? undefined}
-            playerName={playerName}
-            avatarUrl={persistedAvatarUrl}
-            onOpenCollection={() => setScreen("collection")}
-            onSwitchMode={(nextMode) => setBattleMode(nextMode)}
-            onPlayerUpdated={handleBattlePlayerUpdated}
-          />
-        )}
+        <BattleGame
+          playerCollectionIds={ownedCardIds}
+          playerDeckIds={deckIds}
+          playerIdentity={playerIdentity ?? undefined}
+          playerName={playerName}
+          playerEloRating={playerProfile?.eloRating}
+          telegramPlayer={telegramPlayer}
+          mode={resolvedBattleMode}
+          avatarUrl={persistedAvatarUrl}
+          onOpenCollection={() => setScreen("collection")}
+          onSwitchMode={(nextMode) => setBattleMode(nextMode)}
+          onPlayerUpdated={handleBattlePlayerUpdated}
+        />
       </>
     );
   }
