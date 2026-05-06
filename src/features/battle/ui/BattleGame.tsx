@@ -194,7 +194,9 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const [matchInfo, setMatchInfo] = useState<HumanMatchInfo | null>(null);
   const [persistedRewards, setPersistedRewards] = useState<RewardSummary | null>(null);
   const [persistedRewardsError, setPersistedRewardsError] = useState<string | null>(null);
+  const [surrendering, setSurrendering] = useState(false);
   const persistedMatchSignatureRef = useRef<string | null>(null);
+  const surrenderedMatchRef = useRef(false);
   const autoSubmitRef = useRef(() => {});
   const socketRef = useRef<WebSocket | null>(null);
   const gameRef = useRef(game);
@@ -379,6 +381,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const enemyPlayedCardId = pending?.clash.enemyCard.id ?? game.round.enemyCardId;
   const playerDecisionActive = pending === null && ["player_turn", "card_preview"].includes(game.phase);
   const turnWarningActive = playerDecisionActive && turnSeconds <= 10;
+  const canSurrender = !humanBlockingOverlay && !surrendering && !game.matchResult && game.phase !== "reward_summary";
 
   useEffect(() => {
     if (humanBlockingOverlay) return;
@@ -558,14 +561,15 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     if (!playerIdentity) return;
 
     const result = matchResultToBucket(game.matchResult);
+    const surrendered = result === "loss" && surrenderedMatchRef.current;
     // Effect runs once for match_result and again for reward_summary; the ref dedupes the POST.
-    const signature = `${game.matchResult}:${result}`;
+    const signature = `${game.matchResult}:${result}:${surrendered ? "surrender" : "normal"}`;
     if (persistedMatchSignatureRef.current === signature) return;
     persistedMatchSignatureRef.current = signature;
 
     let cancelled = false;
     const opponentEloBefore = game.enemy.aiProfile?.eloRating;
-    postMatchFinished({ identity: playerIdentity, mode: "pve", result, opponentEloBefore })
+    postMatchFinished({ identity: playerIdentity, mode: "pve", result, opponentEloBefore, ...(surrendered ? { surrendered: true } : {}) })
       .then((response) => {
         if (cancelled) return;
         if (Array.isArray(response.player.ownedCards)) {
@@ -812,6 +816,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
 
       clearHumanMessageBuffers();
       resetSoundCues(soundCueRef);
+      surrenderedMatchRef.current = false;
       activeRewardMatchIdRef.current = nextMatch.matchId;
       setMatchInfo(nextMatch);
       setGame(nextGame);
@@ -823,6 +828,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       setRoundWinnerCardIds(new Set());
       setSelectionOpen(false);
       setTurnSeconds(TURN_SECONDS);
+      setSurrendering(false);
       setHumanStatus("matched");
       setHumanMessage("");
       setMatchmakingQueuedAt(null);
@@ -980,6 +986,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setRoundWinnerCardIds(new Set());
     setSelectionOpen(false);
     setTurnSeconds(0);
+    setSurrendering(false);
     clearHumanMessageBuffers();
     setGame((value) => ({
       ...value,
@@ -1000,6 +1007,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setEnemyLockedMove(null);
     setRoundWinnerCardIds(new Set());
     setSelectionOpen(false);
+    setSurrendering(false);
     setPersistedRewards(null);
     setPersistedRewardsError(null);
     activeRewardMatchIdRef.current = null;
@@ -1110,6 +1118,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
 
   function resetAiMatch() {
     aiMoveRequestIdRef.current += 1;
+    surrenderedMatchRef.current = false;
     resetSoundCues(soundCueRef);
 
     const next = createInitialGame({ playerCollectionIds, playerDeckIds, playerName, playerEloRating });
@@ -1127,6 +1136,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setMatchmakingQueuedAt(null);
     setPersistedRewards(null);
     setPersistedRewardsError(null);
+    setSurrendering(false);
     persistedMatchSignatureRef.current = null;
   }
 
@@ -1157,6 +1167,44 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   function closeSelection() {
     setSelectionOpen(false);
     setGame((value) => (value.phase === "card_preview" ? { ...value, phase: "player_turn" } : value));
+  }
+
+  function surrenderMatch() {
+    if (!canSurrender) return;
+
+    setSurrendering(true);
+    setSelectionOpen(false);
+    setPending(null);
+    setEnemyLockedMove(null);
+    setTurnSeconds(0);
+    setClashOverlayDone(false);
+    setHudHpOverride({});
+
+    if (isHumanMatch) {
+      const currentMatch = matchInfoRef.current;
+      const socket = socketRef.current;
+      if (!currentMatch || !isSocketOpen(socket)) {
+        setSurrendering(false);
+        setHumanStatus("error");
+        setHumanMessage("З'єднання арени ще не готове для здачі.");
+        return;
+      }
+
+      sendSocketMessage(socket, {
+        type: "surrender_match",
+        matchId: currentMatch.matchId,
+      });
+      return;
+    }
+
+    aiMoveRequestIdRef.current += 1;
+    surrenderedMatchRef.current = true;
+    persistedMatchSignatureRef.current = null;
+    setGame((value) => ({
+      ...value,
+      phase: "reward_summary",
+      matchResult: "enemy",
+    }));
   }
 
   // ── v2 hand prop construction (kept inline so existing state names flow through) ──
@@ -1324,6 +1372,8 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
           onConfirmPick={confirmSelection}
           onCancelPick={closeSelection}
           onLeave={onOpenCollection ?? (() => {})}
+          onSurrender={surrenderMatch}
+          canSurrender={canSurrender}
           onOpenDecks={() => {
             // TODO(owner): wire deck-management modal. Today GameRoot only
             // exposes onOpenCollection (which both Leaves the match AND opens

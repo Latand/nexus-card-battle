@@ -153,11 +153,13 @@ export async function handlePlayerMatchFinishedPost(request: Request, store: Pla
     const mode = parseMatchMode(body.mode);
     const result = parseMatchResult(body.result);
     const opponentEloBefore = parseOptionalRating(body.opponentEloBefore);
+    const eloLossMultiplier = body.surrendered === true && result === "loss" ? 0.5 : undefined;
 
     const { summary, persisted } = await applyAndSummarizeMatchRewards(store, identity, {
       mode,
       result,
       ...(opponentEloBefore !== undefined ? { opponentEloBefore } : {}),
+      ...(eloLossMultiplier !== undefined ? { eloLossMultiplier } : {}),
     });
 
     return Response.json(
@@ -170,13 +172,14 @@ export async function handlePlayerMatchFinishedPost(request: Request, store: Pla
 }
 
 export type ApplyMatchRewardsContext =
-  | { mode: "pve"; result: MatchResultBucket; opponentEloBefore?: number }
-  | { mode: "pvp"; result: MatchResultBucket; opponentEloBefore?: number };
+  | { mode: "pve"; result: MatchResultBucket; opponentEloBefore?: number; eloLossMultiplier?: number }
+  | { mode: "pvp"; result: MatchResultBucket; opponentEloBefore?: number; eloLossMultiplier?: number };
 
 export type PvpSideInput = {
   key: string;
   identity: PlayerIdentity;
   result: MatchResultBucket;
+  eloLossMultiplier?: number;
 };
 
 export type PvpSideOutcome = {
@@ -261,8 +264,17 @@ export async function applyPvpMatchRewardsForBothSides(
       const opponent = sides[index === 0 ? 1 : 0];
       const matchInfo: ApplyMatchRewardsContext =
         everyEloRead && ratingByKey.has(opponent.key)
-          ? { mode: "pvp", result: side.result, opponentEloBefore: ratingByKey.get(opponent.key)! }
-          : { mode: "pvp", result: side.result };
+          ? {
+              mode: "pvp",
+              result: side.result,
+              opponentEloBefore: ratingByKey.get(opponent.key)!,
+              ...(side.eloLossMultiplier !== undefined ? { eloLossMultiplier: side.eloLossMultiplier } : {}),
+            }
+          : {
+              mode: "pvp",
+              result: side.result,
+              ...(side.eloLossMultiplier !== undefined ? { eloLossMultiplier: side.eloLossMultiplier } : {}),
+            };
 
       try {
         const { summary } = await applyAndSummarizeMatchRewards(store, side.identity, matchInfo);

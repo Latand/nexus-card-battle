@@ -296,6 +296,45 @@ test("PvP forfeit emits matched ELO deltas computed against each opponent's pre-
   second.close();
 });
 
+test("explicit PvP surrender halves only the surrenderer's ELO loss", async ({ baseURL, request }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const winnerIdentity = testIdentity("surrender-winner");
+  const loserIdentity = testIdentity("surrender-loser");
+  await seedRealtimeProfile(request, winnerIdentity, { eloRating: 1000 });
+  await seedRealtimeProfile(request, loserIdentity, { eloRating: 1000 });
+
+  const winner = await connectRealtimeClient(wsUrl, "Surrender Winner", PROTOCOL_OWNED_DECK_IDS, { identity: winnerIdentity });
+  const loser = await connectRealtimeClient(wsUrl, "Surrender Loser", PROTOCOL_OWNED_DECK_IDS, { identity: loserIdentity });
+
+  const winnerReady = await winner.waitFor("match_ready");
+  const loserReady = await loser.waitFor("match_ready");
+
+  loser.send({
+    type: "surrender_match",
+    matchId: loserReady.matchId,
+  });
+
+  const winnerForfeit = await winner.waitFor("match_forfeit", { timeoutMs: 5_000 });
+  const loserForfeit = await loser.waitFor("match_forfeit", { timeoutMs: 5_000 });
+  expect(winnerForfeit.reason).toBe("surrender");
+  expect(loserForfeit.reason).toBe("surrender");
+  expect(winnerForfeit.winnerId).toBe(winnerReady.playerId);
+  expect(winnerForfeit.loserId).toBe(loserReady.playerId);
+
+  const winnerReward = await winner.waitFor("reward_summary", { timeoutMs: 5_000 });
+  const loserReward = await loser.waitFor("reward_summary", { timeoutMs: 5_000 });
+  const winnerPayload = winnerReward.payload as RewardSummary;
+  const loserPayload = loserReward.payload as RewardSummary;
+
+  expect(winnerPayload.deltaElo).toBe(16);
+  expect(winnerPayload.newTotals.eloRating).toBe(1016);
+  expect(loserPayload.deltaElo).toBe(-8);
+  expect(loserPayload.newTotals.eloRating).toBe(992);
+
+  winner.close();
+  loser.close();
+});
+
 test("disconnect mid-match forfeits the disconnecting side and emits a win reward_summary to the opponent", async ({ baseURL, request }) => {
   const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
   const quitterIdentity = testIdentity("disconnect-quitter");

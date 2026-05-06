@@ -10,6 +10,8 @@ export type MatchFinishedRequest = {
   // ELO of the AI bot the player faced. Required for the same ELO delta
   // formula live arena matches use.
   opponentEloBefore?: number;
+  // Explicit surrender is a loss, but applies a softer ELO loss.
+  surrendered?: boolean;
 };
 
 export type MatchFinishedResponse = {

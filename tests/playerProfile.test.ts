@@ -590,6 +590,30 @@ describe("player match-finished API (PvE)", () => {
     expect(store.snapshot(loserIdentity)?.eloRating).toBe(984);
     expect(failures).toEqual([]);
   });
+
+  test("applyPvpMatchRewardsForBothSides keeps winner ELO gain normal but halves surrenderer's ELO loss", async () => {
+    const winnerIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-elo-surrender-winner" };
+    const loserIdentity: PlayerIdentity = { mode: "guest", guestId: "guest-elo-surrender-loser" };
+    const store = new MemoryPlayerProfileStore([
+      { ...createNewStoredPlayerProfile("player-surrender-winner", winnerIdentity), eloRating: 1000 },
+      { ...createNewStoredPlayerProfile("player-surrender-loser", loserIdentity), eloRating: 1000 },
+    ]);
+
+    const outcomes = await applyPvpMatchRewardsForBothSides(store, [
+      { key: "winner", identity: winnerIdentity, result: "win" },
+      { key: "loser", identity: loserIdentity, result: "loss", eloLossMultiplier: 0.5 },
+    ]);
+
+    const winnerSummary = outcomes.find((entry) => entry.key === "winner")?.summary as RewardSummary;
+    const loserSummary = outcomes.find((entry) => entry.key === "loser")?.summary as RewardSummary;
+
+    expect(winnerSummary.deltaElo).toBe(16);
+    expect(winnerSummary.newTotals.eloRating).toBe(1016);
+    expect(loserSummary.deltaElo).toBe(-8);
+    expect(loserSummary.newTotals.eloRating).toBe(992);
+    expect(store.snapshot(winnerIdentity)?.eloRating).toBe(1016);
+    expect(store.snapshot(loserIdentity)?.eloRating).toBe(992);
+  });
 });
 
 describe("player sell API", () => {

@@ -208,6 +208,11 @@ function handleSocketMessage(session, message) {
     return;
   }
 
+  if (message.type === "surrender_match") {
+    submitSurrender(session, message);
+    return;
+  }
+
   if (message.type === "leave_match") {
     leaveMatch(session);
     return;
@@ -653,7 +658,13 @@ async function finalizePvpMatch(match, outcome) {
     .map((playerId) => {
       const player = match.players[playerId];
       if (!player?.identity) return null;
-      return { key: playerId, identity: player.identity, result: bucketForPlayer(playerId, outcome) };
+      const result = bucketForPlayer(playerId, outcome);
+      return {
+        key: playerId,
+        identity: player.identity,
+        result,
+        ...(outcome.surrenderLoserId === playerId && result === "loss" ? { eloLossMultiplier: 0.5 } : {}),
+      };
     })
     .filter(Boolean);
 
@@ -668,7 +679,11 @@ async function finalizePvpMatch(match, outcome) {
     outcomes = await Promise.all(
       sides.map(async (side) => {
         try {
-          const { summary } = await applyAndSummarizeMatchRewards(store, side.identity, { mode: "pvp", result: side.result });
+          const { summary } = await applyAndSummarizeMatchRewards(store, side.identity, {
+            mode: "pvp",
+            result: side.result,
+            ...(side.eloLossMultiplier !== undefined ? { eloLossMultiplier: side.eloLossMultiplier } : {}),
+          });
           return { key: side.key, summary };
         } catch (error) {
           return { key: side.key, summary: null, error };
@@ -719,6 +734,21 @@ function submitTurnTimeout(session, message) {
   forfeitMatch(match, session.id, "timeout");
 }
 
+function submitSurrender(session, message) {
+  const match = getSessionMatch(session);
+  if (!match) {
+    sendError(session, "No active match.");
+    return;
+  }
+
+  if (message.matchId !== match.id) {
+    sendError(session, "Surrender is for a stale match.");
+    return;
+  }
+
+  forfeitMatch(match, session.id, "surrender", { surrenderLoserId: session.id });
+}
+
 function leaveMatch(session) {
   const match = getSessionMatch(session);
   if (!match) return;
@@ -757,7 +787,7 @@ function clearTurnTimer(match) {
   }
 }
 
-function forfeitMatch(match, loserId, reason) {
+function forfeitMatch(match, loserId, reason, options = {}) {
   const winnerId = getOpponentId(match, loserId);
   clearTurnTimer(match);
 
@@ -770,7 +800,7 @@ function forfeitMatch(match, loserId, reason) {
     reason,
   });
 
-  finalizePvpMatch(match, { matchResult: "player", winnerSessionId: winnerId }).catch((error) => {
+  finalizePvpMatch(match, { matchResult: "player", winnerSessionId: winnerId, ...options }).catch((error) => {
     console.error("Arena forfeit reward finalization failed.", error);
   });
 }

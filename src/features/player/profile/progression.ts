@@ -6,7 +6,7 @@ import {
   computeLevelFromXp,
   type PlayerProfile,
 } from "./types";
-import { computeElo } from "./elo";
+import { DEFAULT_ELO_FLOOR, computeElo } from "./elo";
 
 export { computeLevelFromXp };
 
@@ -46,11 +46,13 @@ export type MatchInfo =
       mode: "pve";
       result: MatchResultBucket;
       opponentEloBefore?: number;
+      eloLossMultiplier?: number;
     }
   | {
       mode: "pvp";
       result: MatchResultBucket;
       opponentEloBefore?: number;
+      eloLossMultiplier?: number;
     };
 
 export type ComputedMatchRewardTotals = {
@@ -113,6 +115,13 @@ export function computeMatchRewards(
     });
     deltaElo = eloOutcome.delta;
     eloRating = eloOutcome.newRating;
+
+    const lossMultiplier = sanitizeEloLossMultiplier(matchInfo.eloLossMultiplier);
+    if (matchInfo.result === "loss" && deltaElo < 0 && lossMultiplier !== undefined) {
+      deltaElo = Math.round(deltaElo * lossMultiplier);
+      eloRating = Math.max(DEFAULT_ELO_FLOOR, playerEloBefore + deltaElo);
+      deltaElo = eloRating - playerEloBefore;
+    }
   }
 
   return {
@@ -160,6 +169,12 @@ function positiveInteger(value: unknown, fallback: number) {
 function sanitizeRating(value: unknown, fallback: number) {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
   return Math.round(value);
+}
+
+function sanitizeEloLossMultiplier(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  if (value < 0 || value >= 1) return undefined;
+  return value;
 }
 
 function computePveCrystalReward(

@@ -22,6 +22,8 @@ export type BattleHudProps = {
   };
   roundNumber?: number;
   onOpenDecks?: () => void;
+  onSurrender?: () => void;
+  canSurrender?: boolean;
   /** When true, briefly pulses warm-red on the identity area (incoming damage). */
   damageFlash?: boolean;
   /** Active status effects on this side's fighter (poison, blessing, …). */
@@ -96,6 +98,8 @@ export function BattleHud({
   identity,
   roundNumber,
   onOpenDecks,
+  onSurrender,
+  canSurrender,
   damageFlash,
   statuses,
   className,
@@ -110,6 +114,7 @@ export function BattleHud({
   const visibleStatuses = statusList.slice(0, MAX_VISIBLE_STATUS_BADGES);
   const overflowStatusCount = Math.max(0, statusList.length - visibleStatuses.length);
   const statusSideKey = isOpponent ? "opponent" : "player";
+  const timerDanger = Boolean(timer && (timerWarning || timer.secondsLeft <= 10));
 
   return (
     <div
@@ -133,10 +138,10 @@ export function BattleHud({
           {isOpponent && timer ? (
             <span
               data-testid="turn-timer"
-              data-warning={timerWarning || timer.secondsLeft <= 10 ? "true" : "false"}
+              data-warning={timerDanger ? "true" : "false"}
               className={cn(
-                "inline-flex items-center gap-0.5 sm:gap-1 font-mono tabular-nums text-[10px] sm:text-[13px] leading-none text-ink/80",
-                (timerWarning || timer.secondsLeft <= 10) && "text-danger",
+                "inline-flex items-center gap-0.5 sm:gap-1 font-mono tabular-nums text-[10px] sm:text-[13px] leading-none text-ink/80 rounded px-1 py-0.5",
+                timerDanger && "text-danger animate-[turn-timer-blink_1s_steps(2,end)_infinite]",
               )}
               aria-label="Турн таймер"
             >
@@ -253,6 +258,23 @@ export function BattleHud({
               АРЕНА
             </span>
           ) : null}
+          {!isOpponent && onSurrender ? (
+            <button
+              type="button"
+              onClick={onSurrender}
+              disabled={!canSurrender}
+              data-testid="battle-hud-surrender"
+              aria-label="Здатись"
+              className={cn(
+                "inline-flex items-center justify-center h-5 px-1.5 sm:px-2 rounded border text-[9px] sm:text-[10px] uppercase tracking-wider transition-colors shrink-0",
+                "text-danger/90 border-danger/60 hover:bg-danger/10",
+                !canSurrender && "opacity-45 cursor-not-allowed hover:bg-transparent",
+              )}
+            >
+              <span className="hidden sm:inline">ЗДАТИСЬ</span>
+              <span className="sm:hidden" aria-hidden>×</span>
+            </button>
+          ) : null}
           {isOpponent && onOpenDecks ? (
             <button
               type="button"
@@ -275,6 +297,16 @@ export function BattleHud({
           40% { transform: translateX(3px); }
           60% { transform: translateX(-2px); }
           80% { transform: translateX(2px); }
+        }
+        @keyframes turn-timer-blink {
+          0%, 100% {
+            background: rgba(217, 112, 86, 0.06);
+            box-shadow: 0 0 0 0 rgba(217, 112, 86, 0);
+          }
+          50% {
+            background: rgba(217, 112, 86, 0.22);
+            box-shadow: 0 0 0 2px rgba(217, 112, 86, 0.26);
+          }
         }
       `}</style>
 

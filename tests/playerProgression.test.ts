@@ -226,6 +226,16 @@ describe("computeMatchRewards (PvP ELO)", () => {
     expect(rewards.newTotals.eloRating).toBe(1484);
   });
 
+  test("surrender halves only the losing player's ELO loss", () => {
+    const rewards = computeMatchRewards(
+      { crystals: 0, totalXp: 0, level: 1, eloRating: 1000 },
+      { mode: "pvp", result: "loss", opponentEloBefore: 1000, eloLossMultiplier: 0.5 },
+    );
+
+    expect(rewards.deltaElo).toBe(-8);
+    expect(rewards.newTotals.eloRating).toBe(992);
+  });
+
   test("PvP draw against an equal-rated opponent leaves ELO unchanged", () => {
     const rewards = computeMatchRewards(
       { crystals: 0, totalXp: 0, level: 1, eloRating: 1200 },

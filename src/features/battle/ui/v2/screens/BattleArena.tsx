@@ -85,6 +85,8 @@ export type BattleArenaProps = {
   onCancelPick: () => void;
   onLeave: () => void;
   onOpenDecks?: () => void;
+  onSurrender?: () => void;
+  canSurrender?: boolean;
 
   /** Active hand ring (player|enemy|null). */
   activeHand?: "player" | "enemy" | null;
@@ -136,6 +138,8 @@ export function BattleArena({
   onCancelPick,
   onLeave,
   onOpenDecks,
+  onSurrender,
+  canSurrender,
   activeHand,
   playerDamageFlash,
   enemyDamageFlash,
@@ -227,6 +231,8 @@ export function BattleArena({
           roundNumber={game.round.round}
           damageFlash={playerDamageFlash}
           statuses={player.statuses}
+          onSurrender={onSurrender}
+          canSurrender={canSurrender}
         />
       </div>
 
