@@ -591,22 +591,22 @@ a {
 
 @media (max-width: 620px) and (orientation: portrait) {
   .battle-screen {
-    padding: 6px !important;
+    padding: 4px !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
   }
 
   .battle-board {
-    height: calc(100% - 12px);
-    grid-template-rows: auto minmax(0, auto) minmax(92px, 1fr) minmax(0, auto) auto;
+    height: calc(100% - 8px);
+    grid-template-rows: auto minmax(0, auto) minmax(34px, 0.42fr) minmax(0, auto) auto;
     align-content: stretch;
-    gap: 6px;
+    gap: 4px;
   }
 
   .battle-hand {
-    --battle-card-w: min(134px, calc((100dvw - 52px) / 4));
-    gap: 4px !important;
-    padding: 5px !important;
+    --battle-card-w: min(154px, calc((100dvw - 30px) / 4), 18dvh);
+    gap: 3px !important;
+    padding: 3px !important;
   }
 
   .battle-hand-card {
@@ -629,14 +629,18 @@ a {
   }
 
   .battle-arena-strip {
-    min-height: clamp(94px, 15dvh, 116px) !important;
-    padding-inline: 4px;
+    min-height: 30px !important;
+    padding: 0 4px !important;
+    gap: 0 !important;
+  }
+
+  .battle-arena-strip [data-testid="round-status"] {
+    font-size: clamp(16px, 5.6dvw, 24px) !important;
+    opacity: 0.84;
   }
 
   .battle-arena-strip p {
-    max-width: 320px;
-    font-size: 11px;
-    line-height: 1.25;
+    display: none !important;
   }
 
   [data-testid="battle-overlay"] {
@@ -732,15 +736,15 @@ a {
 
   .battle-board {
     height: calc(100% - 8px);
-    grid-template-rows: 40px minmax(0, auto) minmax(34px, 1fr) minmax(0, auto) 40px;
+    grid-template-rows: 38px minmax(0, auto) minmax(22px, 0.28fr) minmax(0, auto) 38px;
     align-content: stretch;
-    gap: 3px;
+    gap: 2px;
   }
 
   .battle-hand {
-    --battle-card-w: min(120px, 17dvw, 23dvh);
-    gap: 6px !important;
-    padding: 4px 8px !important;
+    --battle-card-w: min(132px, calc((100dvw - 70px) / 4), 25.5dvh);
+    gap: 5px !important;
+    padding: 2px 6px !important;
   }
 
   .battle-hand-card {
@@ -785,20 +789,25 @@ a {
   }
 
   .battle-arena-strip {
-    min-height: 38px !important;
+    min-height: 22px !important;
+    padding-block: 0 !important;
     gap: 2px !important;
   }
 
   .battle-arena-strip [data-testid="round-status"] {
     min-width: 0 !important;
-    padding-inline: 8px !important;
-    font-size: clamp(22px, 5.2dvw, 34px);
+    padding-inline: 6px !important;
+    font-size: clamp(14px, 3.5dvw, 22px) !important;
+    opacity: 0.8;
   }
 
   .battle-arena-strip p {
-    max-width: min(560px, 82dvw);
-    font-size: 10px;
-    line-height: 1.15;
+    display: none !important;
+  }
+
+  [data-testid="attack-caption"],
+  [data-testid="attack-impact-flash"] {
+    display: none !important;
   }
 
   [data-testid="battle-overlay"] {
@@ -843,21 +852,22 @@ a {
 
 @media (orientation: landscape) and (max-height: 430px) {
   .battle-board {
-    grid-template-rows: 38px minmax(0, auto) minmax(30px, 1fr) minmax(0, auto) 38px;
+    grid-template-rows: 36px minmax(0, auto) minmax(18px, 0.2fr) minmax(0, auto) 36px;
     gap: 2px;
   }
 
   .battle-hand {
-    --battle-card-w: min(106px, 15.5dvw, 21.5dvh);
-    padding-block: 3px !important;
+    --battle-card-w: min(124px, calc((100dvw - 58px) / 4), 27dvh);
+    gap: 4px !important;
+    padding-block: 1px !important;
   }
 
   .battle-arena-strip {
-    min-height: 38px !important;
+    min-height: 18px !important;
   }
 
-  .battle-arena-strip p {
-    display: none;
+  .battle-arena-strip [data-testid="round-status"] {
+    font-size: clamp(12px, 3dvw, 18px) !important;
   }
 
   .duel-grid {
