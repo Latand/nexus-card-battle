@@ -222,20 +222,20 @@ describe("player profile API", () => {
 describe("player match-finished API (PvE)", () => {
   const identity: PlayerIdentity = { mode: "guest", guestId: "guest-pve-rewards" };
 
-  test("a fresh profile + PvE win persists +30 XP, no crystals, no level-up, and increments wins", async () => {
+  test("a fresh profile + PvE win persists +30 XP, match crystals, no level-up, and increments wins", async () => {
     const store = new MemoryPlayerProfileStore();
     const response = await postMatchFinished(store, { identity, mode: "pve", result: "win" });
     const body = (await response.json()) as { rewards: RewardSummary; player: PlayerProfile };
 
     expect(response.status).toBe(200);
     expect(body.rewards.deltaXp).toBe(30);
-    expect(body.rewards.deltaCrystals).toBe(0);
+    expect(body.rewards.deltaCrystals).toBe(10);
     expect(body.rewards.leveledUp).toBe(false);
     expect(body.rewards.levelUpBonusCrystals).toBe(0);
-    expect(body.rewards.newTotals).toEqual({ crystals: 0, totalXp: 30, level: 1 });
+    expect(body.rewards.newTotals).toEqual({ crystals: 10, totalXp: 30, level: 1 });
 
     expect(body.player.totalXp).toBe(30);
-    expect(body.player.crystals).toBe(0);
+    expect(body.player.crystals).toBe(10);
     expect(body.player.level).toBe(1);
     expect(body.player.wins).toBe(1);
     expect(body.player.losses).toBe(0);
@@ -254,10 +254,10 @@ describe("player match-finished API (PvE)", () => {
     expect(response.status).toBe(200);
     expect(body.rewards.leveledUp).toBe(false);
     expect(body.rewards.newTotals.level).toBe(1);
-    expect(body.rewards.newTotals.crystals).toBe(0);
+    expect(body.rewards.newTotals.crystals).toBe(10);
   });
 
-  test("seven PvE wins accumulate to 210 XP and trigger level-up to level 2 with a 50-crystal bonus", async () => {
+  test("seven PvE wins accumulate to 210 XP, match crystals, and a level-2 bonus", async () => {
     const store = new MemoryPlayerProfileStore();
 
     let lastBody: { rewards: RewardSummary; player: PlayerProfile } | undefined;
@@ -270,12 +270,12 @@ describe("player match-finished API (PvE)", () => {
 
     expect(lastBody.player.totalXp).toBe(210);
     expect(lastBody.player.level).toBe(2);
-    expect(lastBody.player.crystals).toBe(50);
+    expect(lastBody.player.crystals).toBe(120);
     expect(lastBody.player.wins).toBe(7);
     expect(lastBody.rewards.leveledUp).toBe(true);
-    expect(lastBody.rewards.deltaCrystals).toBe(50);
+    expect(lastBody.rewards.deltaCrystals).toBe(60);
     expect(lastBody.rewards.levelUpBonusCrystals).toBe(50);
-    expect(lastBody.rewards.newTotals).toEqual({ crystals: 50, totalXp: 210, level: 2 });
+    expect(lastBody.rewards.newTotals).toEqual({ crystals: 120, totalXp: 210, level: 2 });
   });
 
   test("PvE draws and losses persist their result counters and XP", async () => {
@@ -289,7 +289,7 @@ describe("player match-finished API (PvE)", () => {
     expect(persisted?.draws).toBe(1);
     expect(persisted?.losses).toBe(2);
     expect(persisted?.wins).toBe(0);
-    expect(persisted?.crystals).toBe(0);
+    expect(persisted?.crystals).toBe(5);
   });
 
   test("rejects a PvP request with a 400 invalid_match", async () => {
@@ -490,7 +490,7 @@ describe("player match-finished API (PvE)", () => {
 
     const persisted = store.snapshot(racyIdentity);
     expect(persisted?.totalXp).toBe(195 + 30 + 30);
-    expect(persisted?.crystals).toBe(50);
+    expect(persisted?.crystals).toBe(70);
     expect(persisted?.wins).toBe(2);
   });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { requestBattleAiMove } from "@/features/battle/ai/client";
 import { postMatchFinished } from "@/features/player/profile/client";
 import { useLobbyChat } from "@/features/presence/client";
 import { readStableSessionName, rememberStableSessionName } from "@/features/presence/sessionName";
@@ -65,6 +66,7 @@ type HumanFirstMove = {
 type KnownEnemyMove = {
   card: Card;
   energy?: number;
+  damageBoost?: boolean;
 };
 
 type HumanMatchPlayer = {
@@ -200,10 +202,19 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const humanMessageHandlerRef = useRef<(message: HumanSocketMessage) => void>(() => {});
   const humanSessionNameRef = useRef("");
   const stableHumanNameRef = useRef("");
+  const mountedRef = useRef(true);
+  const aiMoveRequestIdRef = useRef(0);
 
   useEffect(() => {
     gameRef.current = game;
   }, [game]);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      aiMoveRequestIdRef.current += 1;
+    };
+  }, []);
 
   // Persist AI-mode game state across refreshes; clear once a match concludes
   // so the next entry to the battle screen starts a fresh fight.
@@ -366,18 +377,30 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
             return;
           }
 
-          const enemyMove = chooseEnemyMove(game.enemy, game.player, game.round.round);
-
-          setEnemyLockedMove(enemyMove);
+          const requestId = ++aiMoveRequestIdRef.current;
+          setEnemyLockedMove(null);
           setGame((value) => ({
             ...value,
             phase: "opponent_turn",
-            round: {
-              ...value.round,
-              enemyCardId: enemyMove.card.id,
-              enemyEnergyBid: enemyMove.energy,
-            },
           }));
+          chooseAiEnemyMove(game).then((enemyMove) => {
+            if (!isCurrentAiMoveRequest(requestId, game.round.round)) return;
+
+            setEnemyLockedMove(enemyMove);
+            setGame((value) => {
+              if (value.round.round !== game.round.round || value.first !== "enemy" || value.phase !== "opponent_turn") return value;
+
+              return {
+                ...value,
+                phase: "player_turn",
+                round: {
+                  ...value.round,
+                  enemyCardId: enemyMove.card.id,
+                  enemyEnergyBid: enemyMove.energy,
+                },
+              };
+            });
+          });
           return;
         }
 
@@ -388,9 +411,10 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
 
     if (game.phase === "opponent_turn") {
       if (isHumanMatch) return;
+      if (!pending) return;
 
       return schedule(() => {
-        setGame((value) => ({ ...value, phase: pending ? "battle_intro" : "player_turn" }));
+        setGame((value) => ({ ...value, phase: "battle_intro" }));
       }, PHASE_TIMING_MS.opponent_turn);
     }
 
@@ -519,14 +543,69 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       return;
     }
 
+    if (game.first === "player") {
+      const requestGame = game;
+      const requestId = ++aiMoveRequestIdRef.current;
+
+      setSelectedId(card.id);
+      setSelectionOpen(false);
+      setTurnSeconds(TURN_SECONDS);
+      setEnemyLockedMove(null);
+      setGame((value) => ({
+        ...value,
+        phase: "opponent_turn",
+        round: {
+          ...value.round,
+          playerCardId: card.id,
+          playerEnergyBid: legalEnergy,
+        },
+      }));
+
+      chooseAiEnemyMove(requestGame, card).then((enemyMove) => {
+        if (!isCurrentAiMoveRequest(requestId, requestGame.round.round)) return;
+
+        const outcome = resolveRound(
+          requestGame.player,
+          requestGame.enemy,
+          card,
+          legalEnergy,
+          effectiveBoost,
+          requestGame.first,
+          requestGame.round.round,
+          enemyMove,
+        );
+
+        setPending(outcome);
+        setRoundWinnerCardIds((value) => addRoundWinnerCardId(value, outcome.clash));
+        setEnemyLockedMove(enemyMove);
+        setGame((value) => {
+          if (value.round.round !== requestGame.round.round || value.phase !== "opponent_turn") return value;
+
+          return {
+            ...value,
+            phase: "battle_intro",
+            round: {
+              ...value.round,
+              enemyCardId: enemyMove.card.id,
+              enemyEnergyBid: enemyMove.energy,
+              clash: outcome.clash,
+            },
+          };
+        });
+      });
+      return;
+    }
+
     const knownEnemyMove =
-      game.first === "enemy"
-        ? enemyLockedMove?.energy !== undefined
-          ? ({ card: enemyLockedMove.card, energy: enemyLockedMove.energy } satisfies EnemyMove)
-          : chooseEnemyMove(game.enemy, game.player, game.round.round)
-        : undefined;
+      enemyLockedMove?.energy !== undefined
+        ? ({
+            card: enemyLockedMove.card,
+            energy: enemyLockedMove.energy,
+            damageBoost: Boolean(enemyLockedMove.damageBoost),
+          } satisfies EnemyMove)
+        : chooseEnemyMove(game.enemy, game.player, game.round.round, { visiblePlayerCard: card, first: game.first });
     const outcome = resolveRound(game.player, game.enemy, card, legalEnergy, effectiveBoost, game.first, game.round.round, knownEnemyMove);
-    const enemyMove = knownEnemyMove ?? { card: outcome.clash.enemyCard, energy: outcome.clash.enemyEnergy };
+    const enemyMove = knownEnemyMove;
 
     setSelectedId(card.id);
     setSelectionOpen(false);
@@ -847,6 +926,22 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setHumanChatDraft("");
   }
 
+  async function chooseAiEnemyMove(currentGame: GameState, visiblePlayerCard?: Card): Promise<EnemyMove> {
+    try {
+      return await requestBattleAiMove(currentGame, { visiblePlayerCard });
+    } catch (error) {
+      console.warn("Remote AI move failed; using local fallback.", error instanceof Error ? error.message : "Unknown error");
+      return chooseEnemyMove(currentGame.enemy, currentGame.player, currentGame.round.round, {
+        visiblePlayerCard,
+        first: currentGame.first,
+      });
+    }
+  }
+
+  function isCurrentAiMoveRequest(requestId: number, round: number) {
+    return mountedRef.current && aiMoveRequestIdRef.current === requestId && gameRef.current.round.round === round && !gameRef.current.matchResult;
+  }
+
   function flushBufferedHumanMessages() {
     const currentGame = gameRef.current;
     const round = currentGame.round.round;
@@ -901,6 +996,8 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   });
 
   function reset() {
+    aiMoveRequestIdRef.current += 1;
+
     if (isHumanMatch) {
       restartHumanQueue();
       return;
@@ -1075,7 +1172,6 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
           boostCost={DAMAGE_BOOST_COST}
           canBoost={canBoost}
           knownEnemyCard={enemyLockedMove?.card}
-          knownEnemyEnergy={enemyLockedMove?.energy}
           clash={arenaClash}
           clashPhase={game.phase}
           splash={splash}
@@ -1271,6 +1367,7 @@ function createKnownEnemyMoveFromHumanMove(game: GameState, move: HumanFirstMove
   return {
     card,
     ...(typeof move.energy === "number" ? { energy: move.energy } : {}),
+    ...(typeof move.boosted === "boolean" ? { damageBoost: move.boosted } : {}),
   };
 }
 
@@ -1362,4 +1459,3 @@ function matchResultToBucket(result: MatchResult): "win" | "draw" | "loss" {
   if (result === "draw") return "draw";
   return "loss";
 }
-

@@ -63,7 +63,7 @@ export type ComputedMatchRewardTotals = {
 export type ComputedMatchRewards = {
   deltaXp: number;
   deltaCrystals: number;
-  // Crystals NOT attributable to a level-up (PvE = 0).
+  // Crystals from the match itself, before any level-up bonus.
   matchCrystals: number;
   deltaElo?: number;
   leveledUp: boolean;

@@ -16,6 +16,7 @@ export type EnemyStrategyOptions = {
     energy: number;
     damageBoost?: boolean;
   };
+  visiblePlayerCard?: Card;
   first?: Side;
 };
 
@@ -97,7 +98,7 @@ function scoreMoveCandidate(
     return winValue + hpSwing + lethal + survivalRisk + lethalBias - spendPenalty;
   }
 
-  const expectedPlayerMoves = getExpectedPlayerMoves(player, round, profile);
+  const expectedPlayerMoves = getExpectedPlayerMoves(player, round, profile, options.visiblePlayerCard);
   const matchupValue =
     expectedPlayerMoves.reduce((total, playerMove) => {
       const clash = evaluateKnownClash(candidate, enemy, player, playerMove, options.first ?? "enemy");
@@ -173,12 +174,13 @@ function evaluateKnownClash(
   };
 }
 
-function getExpectedPlayerMoves(player: Fighter, round: number, profile: FighterAiProfile) {
+function getExpectedPlayerMoves(player: Fighter, round: number, profile: FighterAiProfile, visiblePlayerCard?: Card) {
   const available = getAvailableCards(player);
   const roundsLeft = Math.max(1, MAX_ROUNDS - round + 1);
   const expectedEnergy = Math.max(0, Math.min(player.energy, Math.ceil(player.energy / roundsLeft) + (profile.difficulty === "champion" ? 1 : 0)));
+  const candidateCards = visiblePlayerCard ? available.filter((card) => card.id === visiblePlayerCard.id) : available;
 
-  return [...available]
+  return [...candidateCards]
     .sort((a, b) => b.power * (expectedEnergy + BASE_ATTACK_ENERGY) + b.damage * 2 - (a.power * (expectedEnergy + BASE_ATTACK_ENERGY) + a.damage * 2))
     .slice(0, Math.min(3, available.length))
     .map((card) => ({ card, energy: expectedEnergy, damageBoost: false }));

@@ -24,7 +24,7 @@ export function resolveRound(
   enemyMove?: EnemyMove,
 ): Outcome {
   const enemyChoice = enemyMove ?? chooseEnemyMove(enemy, player, round, {
-    knownPlayerMove: { card: playerCard, energy: playerEnergy, damageBoost },
+    visiblePlayerCard: playerCard,
     first,
   });
   const { playerBonus, enemyBonus } = getEffectiveBonusStates(player, playerCard, enemy, enemyChoice.card);

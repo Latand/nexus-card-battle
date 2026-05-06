@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   LEVEL_UP_CRYSTAL_BONUS_PER_LEVEL,
+  PVE_CRYSTAL_REWARDS,
   PVE_XP_REWARDS,
   PVP_CRYSTAL_REWARDS,
   PVP_XP_REWARDS,
@@ -82,22 +83,24 @@ describe("computeLevelFromXp", () => {
 describe("computeMatchRewards (PvE)", () => {
   const freshProfile = { crystals: 0, totalXp: 0, level: 1 };
 
-  test("PvE win awards +30 XP, no crystals, no level-up at zero baseline", () => {
+  test("PvE win awards +30 XP, match crystals, and no level-up at zero baseline", () => {
     const rewards = computeMatchRewards(freshProfile, { mode: "pve", result: "win" });
 
     expect(rewards.deltaXp).toBe(PVE_XP_REWARDS.win);
     expect(rewards.deltaXp).toBe(30);
-    expect(rewards.deltaCrystals).toBe(0);
+    expect(rewards.matchCrystals).toBe(PVE_CRYSTAL_REWARDS.winLower);
+    expect(rewards.deltaCrystals).toBe(10);
     expect(rewards.leveledUp).toBe(false);
     expect(rewards.levelUpBonusCrystals).toBe(0);
-    expect(rewards.newTotals).toEqual({ crystals: 0, totalXp: 30, level: 1 });
+    expect(rewards.newTotals).toEqual({ crystals: 10, totalXp: 30, level: 1 });
   });
 
-  test("PvE draw awards +15 XP", () => {
+  test("PvE draw awards +15 XP and draw crystals", () => {
     const rewards = computeMatchRewards(freshProfile, { mode: "pve", result: "draw" });
 
     expect(rewards.deltaXp).toBe(15);
-    expect(rewards.deltaCrystals).toBe(0);
+    expect(rewards.matchCrystals).toBe(PVE_CRYSTAL_REWARDS.draw);
+    expect(rewards.deltaCrystals).toBe(5);
     expect(rewards.leveledUp).toBe(false);
     expect(rewards.newTotals.totalXp).toBe(15);
     expect(rewards.newTotals.level).toBe(1);
@@ -123,11 +126,12 @@ describe("computeMatchRewards (PvE)", () => {
     expect(rewards.leveledUp).toBe(true);
     expect(rewards.levelUpBonusCrystals).toBe(2 * LEVEL_UP_CRYSTAL_BONUS_PER_LEVEL);
     expect(rewards.levelUpBonusCrystals).toBe(50);
-    expect(rewards.deltaCrystals).toBe(50);
-    expect(rewards.newTotals).toEqual({ crystals: 50, totalXp: 225, level: 2 });
+    expect(rewards.matchCrystals).toBe(PVE_CRYSTAL_REWARDS.winLower);
+    expect(rewards.deltaCrystals).toBe(60);
+    expect(rewards.newTotals).toEqual({ crystals: 60, totalXp: 225, level: 2 });
   });
 
-  test("level-up bonus stacks onto an existing crystal balance", () => {
+  test("level-up bonus stacks onto match crystals and an existing crystal balance", () => {
     const rewards = computeMatchRewards(
       { crystals: 12, totalXp: 195, level: 1 },
       { mode: "pve", result: "win" },
@@ -135,7 +139,7 @@ describe("computeMatchRewards (PvE)", () => {
 
     expect(rewards.leveledUp).toBe(true);
     expect(rewards.levelUpBonusCrystals).toBe(50);
-    expect(rewards.newTotals.crystals).toBe(12 + 50);
+    expect(rewards.newTotals.crystals).toBe(12 + 10 + 50);
   });
 
   test("rejects an unsupported match mode", () => {

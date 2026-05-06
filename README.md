@@ -33,6 +33,8 @@ Open [http://localhost:3000](http://localhost:3000).
 
 `bun run dev` starts the custom Node server, so local PvP uses the same `/ws` path as production.
 
+AI battle mode calls OpenRouter from a server route when `OPENROUTER_API_KEY` is set in `.env`. The default model is `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`; override it with `OPENROUTER_MODEL` if needed. If the key or provider is unavailable, the app falls back to the local strategy without exposing the key to the browser.
+
 ## Production
 
 Use the Docker/self-host path for PvP, because the arena needs a long-lived WebSocket server:
@@ -43,6 +45,7 @@ docker compose up -d --build
 
 By default Compose binds the app to `127.0.0.1:3010` and the container listens on `3000`.
 Compose also starts MongoDB with the persistent `nexus_mongodb_data` volume and provides `MONGODB_URI=mongodb://mongo:27017/nexus-card-battle` to the app. Set `MONGODB_URI` in the shell to point the app at a different MongoDB instance.
+Compose also passes `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_SITE_URL`, and `OPENROUTER_APP_TITLE` from the shell or `.env` into the app container.
 See [docs/deploy.md](docs/deploy.md) for the Nginx WebSocket proxy block.
 
 ## Known Limitations

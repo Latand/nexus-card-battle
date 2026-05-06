@@ -14,12 +14,12 @@ const guestIdentity: PlayerIdentity = {
 };
 
 describe("booster catalog", () => {
-  test("returns twelve curated two-clan boosters without C.O.R.R.", async () => {
+  test("returns thirteen curated boosters without C.O.R.R.", async () => {
     const response = await handleBoosterCatalogGet();
     const body = (await response.json()) as { boosters: { id: string; name: string; clans: string[] }[] };
 
     expect(response.status).toBe(200);
-    expect(body.boosters).toHaveLength(12);
+    expect(body.boosters).toHaveLength(13);
     expect(body.boosters.map((booster) => booster.name)).toEqual([
       "Neon Breach",
       "Factory Shift",
@@ -33,10 +33,12 @@ describe("booster catalog", () => {
       "Metro Chase",
       "Desert Signal",
       "Street Plague",
+      "Vibe Drop",
     ]);
 
     for (const booster of body.boosters) {
-      expect(booster.clans).toHaveLength(2);
+      expect(booster.clans.length).toBeGreaterThanOrEqual(1);
+      expect(booster.clans.length).toBeLessThanOrEqual(2);
       expect(booster.clans).not.toContain("C.O.R.R.");
     }
   });
