@@ -1,5 +1,4 @@
 import type { CSSProperties } from "react";
-import { useEffect, useState } from "react";
 import { cn } from "@/shared/lib/cn";
 import { getProjectileAssetForClan } from "./projectileAssets";
 
@@ -36,15 +35,10 @@ export function ProjectileSprite({
   const fallbackAsset = projectileAssets[Math.abs(kind) % projectileAssets.length];
   const clanAsset = getProjectileAssetForClan(clan);
   const animatedSrc = clanAsset ? `/nexus-assets/projectiles/clans/animated/${clanAsset.slug}.png` : "";
-  const [clanAssetLoaded, setClanAssetLoaded] = useState(false);
-  const [animatedAssetLoaded, setAnimatedAssetLoaded] = useState(false);
-  const activeAsset = (animatedAssetLoaded || clanAssetLoaded) && clanAsset ? clanAsset : fallbackAsset;
+  const shouldUseAnimatedAsset = Boolean(animatedSrc);
+  const shouldUseClanAsset = Boolean(clanAsset) && !shouldUseAnimatedAsset;
+  const activeAsset = clanAsset && (shouldUseAnimatedAsset || shouldUseClanAsset) ? clanAsset : fallbackAsset;
   const glowRgb = getGlowRgb(activeAsset.glow);
-
-  useEffect(() => {
-    setClanAssetLoaded(false);
-    setAnimatedAssetLoaded(false);
-  }, [animatedSrc, clanAsset?.src]);
 
   return (
     <span
@@ -54,7 +48,7 @@ export function ProjectileSprite({
       )}
       style={
         {
-          backgroundImage: animatedAssetLoaded || clanAssetLoaded ? "none" : `url('${fallbackAsset.src}')`,
+          backgroundImage: shouldUseAnimatedAsset || shouldUseClanAsset ? "none" : `url('${fallbackAsset.src}')`,
           imageRendering: "auto",
           "--sprite-flip": direction,
           "--sprite-scale": scale,
@@ -66,26 +60,12 @@ export function ProjectileSprite({
     >
       <span aria-hidden className="nexus-projectile-aura" />
       <span aria-hidden className="nexus-projectile-streak" />
-      {animatedSrc ? (
-        <>
-          <img
-            alt=""
-            aria-hidden
-            className="hidden"
-            draggable={false}
-            src={animatedSrc}
-            onLoad={() => setAnimatedAssetLoaded(true)}
-            onError={() => setAnimatedAssetLoaded(false)}
-          />
-          <span
-            aria-hidden
-            className={cn(
-              "absolute inset-0 bg-contain bg-no-repeat animate-[nexus-projectile-frames_360ms_linear_infinite]",
-              animatedAssetLoaded ? "block" : "hidden",
-            )}
-            style={{ backgroundImage: `url('${animatedSrc}')`, backgroundSize: "300% 100%", imageRendering: "auto" }}
-          />
-        </>
+      {shouldUseAnimatedAsset && animatedSrc ? (
+        <span
+          aria-hidden
+          className="absolute inset-0 bg-contain bg-no-repeat animate-[nexus-projectile-frames_360ms_linear_infinite]"
+          style={{ backgroundImage: `url('${animatedSrc}')`, backgroundSize: "300% 100%", imageRendering: "auto" }}
+        />
       ) : null}
       {clanAsset ? (
         <img
@@ -93,12 +73,10 @@ export function ProjectileSprite({
           aria-hidden
           className={cn(
             "h-full w-full object-contain",
-            clanAssetLoaded && !animatedAssetLoaded ? "block" : "hidden",
+            shouldUseClanAsset ? "block" : "hidden",
           )}
           draggable={false}
           src={clanAsset.src}
-          onLoad={() => setClanAssetLoaded(true)}
-          onError={() => setClanAssetLoaded(false)}
         />
       ) : null}
     </span>
