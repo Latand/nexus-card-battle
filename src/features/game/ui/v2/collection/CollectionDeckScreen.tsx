@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { hasCardArt } from "@/features/battle/model/cardArtIndex";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cards } from "@/features/battle/model/cards";
 import { clanList } from "@/features/battle/model/clans";
 import type { Card } from "@/features/battle/model/types";
+import { BattleCard } from "@/features/battle/ui/components/BattleCard";
 import { PLAYER_DECK_SIZE } from "@/features/game/model/deckConfig";
 import { sellPlayerCards } from "@/features/player/profile/client";
 import { cn } from "@/shared/lib/cn";
@@ -520,59 +520,14 @@ export function CollectionDeckScreen(props: CollectionDeckScreenProps) {
 }
 
 function CollectionCardTile({ card, locked }: { card: Card; locked: boolean }) {
-  const hasArt = hasCardArt(card.id);
-  const style = {
-    "--accent": card.accent,
-    background:
-      `linear-gradient(180deg, color-mix(in srgb, ${card.accent}, transparent 83%), rgba(12,14,15,0.92) 40%, rgba(7,8,8,0.98)), ${card.portrait}`,
-    boxShadow: locked
-      ? "inset 0 0 0 1px rgba(255,255,255,0.06)"
-      : `inset 0 0 0 1px color-mix(in srgb, ${card.accent}, #f6dea5 24%), 0 8px 16px rgba(0,0,0,0.32)`,
-  } as CSSProperties;
-
   return (
     <div
       className={cn(
-        "relative aspect-[2/3] w-full overflow-hidden rounded-[10px] border border-black/45 text-left",
-        locked ? "saturate-[0.45]" : "hover:brightness-110",
+        "relative w-full transition-transform",
+        locked ? "saturate-[0.45] opacity-75" : "hover:brightness-110",
       )}
-      style={style}
     >
-      <div className="absolute left-[9%] top-[9%] h-[43%] w-[82%] overflow-hidden rounded-[5px] bg-black/25">
-        {hasArt && (
-          // eslint-disable-next-line @next/next/no-img-element -- catalog thumbnails avoid the heavier next/image wrapper.
-          <img
-            src={card.artUrl}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="h-full w-full object-cover object-top"
-            onError={(event) => {
-              event.currentTarget.hidden = true;
-            }}
-          />
-        )}
-      </div>
-      <div className="pointer-events-none absolute inset-x-[7%] top-[4%] flex items-center justify-between gap-1 text-[clamp(5px,1.6vw,9px)] font-black uppercase text-[#efd481]">
-        <span className="min-w-0 truncate">{RARITY_LABELS[card.rarity]}</span>
-        <span className="shrink-0 text-[#f8ebcb]">{card.level}</span>
-      </div>
-      <div className="pointer-events-none absolute inset-x-[8%] top-[54%] grid min-h-[15%] content-start gap-0.5">
-        <b className="min-w-0 truncate text-center text-[clamp(8px,2vw,13px)] font-black leading-none text-[#fff4cd] [text-shadow:0_1px_0_rgba(0,0,0,0.9)]">
-          {card.name}
-        </b>
-        <span className="min-w-0 truncate text-center text-[clamp(5px,1.45vw,9px)] font-bold uppercase text-[#bdb095]">
-          {card.clan}
-        </span>
-      </div>
-      <div className="pointer-events-none absolute bottom-[10%] left-[9%] right-[9%] flex items-center justify-between text-[clamp(9px,2.4vw,16px)] font-black">
-        <span className="grid aspect-square w-[22%] place-items-center rounded-full bg-black/55 text-[#ffe08a]">
-          {card.power}
-        </span>
-        <span className="grid aspect-square w-[22%] place-items-center rounded-full bg-black/55 text-[#ff7668]">
-          {card.damage}
-        </span>
-      </div>
+      <BattleCard card={card} />
     </div>
   );
 }
