@@ -204,6 +204,74 @@ test("opens an already known booster again for 100 crystals from the collection 
   await expect(page.getByTestId("paid-booster-open-neon-breach")).toBeDisabled();
 });
 
+test("does not keep a stale group booster visible after group context becomes invalid", async ({ page }) => {
+  const identity: PlayerIdentity = { mode: "guest", guestId: "guest-group-booster-stale-e2e" };
+  let boosterCatalogRequests = 0;
+
+  await mockDeckReadyProfile(page, {
+    identity,
+    crystals: 100,
+    openedBoosterIds: ["neon-breach", "factory-shift"],
+    starterFreeBoostersRemaining: 0,
+  });
+
+  await page.route("**/api/boosters**", async (route) => {
+    boosterCatalogRequests += 1;
+    const url = new URL(route.request().url());
+    const groupContext = url.searchParams.get("groupContext");
+
+    if (groupContext === "valid-group-context") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          boosters: [
+            {
+              id: "vibe-drop",
+              name: "Vibe Drop",
+              clans: ["VibeCoders"],
+              cardCount: 4,
+              presentation: "special",
+            },
+            {
+              id: "group--100valid",
+              name: "Valid Group",
+              clans: ["Valid Group"],
+              cardCount: 4,
+              presentation: "group",
+              groupChatId: "-100valid",
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
+    await route.fulfill({
+      status: 403,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: "group_context_invalid",
+        message: "Signed group context is invalid.",
+      }),
+    });
+  });
+
+  await page.goto("/?groupContext=valid-group-context");
+  await page.getByTestId("topbar-open-boosters").click();
+  await expect(page.getByTestId("booster-shop-item-group--100valid")).toBeVisible();
+
+  await page.evaluate(() => {
+    window.history.pushState(null, "", "/?groupContext=tampered-group-context");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  });
+
+  await expect(page.getByTestId("booster-shop-error")).toBeVisible();
+  await expect(page.getByTestId("booster-shop-list")).toHaveCount(0);
+  await expect(page.getByTestId("booster-shop-item-group--100valid")).toHaveCount(0);
+  expect(boosterCatalogRequests).toBeGreaterThanOrEqual(2);
+});
+
 test("blocks overlapping deck edits and rolls a failed save back to the confirmed profile deck", async ({ page }) => {
   if (!extraOwnedCardId || !secondExtraOwnedCardId) throw new Error("Fixture must include two owned cards outside the deck.");
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Card } from "@/features/battle/model/types";
 import { BattleCard } from "@/features/battle/ui/components/BattleCard";
 import { fetchBoosterCatalog, openPaidBooster } from "@/features/boosters/client";
@@ -53,15 +53,13 @@ export function BoosterShopModal({
   const [boosters, setBoosters] = useState<BoosterResponse[] | null>(null);
   const [status, setStatus] = useState<ShopStatus>({ kind: "idle" });
   const [reveal, setReveal] = useState<RevealState | null>(null);
-  const fetchedKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    const fetchKey = groupContext ?? "";
-    if (fetchedKeyRef.current === fetchKey) return;
-    fetchedKeyRef.current = fetchKey;
 
     let cancelled = false;
+    setBoosters(null);
+    setReveal(null);
     setStatus({ kind: "loading" });
     void fetchBoosterCatalog(groupContext)
       .then((response) => {
@@ -72,6 +70,8 @@ export function BoosterShopModal({
       .catch((error: unknown) => {
         if (cancelled) return;
         const message = error instanceof Error ? error.message : "Не вдалося завантажити бустери";
+        setBoosters(null);
+        setReveal(null);
         setStatus({ kind: "error", message });
       });
 
@@ -161,7 +161,7 @@ export function BoosterShopModal({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4 flex flex-col gap-4">
-          {reveal && (
+          {status.kind !== "error" && reveal && (
             <RevealPanel reveal={reveal} onDismiss={() => setReveal(null)} />
           )}
 
@@ -185,13 +185,13 @@ export function BoosterShopModal({
             </div>
           )}
 
-          {!loading && boosters && boosters.length === 0 && (
+          {status.kind !== "error" && !loading && boosters && boosters.length === 0 && (
             <p className="text-[12px] text-ink-mute uppercase tracking-[0.16em]">
               Бустери недоступні
             </p>
           )}
 
-          {!loading && boosters && boosters.length > 0 && (
+          {status.kind !== "error" && !loading && boosters && boosters.length > 0 && (
             <ul
               data-testid="booster-shop-list"
               className="grid grid-cols-1 sm:grid-cols-2 gap-3"
