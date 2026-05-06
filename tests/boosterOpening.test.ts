@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cards } from "../src/features/battle/model/cards";
 import type { Card, Rarity } from "../src/features/battle/model/types";
 import { handleBoosterCatalogGet, handleBoosterCatalogPost, handleBoosterOpenPost, handleStarterBoosterOpenPost } from "../src/features/boosters/api";
@@ -6,6 +6,8 @@ import { getBoosterById } from "../src/features/boosters/catalog";
 import { BoosterOpeningError, chooseStarterWeightedRarity, prepareStarterBoosterOpening, type RandomSource } from "../src/features/boosters/opening";
 import type { BoosterCatalogItem, BoosterOpeningRecord, BoosterOpeningStore, StoredBoosterOpeningRecord } from "../src/features/boosters/types";
 import { addToInventory, getOwnedCount } from "../src/features/inventory/inventoryOps";
+import { signGroupLaunchContext } from "../src/features/integrations/groupContext";
+import { groupBoosterId, groupCardId, hydrateGroupRuntime, resetDynamicIntegrationRuntimeForTests, type GroupCardIntegrationRecord, type GroupIntegrationRecord } from "../src/features/integrations/runtime";
 import { createPlayerSessionCookie } from "../src/features/player/profile/auth";
 import { createNewStoredPlayerProfile, isSamePlayerIdentity, type PlayerIdentity, type PlayerProfile, type StoredPlayerProfile } from "../src/features/player/profile/types";
 
@@ -13,6 +15,19 @@ const guestIdentity: PlayerIdentity = {
   mode: "guest",
   guestId: "booster-guest",
 };
+const GROUP_CONTEXT_SECRET = "group-context-test-secret";
+
+let previousGroupContextSecret: string | undefined;
+beforeEach(() => {
+  previousGroupContextSecret = process.env.GROUP_CONTEXT_SIGNING_SECRET;
+  process.env.GROUP_CONTEXT_SIGNING_SECRET = GROUP_CONTEXT_SECRET;
+});
+
+afterEach(() => {
+  resetDynamicIntegrationRuntimeForTests();
+  if (previousGroupContextSecret === undefined) delete process.env.GROUP_CONTEXT_SIGNING_SECRET;
+  else process.env.GROUP_CONTEXT_SIGNING_SECRET = previousGroupContextSecret;
+});
 
 describe("booster catalog", () => {
   test("returns thirteen curated boosters without C.O.R.R.", async () => {
@@ -22,6 +37,7 @@ describe("booster catalog", () => {
     expect(response.status).toBe(200);
     expect(body.boosters).toHaveLength(13);
     expect(body.boosters.map((booster) => booster.name)).toEqual([
+      "Vibe Drop",
       "Neon Breach",
       "Factory Shift",
       "Street Kings",
@@ -34,8 +50,8 @@ describe("booster catalog", () => {
       "Metro Chase",
       "Desert Signal",
       "Street Plague",
-      "Vibe Drop",
     ]);
+    expect(body.boosters[0]).toMatchObject({ id: "vibe-drop", presentation: "special" });
 
     for (const booster of body.boosters) {
       expect(booster.clans.length).toBeGreaterThanOrEqual(1);
@@ -86,6 +102,63 @@ describe("booster catalog", () => {
     expect(body.player.crystals).toBe(100);
     expect(body.boosters.every((booster) => booster.paid.canOpen)).toBe(true);
     expect(body.boosters.every((booster) => booster.paid.crystalCost === 100)).toBe(true);
+  });
+
+  test("shows a group booster only for a valid signed context for that group", async () => {
+    const store = new MemoryBoosterOpeningStore();
+    store.seedProfile(guestIdentity, { crystals: 100 });
+    store.seedGroup("-100visible", ["visible-a", "visible-b", "visible-c", "visible-d"]);
+    store.seedGroup("-100other", ["other-a", "other-b", "other-c", "other-d"]);
+    const visibleContext = signGroupLaunchContext({ chatId: "-100visible", now: new Date("2099-05-06T10:00:00.000Z") });
+    const otherContext = signGroupLaunchContext({ chatId: "-100other", now: new Date("2099-05-06T10:00:00.000Z") });
+
+    const noContextBody = (await (await postCatalog(store, guestIdentity)).json()) as { boosters: BoosterCatalogItem[] };
+    const visibleBody = (await (await postCatalog(store, guestIdentity, visibleContext)).json()) as { boosters: BoosterCatalogItem[] };
+    const otherBody = (await (await postCatalog(store, guestIdentity, otherContext)).json()) as { boosters: BoosterCatalogItem[] };
+
+    expect(noContextBody.boosters.some((booster) => booster.id.startsWith("group-"))).toBe(false);
+    expect(visibleBody.boosters.find((booster) => booster.id === groupBoosterId("-100visible"))).toMatchObject({
+      id: groupBoosterId("-100visible"),
+      groupChatId: "-100visible",
+      presentation: "group",
+      paid: {
+        canOpen: true,
+      },
+    });
+    expect(visibleBody.boosters.some((booster) => booster.id === groupBoosterId("-100other"))).toBe(false);
+    expect(otherBody.boosters.some((booster) => booster.id === groupBoosterId("-100visible"))).toBe(false);
+  });
+
+  test("includes signed group booster metadata on the public paid-shop catalog GET", async () => {
+    const store = new MemoryBoosterOpeningStore();
+    const group = store.seedGroup("-100shop", ["shop-a", "shop-b", "shop-c", "shop-d"]);
+    const context = signGroupLaunchContext({ chatId: "-100shop", now: new Date("2099-05-06T10:00:00.000Z") });
+
+    const response = await handleBoosterCatalogGet(new Request(`http://localhost/api/boosters?groupContext=${encodeURIComponent(context)}`), store);
+    const body = (await response.json()) as { boosters: { id: string; presentation?: string; groupChatId?: string }[] };
+
+    expect(response.status).toBe(200);
+    expect(body.boosters.at(0)).toMatchObject({ id: "vibe-drop", presentation: "special" });
+    expect(body.boosters.at(-1)).toMatchObject({
+      id: group.boosterId,
+      presentation: "group",
+      groupChatId: "-100shop",
+    });
+  });
+
+  test("rejects expired, tampered, or unsigned group contexts for group catalog", async () => {
+    const store = new MemoryBoosterOpeningStore();
+    store.seedGroup("-100secure", ["secure-a"]);
+    const expired = signGroupLaunchContext({ chatId: "-100secure", now: new Date("2000-05-06T10:00:00.000Z"), ttlSeconds: -1 });
+    const tampered = `${expired.slice(0, -1)}x`;
+
+    const expiredResponse = await postCatalog(store, guestIdentity, expired);
+    const tamperedResponse = await postCatalog(store, guestIdentity, tampered);
+
+    expect(expiredResponse.status).toBe(403);
+    expect(((await expiredResponse.json()) as { error: string }).error).toBe("group_context_expired");
+    expect(tamperedResponse.status).toBe(403);
+    expect(((await tamperedResponse.json()) as { error: string }).error).toBe("group_context_invalid");
   });
 });
 
@@ -374,10 +447,64 @@ describe("paid booster opening", () => {
     expect(profile.ownedCards).toEqual([]);
     expect(store.openings).toHaveLength(0);
   });
+
+  test("opens all available group cards when the paid group pool has one to three cards", async () => {
+    const store = new MemoryBoosterOpeningStore();
+    const group = store.seedGroup("-100small", ["one", "two", "three"]);
+    store.seedProfile(guestIdentity, { crystals: 100, starterFreeBoostersRemaining: 0 });
+    const context = signGroupLaunchContext({ chatId: "-100small", now: new Date("2099-05-06T10:00:00.000Z") });
+
+    const response = await openPaidBooster(store, group.boosterId, context);
+    const body = (await response.json()) as OpenBoosterResponse;
+
+    expect(response.status).toBe(200);
+    expect(body.cards.map((card) => card.id)).toEqual(group.cardIds);
+    expect(body.player.crystals).toBe(0);
+    expect(body.player.ownedCards.map((entry) => [entry.cardId, entry.count])).toEqual(group.cardIds.map((cardId) => [cardId, 1]));
+  });
+
+  test("opens four weighted group cards from a larger paid group pool and increments duplicate ownership", async () => {
+    const store = new MemoryBoosterOpeningStore();
+    const group = store.seedGroup("-100large", ["low", "medium", "high", "top", "tail"], [1, 2, 3, 4, 5]);
+    store.seedProfile(guestIdentity, {
+      crystals: 200,
+      starterFreeBoostersRemaining: 0,
+      ownedCards: [{ cardId: group.cardIds[4], count: 1 }],
+    });
+    const context = signGroupLaunchContext({ chatId: "-100large", now: new Date("2099-05-06T10:00:00.000Z") });
+
+    const response = await openPaidBooster(store, group.boosterId, context, [0.99, 0.99, 0.99, 0.99]);
+    const body = (await response.json()) as OpenBoosterResponse;
+
+    expect(response.status).toBe(200);
+    expect(body.cards.map((card) => card.id)).toEqual([group.cardIds[4], group.cardIds[3], group.cardIds[2], group.cardIds[1]]);
+    expect(body.cards).toHaveLength(4);
+    expect(getOwnedCount(body.player.ownedCards, group.cardIds[4])).toBe(2);
+    expect(body.player.crystals).toBe(100);
+  });
+
+  test("requires a matching signed group context to open a group booster", async () => {
+    const store = new MemoryBoosterOpeningStore();
+    const group = store.seedGroup("-100locked", ["locked-a"]);
+    store.seedGroup("-100unrelated", ["unrelated-a"]);
+    store.seedProfile(guestIdentity, { crystals: 300, starterFreeBoostersRemaining: 0 });
+    const unrelatedContext = signGroupLaunchContext({ chatId: "-100unrelated", now: new Date("2099-05-06T10:00:00.000Z") });
+
+    const missing = await openPaidBooster(store, group.boosterId);
+    const unrelated = await openPaidBooster(store, group.boosterId, unrelatedContext);
+
+    expect(missing.status).toBe(403);
+    expect(((await missing.json()) as { error: string }).error).toBe("group_context_required");
+    expect(unrelated.status).toBe(403);
+    expect(((await unrelated.json()) as { error: string }).error).toBe("group_context_required");
+    expect(store.openings).toHaveLength(0);
+  });
 });
 
 class MemoryBoosterOpeningStore implements BoosterOpeningStore {
   private readonly profiles: StoredPlayerProfile[] = [];
+  private readonly groups = new Map<string, GroupIntegrationRecord>();
+  private readonly groupCards = new Map<string, GroupCardIntegrationRecord>();
   readonly openings: StoredBoosterOpeningRecord[] = [];
   private nextProfileId = 1;
   private nextOpeningId = 1;
@@ -529,6 +656,63 @@ class MemoryBoosterOpeningStore implements BoosterOpeningStore {
     return opening;
   }
 
+  seedGroup(chatId: string, idempotencyKeys: string[], dropWeights: number[] = []) {
+    const group: GroupIntegrationRecord = {
+      chatId,
+      clan: `Clan ${chatId}`,
+      boosterId: groupBoosterId(chatId),
+      displayName: `Clan ${chatId}`,
+      glyphUrl: `/nexus-assets/integrations/${encodeURIComponent(chatId)}/glyph.png`,
+      bonus: {
+        id: "test-bonus",
+        name: "Test Bonus",
+        description: "Test bonus.",
+        effects: [{ key: "add-power", amount: 1 }],
+      },
+      cardIds: idempotencyKeys.map((key) => groupCardId(chatId, key)),
+      createdAt: new Date("2099-05-06T10:00:00.000Z"),
+      updatedAt: new Date("2099-05-06T10:00:00.000Z"),
+    };
+    this.groups.set(chatId, group);
+    const cardInputs = idempotencyKeys.map((key, index) => ({
+      chatId,
+      creatorTelegramId: `creator-${index}`,
+      idempotencyKey: key,
+      name: `Group Card ${key}`,
+      power: 10 + index,
+      damage: 3 + index,
+      ability: {
+        id: "group-ability",
+        name: "Group Ability",
+        description: "Group ability.",
+        effects: [{ key: "add-attack", amount: 1 }],
+      },
+      imageUrl: `https://assets.test/${key}.png`,
+      artUrl: `/nexus-assets/integrations/${encodeURIComponent(chatId)}/${key}.webp`,
+      dropWeight: dropWeights[index] ?? 1,
+    }));
+    for (const input of cardInputs) {
+      this.groupCards.set(groupCardId(chatId, input.idempotencyKey), {
+        id: groupCardId(chatId, input.idempotencyKey),
+        chatId,
+        creatorTelegramId: input.creatorTelegramId,
+        idempotencyKey: input.idempotencyKey,
+        dropWeight: input.dropWeight,
+        createdAt: new Date("2099-05-06T10:00:00.000Z"),
+      });
+    }
+    hydrateGroupRuntime([group], cardInputs);
+    return group;
+  }
+
+  async findIntegrationGroupByChatId(chatId: string) {
+    return this.groups.get(chatId);
+  }
+
+  async findIntegrationGroupCardsByChatId(chatId: string) {
+    return [...this.groupCards.values()].filter((card) => card.chatId === chatId);
+  }
+
   private removeOpening(openingId: string) {
     const openingIndex = this.openings.findIndex((opening) => opening.id === openingId);
     if (openingIndex >= 0) {
@@ -551,25 +735,27 @@ function openBooster(store: BoosterOpeningStore, boosterId: string) {
   );
 }
 
-function openPaidBooster(store: BoosterOpeningStore, boosterId: string) {
+function openPaidBooster(store: BoosterOpeningStore, boosterId: string, groupContext?: string, rngValues = Array.from({ length: 16 }, () => 0)) {
   return handleBoosterOpenPost(
     postRequest("http://localhost/api/player/open-booster", {
       identity: guestIdentity,
       boosterId,
       source: "paid_crystals",
+      ...(groupContext ? { groupContext } : {}),
     }),
     store,
     {
-      rng: sequenceRng(Array.from({ length: 16 }, () => 0)),
+      rng: sequenceRng(rngValues),
       now: () => new Date("2026-05-02T12:00:00.000Z"),
     },
   );
 }
 
-function postCatalog(store: BoosterOpeningStore, identity: PlayerIdentity) {
+function postCatalog(store: BoosterOpeningStore, identity: PlayerIdentity, groupContext?: string) {
   return handleBoosterCatalogPost(
     postRequest("http://localhost/api/boosters", {
       identity,
+      ...(groupContext ? { groupContext } : {}),
     }),
     store,
   );
@@ -625,7 +811,7 @@ type OpenBoosterResponse = {
   booster: {
     id: string;
     name: string;
-    clans: [string, string];
+    clans: string[];
   };
   cards: (Card & { rarity: Rarity })[];
   opening: BoosterOpeningRecord;

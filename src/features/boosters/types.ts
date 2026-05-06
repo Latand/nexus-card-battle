@@ -11,17 +11,25 @@ export type Booster = {
   id: string;
   name: string;
   clans: readonly string[];
+  presentation?: BoosterPresentation;
+  group?: {
+    chatId: string;
+  };
   // Optional per-booster overrides — fall back to the global defaults when
   // omitted. Allows weird shapes like a 4-Legend solo-clan starter pack.
   cardCount?: number;
   requiredRarities?: readonly Rarity[];
 };
 
+export type BoosterPresentation = "special" | "group";
+
 export type BoosterResponse = {
   id: string;
   name: string;
   clans: string[];
   cardCount?: number;
+  presentation?: BoosterPresentation;
+  groupChatId?: string;
 };
 
 export type BoosterCatalogItem = BoosterResponse & {
@@ -98,6 +106,18 @@ export type BoosterOpeningStore = {
   findOrCreateByIdentity(identity: StoredPlayerProfile["identity"]): Promise<StoredPlayerProfile>;
   saveStarterBoosterOpening(input: PersistStarterBoosterOpeningInput): Promise<PersistedStarterBoosterOpening>;
   savePaidBoosterOpening(input: PersistPaidBoosterOpeningInput): Promise<PersistedPaidBoosterOpening>;
+  findIntegrationGroupByChatId?(chatId: string): Promise<{
+    chatId: string;
+    clan: string;
+    boosterId: string;
+    displayName: string;
+    cardIds: string[];
+  } | undefined>;
+  findIntegrationGroupCardsByChatId?(chatId: string): Promise<readonly {
+    id: string;
+    chatId: string;
+    dropWeight: number;
+  }[]>;
 };
 
 export type PlayerBoosterCatalogProfile = Pick<PlayerProfile, "openedBoosterIds" | "starterFreeBoostersRemaining" | "crystals">;

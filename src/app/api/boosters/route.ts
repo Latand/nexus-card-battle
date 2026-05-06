@@ -3,8 +3,8 @@ import { getMongoPlayerProfileStore } from "@/features/player/profile/mongo";
 
 export const runtime = "nodejs";
 
-export async function GET() {
-  return handleBoosterCatalogGet();
+export async function GET(request: Request) {
+  return handleBoosterCatalogGet(request, getMongoPlayerProfileStore());
 }
 
 export async function POST(request: Request) {

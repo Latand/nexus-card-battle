@@ -25,6 +25,7 @@ export type BoosterShopModalProps = {
    * callbacks because it carries fresh ownedCards / openedBoosterIds too.
    */
   onProfileChange?: (profile: PlayerProfile) => void;
+  groupContext?: string | null;
 };
 
 type ShopStatus =
@@ -46,21 +47,23 @@ export function BoosterShopModal({
   onCrystalsUpdated,
   onCardsObtained,
   onProfileChange,
+  groupContext,
 }: BoosterShopModalProps) {
   const isMobile = useIsMobile();
   const [boosters, setBoosters] = useState<BoosterResponse[] | null>(null);
   const [status, setStatus] = useState<ShopStatus>({ kind: "idle" });
   const [reveal, setReveal] = useState<RevealState | null>(null);
-  const fetchedRef = useRef(false);
+  const fetchedKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
+    const fetchKey = groupContext ?? "";
+    if (fetchedKeyRef.current === fetchKey) return;
+    fetchedKeyRef.current = fetchKey;
 
     let cancelled = false;
     setStatus({ kind: "loading" });
-    void fetchBoosterCatalog()
+    void fetchBoosterCatalog(groupContext)
       .then((response) => {
         if (cancelled) return;
         setBoosters(response.boosters);
@@ -75,14 +78,7 @@ export function BoosterShopModal({
     return () => {
       cancelled = true;
     };
-  }, [open]);
-
-  useEffect(() => {
-    if (open) return;
-    // Reset on close so reopening starts fresh (loading shows briefly again).
-    setReveal(null);
-    setStatus({ kind: "idle" });
-  }, [open]);
+  }, [groupContext, open]);
 
   const handleOpenBooster = useCallback(
     (boosterId: string) => {
@@ -91,7 +87,7 @@ export function BoosterShopModal({
       if (profileCrystals < PAID_BOOSTER_CRYSTAL_COST) return;
 
       setStatus({ kind: "opening", boosterId });
-      void openPaidBooster(playerIdentity, boosterId)
+      void openPaidBooster(playerIdentity, boosterId, groupContext)
         .then((response) => {
           setReveal({ booster: response.booster, cards: response.cards });
           setStatus({ kind: "idle" });
@@ -115,6 +111,7 @@ export function BoosterShopModal({
       onCardsObtained,
       onCrystalsUpdated,
       onProfileChange,
+      groupContext,
       playerIdentity,
       profileCrystals,
       status.kind,
@@ -241,16 +238,23 @@ function BoosterRow({
   insufficient: boolean;
   onOpen: () => void;
 }) {
+  const special = booster.presentation === "special" || booster.presentation === "group";
   return (
     <article
       data-testid={`booster-shop-item-${booster.id}`}
-      className="flex items-center gap-3 rounded-md border border-accent-quiet bg-surface px-3 py-3"
+      data-presentation={booster.presentation}
+      className={cn(
+        "flex items-center gap-3 rounded-md border px-3 py-3",
+        special
+          ? "border-accent/80 bg-[linear-gradient(135deg,rgba(240,196,49,0.18),rgba(70,210,255,0.12)),var(--color-surface)] shadow-[0_0_24px_rgba(240,196,49,0.16)]"
+          : "border-accent-quiet bg-surface",
+      )}
     >
       <div className="min-w-0 flex-1">
-        <strong className="block truncate text-[14px] text-ink uppercase tracking-[0.06em]">
+        <strong className={cn("block truncate text-[14px] uppercase tracking-[0.06em]", special ? "text-accent" : "text-ink")}>
           {booster.name}
         </strong>
-        <span className="mt-0.5 block truncate text-[11px] text-cool uppercase tracking-[0.16em]">
+        <span className={cn("mt-0.5 block truncate text-[11px] uppercase tracking-[0.16em]", special ? "text-cool" : "text-cool")}>
           {booster.clans.join(" · ")}
         </span>
       </div>

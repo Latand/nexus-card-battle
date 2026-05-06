@@ -16,7 +16,7 @@ import { TopBar } from "@/shared/ui/v2/TopBar";
 import type { TelegramPlayer } from "@/shared/lib/telegram";
 import { PLAYER_DECK_SIZE } from "../model/deckConfig";
 import { clearBattleSession, hasBattleSession } from "@/features/battle/persistence";
-import { useUrlEnum } from "./useUrlState";
+import { useUrlEnum, useUrlState } from "./useUrlState";
 
 type BattleMode = "ai" | "human";
 type ProfileStatus = "loading" | "ready" | "unavailable";
@@ -74,6 +74,7 @@ type TelegramWebApp = NonNullable<NonNullable<TelegramWindow["Telegram"]>["WebAp
 export function GameRoot() {
   const allCardIds = useMemo(() => Array.from(cardIds), []);
   const [screen, setScreen] = useUrlEnum<"collection" | "battle">("screen", ["collection", "battle"], "collection", "push");
+  const [groupContext] = useUrlState<string | null>("groupContext", null);
   const [battleMode, setBattleMode] = useState<BattleMode>("human");
   const [deckIds, setDeckIds] = useState<string[]>([]);
   const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
@@ -357,6 +358,7 @@ export function GameRoot() {
         canPlay={hudCanPlay}
         onPlay={handlePlayFromHud}
         onPlayerUpdated={handleStarterProfileChange}
+        groupContext={groupContext}
       >
         <StarterBoosterOnboarding
           identity={playerIdentity}
@@ -381,6 +383,7 @@ export function GameRoot() {
       canPlay={hudCanPlay}
       onPlay={handlePlayFromHud}
       onPlayerUpdated={setPlayerProfile}
+      groupContext={groupContext}
     >
       <CollectionDeckScreen
         collectionIds={ownedCardIds}
@@ -411,6 +414,7 @@ function HudShell({
   canPlay,
   onPlay,
   onPlayerUpdated,
+  groupContext,
   children,
 }: {
   profile: PlayerProfile | null;
@@ -420,6 +424,7 @@ function HudShell({
   canPlay: boolean;
   onPlay: () => void;
   onPlayerUpdated?: (profile: PlayerProfile) => void;
+  groupContext?: string | null;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -464,6 +469,7 @@ function HudShell({
           profileCrystals={profile.crystals}
           onProfileChange={onPlayerUpdated}
           onCrystalsUpdated={(next) => onPlayerUpdated?.({ ...profile, crystals: next })}
+          groupContext={groupContext}
         />
       )}
       {profileOpen && (

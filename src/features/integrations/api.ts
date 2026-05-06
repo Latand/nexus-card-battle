@@ -11,6 +11,7 @@ import {
   type GroupCardIntegrationRecord,
   type GroupIntegrationRecord,
 } from "./runtime";
+import { GroupContextError, signGroupLaunchContext } from "./groupContext";
 
 export type IntegrationStore = {
   upsertGroup(input: UpsertGroupInput): Promise<GroupIntegrationRecord>;
@@ -135,6 +136,26 @@ export async function handleGroupCardPost(request: Request, store: IntegrationSt
   }
 }
 
+export async function handleGroupLaunchUrlPost(
+  request: Request,
+  context: { params: Promise<{ chatId: string }> | { chatId: string } },
+  options: { now?: Date; ttlSeconds?: number } = {},
+) {
+  try {
+    requireIntegrationAuth(request);
+    const { chatId: rawChatId } = await context.params;
+    const chatId = parseId(rawChatId, "chatId");
+    const body = await readOptionalJsonObject(request);
+    const baseUrl = parseOptionalUrlString(body?.baseUrl, "baseUrl") ?? getDefaultWebAppUrl(request);
+    const url = new URL(baseUrl);
+    url.searchParams.set("groupContext", signGroupLaunchContext({ chatId, now: options.now, ttlSeconds: options.ttlSeconds }));
+
+    return json({ url: url.toString(), expiresInSeconds: options.ttlSeconds ?? 10 * 60 });
+  } catch (error) {
+    return integrationErrorResponse(error);
+  }
+}
+
 export async function serializeCreatorProfile(store: Pick<IntegrationStore, "findOrCreateByIdentity">, telegramId: string): Promise<PlayerProfile> {
   return toPlayerProfile(await store.findOrCreateByIdentity({ mode: "telegram", telegramId }));
 }
@@ -171,7 +192,7 @@ export function createGroupCardRecord(input: CreateGroupCardInput, now = new Dat
   };
 }
 
-function requireIntegrationAuth(request: Request) {
+export function requireIntegrationAuth(request: Request) {
   const expected = process.env.INTEGRATION_API_TOKEN;
   if (!expected) {
     throw new IntegrationValidationError("integration_auth_unconfigured", "Integration API token is not configured.", 500);
@@ -182,6 +203,21 @@ function requireIntegrationAuth(request: Request) {
   if (!header.startsWith(prefix) || header.slice(prefix.length) !== expected) {
     throw new IntegrationValidationError("unauthorized", "Missing or invalid integration bearer token.", 401);
   }
+}
+
+async function readOptionalJsonObject(request: Request) {
+  const text = await request.text();
+  if (!text.trim()) return undefined;
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new IntegrationValidationError("invalid_request", "request body must be valid JSON.", 400);
+  }
+  if (!isRecord(body)) {
+    throw new IntegrationValidationError("invalid_request", "request body must be an object.", 400);
+  }
+  return body;
 }
 
 function parseBonus(value: unknown): Bonus {
@@ -290,6 +326,18 @@ function parseUrlString(value: unknown, field: string) {
   return url;
 }
 
+function parseOptionalUrlString(value: unknown, field: string) {
+  if (value === undefined) return undefined;
+  return parseUrlString(value, field);
+}
+
+function getDefaultWebAppUrl(request: Request) {
+  const configured = process.env.NEXT_PUBLIC_WEBAPP_URL || process.env.WEBAPP_URL || process.env.APP_URL;
+  if (configured) return configured;
+  const url = new URL(request.url);
+  return `${url.origin}/`;
+}
+
 function serializeGroup(group: GroupIntegrationRecord) {
   return {
     chatId: group.chatId,
@@ -318,6 +366,9 @@ function integrationErrorResponse(error: unknown) {
   }
   if (error instanceof IntegrationAssetError) {
     return json({ error: "invalid_asset", message: error.message }, 400);
+  }
+  if (error instanceof GroupContextError) {
+    return json({ error: error.code, message: error.message }, error.status);
   }
   if (error instanceof SyntaxError) {
     return json({ error: "invalid_request", message: error.message }, 400);
