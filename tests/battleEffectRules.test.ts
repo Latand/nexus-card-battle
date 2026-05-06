@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { BASE_ATTACK_ENERGY, DAMAGE_BOOST_COST, MAX_ENERGY, MAX_HEALTH } from "../src/features/battle/model/constants";
 import { resolveRound } from "../src/features/battle/model/domain/roundResolver";
-import type { Bonus, Card, EffectSpec, Fighter, Rarity, Side } from "../src/features/battle/model/types";
+import type { Bonus, Card, EffectSpec, Fighter, FighterStatus, Rarity, Side } from "../src/features/battle/model/types";
 
 const EMPTY_BONUS: Bonus = { id: "none", name: "No bonus", description: "", effects: [] };
 
@@ -200,6 +200,99 @@ describe("battle effect rules", () => {
     expect(outcome.clash.damage).toBe(1);
     expect(outcome.nextEnemy.hp).toBe(MAX_HEALTH - 1 - 2);
   });
+
+  test("new poison ticks after combat damage and can decide the match before matchResult is calculated", () => {
+    const playerCard = makeCard({
+      id: "dahack-1645",
+      power: 10,
+      damage: 1,
+      abilityEffects: [{ key: "apply-poison", amount: 3, outcome: "on_win" }],
+    });
+    const enemyCard = makeCard({ id: "enemy-low", power: 1, damage: 1 });
+    const player = makeFighter("player", [playerCard]);
+    const enemy = makeFighter("enemy", [enemyCard], { hp: 4 });
+
+    const outcome = resolveRound(player, enemy, playerCard, 0, false, "player", 1, {
+      card: enemyCard,
+      energy: 0,
+      damageBoost: false,
+    });
+
+    expect(outcome.clash.winner).toBe("player");
+    expect(outcome.clash.damage).toBe(1);
+    expect(outcome.nextEnemy.hp).toBe(0);
+    expect(outcome.matchResult).toBe("player");
+    expect(effectValue(outcome.clash.effects, "apply-poison")).toBeUndefined();
+    expect(effectValue(outcome.clash.effects, "poison:none")).toBe(-3);
+  });
+
+  test("poison respects its minimum after all direct damage is applied", () => {
+    const playerCard = makeCard({
+      id: "player-poison-min",
+      power: 10,
+      damage: 1,
+      abilityEffects: [{ key: "apply-poison", amount: 4, min: 2, outcome: "on_win" }],
+    });
+    const enemyCard = makeCard({ id: "enemy-low-min", power: 1, damage: 1 });
+    const player = makeFighter("player", [playerCard]);
+    const enemy = makeFighter("enemy", [enemyCard], { hp: 5 });
+
+    const outcome = resolveRound(player, enemy, playerCard, 0, false, "player", 1, {
+      card: enemyCard,
+      energy: 0,
+      damageBoost: false,
+    });
+
+    expect(outcome.clash.damage).toBe(1);
+    expect(outcome.nextEnemy.hp).toBe(2);
+    expect(outcome.matchResult).toBeUndefined();
+    expect(effectValue(outcome.clash.effects, "poison:2")).toBe(-2);
+  });
+
+  test("new blessing ticks after combat and before the round result state is finalized", () => {
+    const playerCard = makeCard({
+      id: "player-blessing",
+      power: 10,
+      damage: 1,
+      abilityEffects: [{ key: "apply-blessing", amount: 2, outcome: "on_win" }],
+    });
+    const enemyCard = makeCard({ id: "enemy-low-blessing", power: 1, damage: 1 });
+    const player = makeFighter("player", [playerCard], { hp: 8 });
+    const enemy = makeFighter("enemy", [enemyCard]);
+
+    const outcome = resolveRound(player, enemy, playerCard, 0, false, "player", 1, {
+      card: enemyCard,
+      energy: 0,
+      damageBoost: false,
+    });
+
+    expect(outcome.clash.winner).toBe("player");
+    expect(outcome.nextPlayer.hp).toBe(10);
+    expect(outcome.matchResult).toBeUndefined();
+    expect(effectValue(outcome.clash.effects, "blessing:none")).toBe(2);
+  });
+
+  test("existing blessing can save a fighter from lethal combat damage before matchResult is calculated", () => {
+    const playerCard = makeCard({ id: "dahack-110", power: 1, damage: 1 });
+    const enemyCard = makeCard({ id: "enemy-lethal", power: 10, damage: 3 });
+    const player = makeFighter("player", [playerCard], {
+      hp: 2,
+      statuses: [makeStatus("blessing", 2)],
+    });
+    const enemy = makeFighter("enemy", [enemyCard]);
+
+    const outcome = resolveRound(player, enemy, playerCard, 0, false, "enemy", 1, {
+      card: enemyCard,
+      energy: 0,
+      damageBoost: false,
+    });
+
+    expect(outcome.clash.winner).toBe("enemy");
+    expect(outcome.clash.damage).toBe(3);
+    expect(outcome.nextPlayer.hp).toBe(2);
+    expect(outcome.matchResult).toBeUndefined();
+    expect(effectValue(outcome.clash.effects, "blessing:none")).toBe(2);
+  });
 });
 
 function makeCard({
@@ -248,7 +341,7 @@ function makeBonus(id: string, effects: EffectSpec[]): Bonus {
   return { id, name: id, description: "", effects };
 }
 
-function makeFighter(id: Side, hand: Card[]): Fighter {
+function makeFighter(id: Side, hand: Card[], options: { hp?: number; energy?: number; statuses?: FighterStatus[] } = {}): Fighter {
   const cardIds = hand.map((card) => card.id);
 
   return {
@@ -256,9 +349,9 @@ function makeFighter(id: Side, hand: Card[]): Fighter {
     name: id,
     title: "Tester",
     avatarUrl: "",
-    hp: MAX_HEALTH,
-    energy: MAX_ENERGY,
-    statuses: [],
+    hp: options.hp ?? MAX_HEALTH,
+    energy: options.energy ?? MAX_ENERGY,
+    statuses: options.statuses ?? [],
     collection: { ownerId: id, cardIds },
     deck: { ownerId: id, cardIds },
     hand: hand.map((card) => ({ ...card, used: false })),
@@ -268,4 +361,15 @@ function makeFighter(id: Side, hand: Card[]): Fighter {
 
 function effectValue(effects: Array<{ id?: string; value?: number }>, idIncludes: string) {
   return effects.find((effect) => effect.id?.includes(idIncludes))?.value;
+}
+
+function makeStatus(kind: FighterStatus["kind"], amount: number, min?: number): FighterStatus {
+  return {
+    id: [kind, min ?? "none"].join(":"),
+    kind,
+    amount,
+    min,
+    source: `${kind}-fixture`,
+    stacks: 1,
+  };
 }

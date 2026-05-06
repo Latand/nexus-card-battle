@@ -369,11 +369,11 @@ function applyStatusTicks(fighter: Fighter, side: Side) {
   const effects: ResolvedEffect[] = [];
 
   for (const status of fighter.statuses) {
-    if (nextFighter.hp <= 0) continue;
-
     const beforeHp = nextFighter.hp;
     const amount = status.amount;
 
+    // Blessing resolves before matchResult and may save a fighter that direct
+    // combat damage just dropped to 0 HP. Poison still respects its own floor.
     if (status.kind === "blessing") {
       nextFighter = { ...nextFighter, hp: nextFighter.hp + amount };
     }
