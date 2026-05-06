@@ -142,7 +142,6 @@ describe("OpenRouter battle AI", () => {
       const response = await chooseOpenRouterBattleAiMove(request, {
         apiKey: process.env.OPENROUTER_API_KEY,
         model: process.env.OPENROUTER_MODEL,
-        timeoutMs: 60_000,
       });
       const availableEnemyCardIds = new Set(game.enemy.hand.map((card) => card.id));
 
