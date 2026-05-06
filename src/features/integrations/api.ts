@@ -14,7 +14,7 @@ import {
 
 export type IntegrationStore = {
   upsertGroup(input: UpsertGroupInput): Promise<GroupIntegrationRecord>;
-  findGroupCardByIdempotencyKey?(idempotencyKey: string): Promise<CreateGroupCardResult | undefined>;
+  findGroupCardByIdempotencyKey?(chatId: string, idempotencyKey: string): Promise<CreateGroupCardResult | undefined>;
   createGroupCard(input: CreateGroupCardInput): Promise<CreateGroupCardResult>;
   findOrCreateByIdentity(identity: PlayerIdentity): Promise<Parameters<typeof toPlayerProfile>[0]>;
 };
@@ -80,7 +80,7 @@ export async function handleGroupCardPost(request: Request, store: IntegrationSt
     const idempotencyKey = parseId(body.idempotencyKey, "idempotencyKey");
     const imageSourceUrl = parseUrlString(body.imageUrl, "imageUrl");
     const dropWeight = parseDropWeight(body.dropWeight);
-    const existing = await store.findGroupCardByIdempotencyKey?.(idempotencyKey);
+    const existing = await store.findGroupCardByIdempotencyKey?.(chatId, idempotencyKey);
     if (existing) {
       const card = registerGroupCardRuntime(existing.group, existing.cardInput);
       return json({
@@ -295,6 +295,16 @@ function serializeGroup(group: GroupIntegrationRecord) {
     chatId: group.chatId,
     clan: group.clan,
     boosterId: group.boosterId,
+    booster: {
+      id: group.boosterId,
+      name: group.displayName,
+      clans: [group.clan],
+      cardCount: group.cardIds.length,
+      opening: {
+        available: false,
+        reason: "group_booster_opening_out_of_scope",
+      },
+    },
     displayName: group.displayName,
     glyphUrl: group.glyphUrl,
     bonus: group.bonus,

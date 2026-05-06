@@ -5,6 +5,10 @@ import type { Bonus, Card, EffectSpec } from "@/features/battle/model/types";
 
 export const GROUP_CARD_RARITY = "Legend" as const;
 export const GROUP_CARD_ACCENT = "#f0c431";
+const STATIC_CARD_IDS = new Set(cards.map((card) => card.id));
+const STATIC_CLAN_NAMES = new Set(Object.keys(clans));
+const dynamicCardIds = new Set<string>();
+const dynamicClanNames = new Set<string>();
 
 export type GroupIntegrationRecord = {
   chatId: string;
@@ -69,19 +73,53 @@ export function registerGroupRuntime(group: GroupIntegrationRecord) {
   };
 
   clans[group.clan] = record;
+  if (!STATIC_CLAN_NAMES.has(group.clan)) {
+    dynamicClanNames.add(group.clan);
+  }
 }
 
 export function registerGroupCardRuntime(group: GroupIntegrationRecord, cardInput: GroupCardInput) {
   registerGroupRuntime(group);
-  const existingIndex = cards.findIndex((card) => card.id === groupCardId(cardInput.chatId, cardInput.idempotencyKey));
+  const cardId = groupCardId(cardInput.chatId, cardInput.idempotencyKey);
+  const existingIndex = cards.findIndex((card) => card.id === cardId);
   const card = buildGroupCard(group, cardInput);
   if (existingIndex >= 0) {
     cards[existingIndex] = card;
+    if (!STATIC_CARD_IDS.has(cardId)) {
+      dynamicCardIds.add(cardId);
+    }
     return card;
   }
 
   cards.push(card);
+  dynamicCardIds.add(card.id);
   return card;
+}
+
+export function hydrateGroupRuntime(groups: readonly GroupIntegrationRecord[], groupCards: readonly GroupCardInput[]) {
+  const groupsByChatId = new Map(groups.map((group) => [group.chatId, group] as const));
+  for (const group of groups) {
+    registerGroupRuntime(group);
+  }
+  for (const groupCard of groupCards) {
+    const group = groupsByChatId.get(groupCard.chatId);
+    if (group) {
+      registerGroupCardRuntime(group, groupCard);
+    }
+  }
+}
+
+export function resetDynamicIntegrationRuntimeForTests() {
+  for (let index = cards.length - 1; index >= 0; index -= 1) {
+    if (dynamicCardIds.has(cards[index].id)) {
+      cards.splice(index, 1);
+    }
+  }
+  for (const clanName of dynamicClanNames) {
+    delete clans[clanName];
+  }
+  dynamicCardIds.clear();
+  dynamicClanNames.clear();
 }
 
 export function buildGroupCard(group: GroupIntegrationRecord, input: GroupCardInput): Card {

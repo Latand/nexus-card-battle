@@ -30,7 +30,7 @@ import {
   type IntegrationStore,
   type UpsertGroupInput,
 } from "@/features/integrations/api";
-import type { GroupCardIntegrationRecord, GroupIntegrationRecord } from "@/features/integrations/runtime";
+import { hydrateGroupRuntime, type GroupCardIntegrationRecord, type GroupIntegrationRecord } from "@/features/integrations/runtime";
 
 const DEFAULT_MONGODB_URI = "mongodb://127.0.0.1:27017/nexus-card-battle";
 const DEFAULT_MONGODB_DB = "nexus-card-battle";
@@ -134,6 +134,7 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
       throw new Error("MongoDB did not return a player profile.");
     }
 
+    await this.hydrateIntegrationRuntime();
     return fromMongoDocument(document);
   }
 
@@ -394,7 +395,7 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
     const groups = await this.getGroupsCollection();
     const groupCards = await this.getGroupCardsCollection();
     const players = await this.getPlayersCollection();
-    const existing = await this.findGroupCardByIdempotencyKey(input.idempotencyKey);
+    const existing = await this.findGroupCardByIdempotencyKey(input.chatId, input.idempotencyKey);
     if (existing) return existing;
 
     const group = await groups.findOne({ chatId: input.chatId });
@@ -412,7 +413,7 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
         await groupCards.insertOne({ ...groupCard, card: input });
       } catch (error) {
         if (isDuplicateKeyError(error)) {
-          const duplicate = await this.findGroupCardByIdempotencyKey(input.idempotencyKey);
+          const duplicate = await this.findGroupCardByIdempotencyKey(input.chatId, input.idempotencyKey);
           if (duplicate) return duplicate;
         }
         throw error;
@@ -423,22 +424,32 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
       const responseGroup = updatedGroup ?? { ...group, cardIds: [...new Set([...group.cardIds, groupCard.id])], updatedAt: now };
       return { group: fromMongoGroup(responseGroup), groupCard, cardInput: input, player: updatedPlayer, idempotent: false };
     } catch (error) {
-      await groupCards.deleteOne({ idempotencyKey: input.idempotencyKey }).catch(() => undefined);
+      await groupCards.deleteOne({ chatId: input.chatId, idempotencyKey: input.idempotencyKey }).catch(() => undefined);
       await groups.updateOne({ chatId: input.chatId }, { $pull: { cardIds: groupCard.id } }).catch(() => undefined);
       throw error;
     }
   }
 
-  async findGroupCardByIdempotencyKey(idempotencyKey: string): Promise<CreateGroupCardResult | undefined> {
+  async findGroupCardByIdempotencyKey(chatId: string, idempotencyKey: string): Promise<CreateGroupCardResult | undefined> {
     const groups = await this.getGroupsCollection();
     const groupCards = await this.getGroupCardsCollection();
-    const existing = await groupCards.findOne({ idempotencyKey });
+    const existing = await groupCards.findOne({ chatId, idempotencyKey });
     if (!existing) return undefined;
     const group = await groups.findOne({ chatId: existing.chatId });
     if (!group) throw new Error("Integration group card history references a missing group.");
     const players = await this.getPlayersCollection();
     const player = await grantGroupCardOnce(players, { mode: "telegram", telegramId: existing.creatorTelegramId }, existing.id, new Date());
     return { group: fromMongoGroup(group), groupCard: fromMongoGroupCard(existing), cardInput: existing.card, player, idempotent: true };
+  }
+
+  async hydrateIntegrationRuntime() {
+    const groups = await this.getGroupsCollection();
+    const groupCards = await this.getGroupCardsCollection();
+    const [storedGroups, storedGroupCards] = await Promise.all([
+      groups.find({}).toArray(),
+      groupCards.find({}).toArray(),
+    ]);
+    hydrateGroupRuntime(storedGroups.map(fromMongoGroup), storedGroupCards.map((card) => card.card));
   }
 
   private async getPlayersCollection() {
@@ -504,7 +515,11 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
       const db = client.db(this.dbName);
       await Promise.all([
         db.collection<MongoGroupDocument>(GROUPS_COLLECTION).createIndex({ chatId: 1 }, { unique: true, name: "uniq_integration_group_chat" }),
-        db.collection<MongoGroupCardDocument>(GROUP_CARDS_COLLECTION).createIndex({ idempotencyKey: 1 }, { unique: true, name: "uniq_integration_group_card_idempotency" }),
+        db.collection<MongoGroupCardDocument>(GROUP_CARDS_COLLECTION).dropIndex("uniq_integration_group_card_idempotency").catch((error) => {
+          if (error instanceof MongoServerError && error.codeName === "IndexNotFound") return undefined;
+          throw error;
+        }),
+        db.collection<MongoGroupCardDocument>(GROUP_CARDS_COLLECTION).createIndex({ chatId: 1, idempotencyKey: 1 }, { unique: true, name: "uniq_integration_group_card_chat_idempotency" }),
         db.collection<MongoGroupCardDocument>(GROUP_CARDS_COLLECTION).createIndex({ chatId: 1 }, { name: "idx_integration_group_cards_chat" }),
       ]);
     })();

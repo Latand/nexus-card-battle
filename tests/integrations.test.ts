@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import sharp from "sharp";
-import { findCard } from "../src/features/battle/model/domain/decks";
+import { cards } from "../src/features/battle/model/cards";
+import { createBattleHand, createCardCollection, createDeck, findCard } from "../src/features/battle/model/domain/decks";
 import type { Bonus } from "../src/features/battle/model/types";
 import { handleGroupCardPost, handleGroupUpsertPut, createGroupCardRecord, createNewGroup, validateGroupBonusChange, type CreateGroupCardInput, type CreateGroupCardResult, type IntegrationStore, type UpsertGroupInput } from "../src/features/integrations/api";
-import { groupCardId } from "../src/features/integrations/runtime";
+import { groupCardId, hydrateGroupRuntime, resetDynamicIntegrationRuntimeForTests } from "../src/features/integrations/runtime";
 import { addToInventory, getOwnedCount } from "../src/features/inventory/inventoryOps";
+import { handlePlayerDeckSavePost } from "../src/features/player/profile/api";
+import { createPlayerSessionCookie } from "../src/features/player/profile/auth";
 import { createNewStoredPlayerProfile, type PlayerIdentity, type StoredPlayerProfile } from "../src/features/player/profile/types";
 
 const TOKEN = "integration-test-token";
@@ -28,9 +31,11 @@ describe("integration API", () => {
   beforeEach(() => {
     previousToken = process.env.INTEGRATION_API_TOKEN;
     process.env.INTEGRATION_API_TOKEN = TOKEN;
+    resetDynamicIntegrationRuntimeForTests();
   });
 
   afterEach(() => {
+    resetDynamicIntegrationRuntimeForTests();
     if (previousToken === undefined) {
       delete process.env.INTEGRATION_API_TOKEN;
     } else {
@@ -59,7 +64,7 @@ describe("integration API", () => {
   test("upserts a group clan and booster with Nexus-owned glyph URL", async () => {
     const store = new MemoryIntegrationStore();
     const response = await putGroup(store, "-100777", { displayName: "The Chat" });
-    const body = (await response.json()) as { group: { chatId: string; clan: string; boosterId: string; displayName: string; glyphUrl: string; bonus: Bonus } };
+    const body = (await response.json()) as { group: { chatId: string; clan: string; boosterId: string; booster: { opening: { available: boolean; reason: string } }; displayName: string; glyphUrl: string; bonus: Bonus } };
 
     expect(response.status).toBe(200);
     expect(body.group).toMatchObject({
@@ -68,6 +73,15 @@ describe("integration API", () => {
       boosterId: "group--100777",
       displayName: "The Chat",
       bonus,
+    });
+    expect(body.group.booster).toMatchObject({
+      id: "group--100777",
+      name: "The Chat",
+      clans: ["The Chat"],
+      opening: {
+        available: false,
+        reason: "group_booster_opening_out_of_scope",
+      },
     });
     expect(body.group.glyphUrl).toMatch(/^\/nexus-assets\/integrations\/100777\/glyph\.png$/);
     expect(store.groups.get("-100777")?.displayName).toBe("The Chat");
@@ -139,6 +153,86 @@ describe("integration API", () => {
     expect(getOwnedCount(secondBody.player.ownedCards, firstBody.card.id)).toBe(1);
   });
 
+  test("scopes card idempotency by group so different chats can reuse a key", async () => {
+    const store = new MemoryIntegrationStore();
+    await putGroup(store, "-100a", { displayName: "Group A" });
+    await putGroup(store, "-100b", { displayName: "Group B" });
+
+    const first = await postCard(store, { chatId: "-100a", creatorTelegramId: "101", idempotencyKey: "shared-key", name: "A Card" });
+    const second = await postCard(store, { chatId: "-100b", creatorTelegramId: "202", idempotencyKey: "shared-key", name: "B Card" });
+    const firstBody = (await first.json()) as { card: { id: string; clan: string }; player: { ownedCards: { cardId: string; count: number }[] }; idempotent: boolean };
+    const secondBody = (await second.json()) as { card: { id: string; clan: string }; player: { ownedCards: { cardId: string; count: number }[] }; idempotent: boolean };
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(firstBody.idempotent).toBe(false);
+    expect(secondBody.idempotent).toBe(false);
+    expect(firstBody.card.id).toBe(groupCardId("-100a", "shared-key"));
+    expect(secondBody.card.id).toBe(groupCardId("-100b", "shared-key"));
+    expect(firstBody.card.id).not.toBe(secondBody.card.id);
+    expect(firstBody.card.clan).toBe("Group A");
+    expect(secondBody.card.clan).toBe("Group B");
+    expect(getOwnedCount(firstBody.player.ownedCards, firstBody.card.id)).toBe(1);
+    expect(getOwnedCount(secondBody.player.ownedCards, secondBody.card.id)).toBe(1);
+  });
+
+  test("hydrates persisted dynamic cards before profile, deck, and battle lookups", async () => {
+    const store = new MemoryIntegrationStore();
+    const group = createNewGroup({
+      chatId: "-100persist",
+      displayName: "Persisted Chat",
+      glyphUrl: "/nexus-assets/integrations/100persist/glyph.png",
+      bonus,
+    });
+    const cardInput = {
+      ...cardBody({
+        chatId: "-100persist",
+        creatorTelegramId: "303",
+        idempotencyKey: "persist-card",
+        imageUrl: "https://assets.test/persist.png",
+      }),
+      artUrl: "/nexus-assets/integrations/100persist/persist-card.png",
+      dropWeight: 1,
+    } as CreateGroupCardInput;
+    const groupCard = createGroupCardRecord(cardInput);
+    group.cardIds.push(groupCard.id);
+    const identity: PlayerIdentity = { mode: "telegram", telegramId: "303" };
+    const staticDeckIds = cards.filter((card) => !card.id.startsWith("group-")).slice(0, 8).map((card) => card.id);
+    const deckIds = [...staticDeckIds, groupCard.id];
+    store.groups.set(group.chatId, group);
+    store.groupCards.set(store.groupCardKey(group.chatId, groupCard.idempotencyKey), groupCard);
+    store.groupCardInputs.set(store.groupCardKey(group.chatId, groupCard.idempotencyKey), cardInput);
+    store.players.set(store.playerKey(identity), {
+      ...createNewStoredPlayerProfile("player-persisted", identity),
+      ownedCards: deckIds.map((cardId) => ({ cardId, count: 1 })),
+      deckIds,
+    });
+
+    resetDynamicIntegrationRuntimeForTests();
+    expect(() => findCard(groupCard.id)).toThrow("Unknown card id");
+
+    await store.findOrCreateByIdentity(identity);
+    expect(findCard(groupCard.id)).toMatchObject({
+      id: groupCard.id,
+      clan: "Persisted Chat",
+      rarity: "Legend",
+    });
+
+    const collection = createCardCollection("player-persisted", deckIds);
+    const deck = createDeck("player-persisted", collection, deckIds);
+    expect(deck.cardIds).toContain(groupCard.id);
+    expect(createBattleHand({ ownerId: "player-persisted", cardIds: [groupCard.id] }).map((card) => card.id)).toEqual([groupCard.id]);
+
+    const deckSave = await handlePlayerDeckSavePost(
+      jsonRequest("http://localhost/api/player/deck", { identity, deckIds }, {
+        "Content-Type": "application/json",
+        Cookie: createPlayerSessionCookie(identity),
+      }),
+      store,
+    );
+    expect(deckSave.status).toBe(200);
+  });
+
   test("rejects invalid assets and invalid dropWeight atomically", async () => {
     const store = new MemoryIntegrationStore();
     await putGroup(store, "-100atomic", { displayName: "Atomic" });
@@ -163,6 +257,14 @@ class MemoryIntegrationStore implements IntegrationStore {
   groupCards = new Map<string, ReturnType<typeof createGroupCardRecord>>();
   players = new Map<string, StoredPlayerProfile>();
 
+  groupCardKey(chatId: string, idempotencyKey: string) {
+    return `${chatId}\u0000${idempotencyKey}`;
+  }
+
+  playerKey(identity: PlayerIdentity) {
+    return `${identity.mode}:${identity.mode === "telegram" ? identity.telegramId : identity.guestId}`;
+  }
+
   async upsertGroup(input: UpsertGroupInput) {
     const current = this.groups.get(input.chatId);
     validateGroupBonusChange(current, input.bonus);
@@ -178,15 +280,15 @@ class MemoryIntegrationStore implements IntegrationStore {
   }
 
   async createGroupCard(input: CreateGroupCardInput): Promise<CreateGroupCardResult> {
-    const existing = await this.findGroupCardByIdempotencyKey(input.idempotencyKey);
+    const existing = await this.findGroupCardByIdempotencyKey(input.chatId, input.idempotencyKey);
     if (existing) return existing;
 
     const group = this.groups.get(input.chatId);
     if (!group) throw new Error("missing group");
     const player = await this.findOrCreateByIdentity({ mode: "telegram", telegramId: input.creatorTelegramId });
     const groupCard = createGroupCardRecord(input);
-    this.groupCards.set(input.idempotencyKey, groupCard);
-    this.groupCardInputs.set(input.idempotencyKey, input);
+    this.groupCards.set(this.groupCardKey(input.chatId, input.idempotencyKey), groupCard);
+    this.groupCardInputs.set(this.groupCardKey(input.chatId, input.idempotencyKey), input);
     group.cardIds.push(groupCard.id);
     player.ownedCards = addToInventory(player.ownedCards, groupCard.id, 1);
 
@@ -195,9 +297,9 @@ class MemoryIntegrationStore implements IntegrationStore {
 
   groupCardInputs = new Map<string, CreateGroupCardInput>();
 
-  async findGroupCardByIdempotencyKey(idempotencyKey: string): Promise<CreateGroupCardResult | undefined> {
-    const existing = this.groupCards.get(idempotencyKey);
-    const cardInput = this.groupCardInputs.get(idempotencyKey);
+  async findGroupCardByIdempotencyKey(chatId: string, idempotencyKey: string): Promise<CreateGroupCardResult | undefined> {
+    const existing = this.groupCards.get(this.groupCardKey(chatId, idempotencyKey));
+    const cardInput = this.groupCardInputs.get(this.groupCardKey(chatId, idempotencyKey));
     if (!existing || !cardInput) return undefined;
     const group = this.groups.get(existing.chatId);
     if (!group) throw new Error("missing group");
@@ -211,12 +313,19 @@ class MemoryIntegrationStore implements IntegrationStore {
   }
 
   async findOrCreateByIdentity(identity: PlayerIdentity) {
-    const key = `${identity.mode}:${identity.mode === "telegram" ? identity.telegramId : identity.guestId}`;
+    hydrateGroupRuntime([...this.groups.values()], [...this.groupCardInputs.values()]);
+    const key = this.playerKey(identity);
     const existing = this.players.get(key);
     if (existing) return existing;
     const created = createNewStoredPlayerProfile(`player-${this.players.size + 1}`, identity);
     this.players.set(key, created);
     return created;
+  }
+
+  async saveDeck(identity: PlayerIdentity, deckIds: string[]) {
+    const profile = await this.findOrCreateByIdentity(identity);
+    profile.deckIds = deckIds;
+    return profile;
   }
 }
 
