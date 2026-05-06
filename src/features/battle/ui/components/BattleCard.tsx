@@ -13,6 +13,13 @@ const rarityLabels: Record<Rarity, string> = {
   Unique: "UNIQ",
   Legend: "LEGEND",
 };
+
+const rarityTint: Record<Rarity, string> = {
+  Common: "#9ca67b",
+  Rare: "#c04fd6",
+  Unique: "#5bd7f0",
+  Legend: "#f0c668",
+};
 // Frame is now an RGBA PNG with the art region punched as a transparent
 // rectangle, so the character image rendered UNDER it shows through cleanly.
 const FRAME_URL = "/nexus-assets/cards/nexus-card-frame-alpha.png";
@@ -42,6 +49,7 @@ export function BattleCard({
   const style = {
     containerType: "inline-size",
     "--accent": card.accent,
+    "--rarity-tint": rarityTint[card.rarity],
     backgroundImage: `linear-gradient(180deg, color-mix(in srgb, ${card.accent}, transparent 82%), transparent 30%, color-mix(in srgb, ${card.accent}, transparent 88%))`,
     backgroundPosition: "center",
     backgroundSize: "100% 100%",
@@ -88,6 +96,11 @@ export function BattleCard({
       <div className="battle-card-art absolute left-[9.5%] top-[9.8%] z-[1] h-[42.5%] w-[81%] overflow-hidden bg-bg">
         <CardArtImage cardId={card.id} src={card.artUrl} fallbackBg={card.portrait} />
       </div>
+
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(circle_at_50%_32%,color-mix(in_srgb,var(--rarity-tint),transparent_78%),transparent_46%),linear-gradient(180deg,color-mix(in_srgb,var(--rarity-tint),transparent_86%),transparent_58%,color-mix(in_srgb,var(--rarity-tint),transparent_88%))] mix-blend-soft-light"
+      />
 
       {/* Frame overlay — sits above the character image so its alpha cutout
           masks the image into the art region. Below all chrome (z-3+). */}

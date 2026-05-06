@@ -642,8 +642,12 @@ function ClashSlot({
 }) {
   const lungeAnim =
     side === "player"
-      ? "animate-[nexus-card-lunge-right_360ms_cubic-bezier(0.22,1,0.36,1)_both]"
-      : "animate-[nexus-card-lunge-left_360ms_cubic-bezier(0.22,1,0.36,1)_both]";
+      ? lungeKey % 2 === 0
+        ? "animate-[clashLungeRightA_360ms_cubic-bezier(0.22,1,0.36,1)_both]"
+        : "animate-[clashLungeRightB_360ms_cubic-bezier(0.22,1,0.36,1)_both]"
+      : lungeKey % 2 === 0
+        ? "animate-[clashLungeLeftA_360ms_cubic-bezier(0.22,1,0.36,1)_both]"
+        : "animate-[clashLungeLeftB_360ms_cubic-bezier(0.22,1,0.36,1)_both]";
   return (
     <div
       ref={slotRef}
@@ -660,9 +664,8 @@ function ClashSlot({
       <div className="relative aspect-[2/3] w-full">
         {/* Card layer — lunges during fight, shatters on death. */}
         <div
-          key={`lunge-${lungeKey}`}
           className={cn(
-            "absolute inset-0 transition-opacity duration-200",
+            "absolute inset-0 transition-opacity duration-200 [backface-visibility:hidden] [transform:translateZ(0)] will-change-transform",
             showAvatar ? "opacity-0" : "opacity-100",
             !showAvatar && lungeKey > 0 && lungeAnim,
             shattering &&
@@ -694,6 +697,12 @@ function ClashSlot({
       </div>
 
       <EnergyPillRow energy={energy} side={side} />
+      <style>{`
+        @keyframes clashLungeRightA { 0% { transform: translateZ(0) translateX(0) scale(1); } 42% { transform: translateZ(0) translateX(18px) scale(1.04); } 100% { transform: translateZ(0) translateX(0) scale(1); } }
+        @keyframes clashLungeRightB { 0% { transform: translateZ(0) translateX(0) scale(1); } 42% { transform: translateZ(0) translateX(18px) scale(1.04); } 100% { transform: translateZ(0) translateX(0) scale(1); } }
+        @keyframes clashLungeLeftA { 0% { transform: translateZ(0) translateX(0) scale(1); } 42% { transform: translateZ(0) translateX(-18px) scale(1.04); } 100% { transform: translateZ(0) translateX(0) scale(1); } }
+        @keyframes clashLungeLeftB { 0% { transform: translateZ(0) translateX(0) scale(1); } 42% { transform: translateZ(0) translateX(-18px) scale(1.04); } 100% { transform: translateZ(0) translateX(0) scale(1); } }
+      `}</style>
     </div>
   );
 }
