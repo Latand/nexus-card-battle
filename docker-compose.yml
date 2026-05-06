@@ -27,7 +27,7 @@ services:
       PORT: "3000"
       MONGODB_URI: "${MONGODB_URI:-mongodb://mongo:27017/nexus-card-battle}"
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
-      OPENROUTER_MODEL: "${OPENROUTER_MODEL:-nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free}"
+      OPENROUTER_MODEL: "${OPENROUTER_MODEL:-openai/gpt-5.4-nano}"
       OPENROUTER_SITE_URL: "${OPENROUTER_SITE_URL:-}"
       OPENROUTER_APP_TITLE: "${OPENROUTER_APP_TITLE:-Nexus Card Battle}"
     ports:

@@ -33,7 +33,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 `bun run dev` starts the custom Node server, so local PvP uses the same `/ws` path as production.
 
-AI battle mode calls OpenRouter from a server route when `OPENROUTER_API_KEY` is set in `.env`. The default model is `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`; override it with `OPENROUTER_MODEL` if needed. If the key or provider is unavailable, the app falls back to the local strategy without exposing the key to the browser.
+AI battle mode calls OpenRouter from a server route when `OPENROUTER_API_KEY` is set in `.env`. The default model is `openai/gpt-5.4-nano`; override it with `OPENROUTER_MODEL` if needed. The server sends the full public battle state, hidden-information rules, and a `choose_battle_move` tool schema for selecting `cardId`, `energy`, and `damageBoost`. If the key or provider is unavailable, the app uses an emergency local strategy without exposing the key to the browser.
 
 ## Production
 

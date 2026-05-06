@@ -41,7 +41,7 @@ describe("OpenRouter battle AI", () => {
     expect(response.energy).toBeLessThanOrEqual(game.enemy.energy);
   });
 
-  test("sends hidden-info rules to OpenRouter and normalizes a legal JSON move", async () => {
+  test("sends hidden-info rules and a forced move tool to OpenRouter", async () => {
     const game = createInitialGame();
     const enemyCard = game.enemy.hand[0];
     const request = createBattleAiMoveRequest(game, { visiblePlayerCard: game.player.hand[0] });
@@ -53,7 +53,17 @@ describe("OpenRouter battle AI", () => {
           choices: [
             {
               message: {
-                content: JSON.stringify({ cardId: enemyCard.id, energy: 2, damageBoost: false }),
+                content: null,
+                tool_calls: [
+                  {
+                    id: "call_battle_move",
+                    type: "function",
+                    function: {
+                      name: "choose_battle_move",
+                      arguments: JSON.stringify({ cardId: enemyCard.id, energy: 2, damageBoost: false }),
+                    },
+                  },
+                ],
               },
             },
           ],
@@ -76,17 +86,50 @@ describe("OpenRouter battle AI", () => {
       model: "test/model",
     });
 
-    const body = capturedBody as { messages: Array<{ content: string }>; response_format: { type: string }; reasoning?: { max_tokens: number } };
+    const body = capturedBody as {
+      messages: Array<{ role: string; content: string }>;
+      tools: Array<{
+        type: string;
+        function: {
+          name: string;
+          parameters: {
+            properties: {
+              cardId: { enum: string[] };
+              energy: { minimum: number; maximum: number };
+              damageBoost: { type: string };
+            };
+            required: string[];
+          };
+        };
+      }>;
+      tool_choice: { type: string; function: { name: string } };
+      parallel_tool_calls: boolean;
+      response_format?: unknown;
+      reasoning?: { max_tokens: number };
+      max_tokens?: number;
+    };
     const context = JSON.parse(body.messages[1].content) as {
-      visiblePlayerCardId: string;
+      battleState: { visiblePlayerCardId: string };
       rules: { hiddenInformation: { playerEnergyBid: string; enemyEnergyBid: string } };
+      strategyGuide: { energyPlan: { plannedEnergy: number; moderateEnergyRange: [number, number] }; priorities: string[] };
     };
 
-    expect(body.response_format.type).toBe("json_object");
-    expect(body.reasoning).toEqual({ max_tokens: 64 });
-    expect(context.visiblePlayerCardId).toBe(game.player.hand[0].id);
+    expect(body.response_format).toBeUndefined();
+    expect(body.tools[0].type).toBe("function");
+    expect(body.tools[0].function.name).toBe("choose_battle_move");
+    expect(body.tools[0].function.parameters.properties.cardId.enum).toContain(enemyCard.id);
+    expect(body.tools[0].function.parameters.properties.energy).toMatchObject({ minimum: 0, maximum: game.enemy.energy });
+    expect(body.tools[0].function.parameters.properties.damageBoost.type).toBe("boolean");
+    expect(body.tools[0].function.parameters.required).toEqual(["cardId", "energy", "damageBoost"]);
+    expect(body.tool_choice).toEqual({ type: "function", function: { name: "choose_battle_move" } });
+    expect(body.parallel_tool_calls).toBe(false);
+    expect(body.reasoning).toEqual({ max_tokens: 5000 });
+    expect(body.max_tokens).toBe(5000);
+    expect(context.battleState.visiblePlayerCardId).toBe(game.player.hand[0].id);
     expect(context.rules.hiddenInformation.playerEnergyBid).toBe("never provided");
     expect(context.rules.hiddenInformation.enemyEnergyBid).toContain("choose it privately");
+    expect(context.strategyGuide.energyPlan.moderateEnergyRange[1]).toBeLessThan(game.enemy.energy);
+    expect(context.strategyGuide.priorities.join(" ")).toContain("do not spend all current energy early");
   });
 
   const openRouterIntegrationTest = process.env.RUN_OPENROUTER_INTEGRATION === "1" ? test : test.skip;
@@ -99,15 +142,15 @@ describe("OpenRouter battle AI", () => {
       const response = await chooseOpenRouterBattleAiMove(request, {
         apiKey: process.env.OPENROUTER_API_KEY,
         model: process.env.OPENROUTER_MODEL,
-        timeoutMs: 20_000,
+        timeoutMs: 60_000,
       });
       const availableEnemyCardIds = new Set(game.enemy.hand.map((card) => card.id));
 
       expect(response.source).toBe("openrouter");
       expect(availableEnemyCardIds.has(response.cardId)).toBe(true);
-      expect(response.energy).toBeGreaterThanOrEqual(0);
-      expect(response.energy).toBeLessThanOrEqual(game.enemy.energy);
+      expect(response.energy).toBeGreaterThan(0);
+      expect(response.energy).toBeLessThan(game.enemy.energy);
     },
-    30_000,
+    75_000,
   );
 });
