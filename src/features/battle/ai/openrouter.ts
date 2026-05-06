@@ -7,7 +7,7 @@ import type { BattleAiFighter, BattleAiMoveRequest, BattleAiMoveResponse } from 
 
 export { DEFAULT_OPENROUTER_MODEL } from "./modelInfo";
 const OPENROUTER_CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions";
-const DEFAULT_TIMEOUT_MS = 60_000;
+const DEFAULT_TIMEOUT_MS = 70_000;
 const OPENROUTER_REASONING_TOKENS = 5_000;
 const OPENROUTER_MAX_TOKENS = 5_000;
 const BATTLE_MOVE_TOOL_NAME = "choose_battle_move";

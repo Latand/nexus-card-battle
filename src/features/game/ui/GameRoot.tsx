@@ -1,33 +1,46 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { cards } from "@/features/battle/model/cards";
-import { BattleGame } from "@/features/battle/ui/BattleGame";
+import { cardIds } from "@/features/battle/model/cardIds";
 import { STARTER_BOOSTER_CARD_COUNT } from "@/features/boosters/types";
 import { getOwnedCardIds } from "@/features/inventory/inventoryOps";
 import { DEFAULT_PLAYER_AVATAR_URL, readTelegramPhotoUrl, resolveAvatarUrl, useTelegramAvatar } from "@/features/player/profile/avatar";
 import { fetchPlayerProfile, resolveClientPlayerIdentity, savePlayerAvatar, savePlayerDeck } from "@/features/player/profile/client";
 import { STARTER_FREE_BOOSTERS, type PlayerIdentity, type PlayerProfile } from "@/features/player/profile/types";
 import { useOnlineCount } from "@/features/presence/client";
-import { ProfileModal } from "@/features/player/ui/v2/ProfileModal";
 import { AtmosphericBackground } from "@/shared/ui/v2/AtmosphericBackground";
 import { LobbyBubble } from "@/shared/ui/v2/LobbyBubble";
-import { LobbyChatDrawer } from "@/shared/ui/v2/LobbyChatDrawer";
 import { TopBar } from "@/shared/ui/v2/TopBar";
 import type { TelegramPlayer } from "@/shared/lib/telegram";
-import { PLAYER_DECK_SIZE } from "../model/randomDeck";
+import { PLAYER_DECK_SIZE } from "../model/deckConfig";
 import { clearBattleSession, hasBattleSession } from "@/features/battle/persistence";
 import { useUrlEnum } from "./useUrlState";
-import { BoosterShopModal } from "./v2/collection/BoosterShopModal";
-import { CollectionDeckScreen } from "./v2/collection/CollectionDeckScreen";
-import { StarterBoosterOnboarding } from "./v2/onboarding/StarterBoosterOnboarding";
 
 type BattleMode = "ai" | "human";
 type ProfileStatus = "loading" | "ready" | "unavailable";
 type DeckSource = "profile" | "starter-fallback";
 type DeckSaveStatus = "idle" | "saving" | "saved" | "error";
 const STARTER_KIT_CARD_COUNT = STARTER_FREE_BOOSTERS * STARTER_BOOSTER_CARD_COUNT;
+const BattleGame = dynamic(() => import("@/features/battle/ui/BattleGame").then((mod) => mod.BattleGame), {
+  loading: () => <ProfileLoadingScreen />,
+});
+const ProfileModal = dynamic(() => import("@/features/player/ui/v2/ProfileModal").then((mod) => mod.ProfileModal), {
+  loading: () => null,
+});
+const LobbyChatDrawer = dynamic(() => import("@/shared/ui/v2/LobbyChatDrawer").then((mod) => mod.LobbyChatDrawer), {
+  loading: () => null,
+});
+const BoosterShopModal = dynamic(() => import("./v2/collection/BoosterShopModal").then((mod) => mod.BoosterShopModal), {
+  loading: () => null,
+});
+const CollectionDeckScreen = dynamic(() => import("./v2/collection/CollectionDeckScreen").then((mod) => mod.CollectionDeckScreen), {
+  loading: () => null,
+});
+const StarterBoosterOnboarding = dynamic(() => import("./v2/onboarding/StarterBoosterOnboarding").then((mod) => mod.StarterBoosterOnboarding), {
+  loading: () => null,
+});
 type TelegramWindow = Window & {
   Telegram?: {
     WebApp?: {
@@ -59,7 +72,7 @@ type TelegramWindow = Window & {
 type TelegramWebApp = NonNullable<NonNullable<TelegramWindow["Telegram"]>["WebApp"]>;
 
 export function GameRoot() {
-  const allCardIds = useMemo(() => cards.map((card) => card.id), []);
+  const allCardIds = useMemo(() => Array.from(cardIds), []);
   const [screen, setScreen] = useUrlEnum<"collection" | "battle">("screen", ["collection", "battle"], "collection", "push");
   const [battleMode, setBattleMode] = useState<BattleMode>("human");
   const [deckIds, setDeckIds] = useState<string[]>([]);
@@ -444,30 +457,36 @@ function HudShell({
         <div className="min-w-0 flex-1">{children}</div>
       </div>
       <LobbyBubble count={onlineCount ?? 0} onClick={() => setLobbyOpen(true)} />
-      <BoosterShopModal
-        open={boosterShopOpen}
-        onClose={() => setBoosterShopOpen(false)}
-        playerIdentity={playerIdentity}
-        profileCrystals={profile.crystals}
-        onProfileChange={onPlayerUpdated}
-        onCrystalsUpdated={(next) => onPlayerUpdated?.({ ...profile, crystals: next })}
-      />
-      <ProfileModal
-        open={profileOpen}
-        onClose={() => setProfileOpen(false)}
-        profile={profile}
-        playerName={playerName}
-        liveAvatarUrl={liveTelegramAvatarUrl}
-        onOpenGuide={() => {
-          setProfileOpen(false);
-          router.push("/guide");
-        }}
-      />
-      <LobbyChatDrawer
-        open={lobbyOpen}
-        onClose={() => setLobbyOpen(false)}
-        userName={playerName?.trim()}
-      />
+      {boosterShopOpen && (
+        <BoosterShopModal
+          open={boosterShopOpen}
+          onClose={() => setBoosterShopOpen(false)}
+          playerIdentity={playerIdentity}
+          profileCrystals={profile.crystals}
+          onProfileChange={onPlayerUpdated}
+          onCrystalsUpdated={(next) => onPlayerUpdated?.({ ...profile, crystals: next })}
+        />
+      )}
+      {profileOpen && (
+        <ProfileModal
+          open={profileOpen}
+          onClose={() => setProfileOpen(false)}
+          profile={profile}
+          playerName={playerName}
+          liveAvatarUrl={liveTelegramAvatarUrl}
+          onOpenGuide={() => {
+            setProfileOpen(false);
+            router.push("/guide");
+          }}
+        />
+      )}
+      {lobbyOpen && (
+        <LobbyChatDrawer
+          open={lobbyOpen}
+          onClose={() => setLobbyOpen(false)}
+          userName={playerName?.trim()}
+        />
+      )}
     </AtmosphericBackground>
   );
 }

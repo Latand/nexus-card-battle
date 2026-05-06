@@ -23,6 +23,10 @@ type LobbyState = {
   chatMessages: LobbyChatMessage[];
 };
 
+type LobbyChatOptions = {
+  enabled?: boolean;
+};
+
 const CHAT_LIMIT = 200;
 const CHAT_TEXT_LIMIT = 240;
 const NAME_FALLBACK = "Гравець";
@@ -51,20 +55,23 @@ export function useOnlineCount(): number | null {
   return count;
 }
 
-export function useLobbyChat(userName?: string) {
+export function useLobbyChat(userName?: string, options: LobbyChatOptions = {}) {
+  const enabled = options.enabled ?? true;
   const [snapshot, setSnapshot] = useState<LobbyState>(() => ({ ...lobbyState, chatMessages: [...lobbyState.chatMessages] }));
 
   useEffect(() => {
+    if (!enabled) return;
     return subscribeLobby(() => setSnapshot({ ...lobbyState, chatMessages: [...lobbyState.chatMessages] }));
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
+    if (!enabled) return;
     setLobbyUserName(userName);
-  }, [userName]);
+  }, [enabled, userName]);
 
   return {
     ...snapshot,
-    sendMessage: sendLobbyChatMessage,
+    sendMessage: enabled ? sendLobbyChatMessage : disabledLobbyChatSend,
   };
 }
 
@@ -208,6 +215,10 @@ function sendLobbyChatMessage(value: string) {
   if (!text || !isLobbySocketOpen()) return false;
   lobbySocket?.send(JSON.stringify({ type: "chat_message", text }));
   return true;
+}
+
+function disabledLobbyChatSend() {
+  return false;
 }
 
 function normalizeLobbyChatHistory(value: unknown) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { BattleCard } from "@/features/battle/ui/components/BattleCard";
-import { PLAYER_DECK_SIZE } from "@/features/game/model/randomDeck";
+import { PLAYER_DECK_SIZE } from "@/features/game/model/deckConfig";
 import type { Card } from "@/features/battle/model/types";
 import { cn } from "@/shared/lib/cn";
 import Modal from "@/shared/ui/v2/Modal";

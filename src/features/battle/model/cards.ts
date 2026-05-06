@@ -1,10 +1,8 @@
 // Static Нексус card database used by the battle prototype.
 // Card records are checked in intentionally; no runtime parser is needed.
+import { READABLE_CARD_FRAME_URL } from "./cardAssets";
 import { getClanBonus, rarityAccents } from "./clans";
 import type { Card, EffectSpec, Rarity } from "./types";
-
-const FRAME_URL = "/nexus-assets/cards/card-frame-readable-192x288.png";
-const PORTRAIT_URL = "/nexus-assets/characters/cyber-brawler-card-portrait.png";
 
 type SourceCard = {
   id: string;
@@ -42396,7 +42394,7 @@ export const cards: Card[] = sourceCards.map((card) => ({
   artUrl: `/nexus-assets/characters/cards/${card.id}.webp`,
   bonus: getClanBonus(card.clan),
   accent: rarityAccents[card.rarity],
-  frameUrl: FRAME_URL,
+  frameUrl: READABLE_CARD_FRAME_URL,
   portrait: portraitFor(card),
   used: false,
 }));
@@ -42408,5 +42406,3 @@ function portraitFor(card: SourceCard) {
     `linear-gradient(145deg, hsl(${hue} 58% 52%), hsl(${(hue + 26) % 360} 46% 32%) 52%, #131319)`,
   ].join(", ");
 }
-
-export const FALLBACK_PORTRAIT_URL = PORTRAIT_URL;

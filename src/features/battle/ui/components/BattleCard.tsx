@@ -1,7 +1,7 @@
 import Image from "next/image";
 import { useState, type CSSProperties } from "react";
 import { cn } from "@/shared/lib/cn";
-import { FALLBACK_PORTRAIT_URL } from "../../model/cards";
+import { FALLBACK_PORTRAIT_URL } from "../../model/cardAssets";
 import { hasCardArt } from "../../model/cardArtIndex";
 import type { Card, Rarity } from "../../model/types";
 import { CardTooltip } from "./CardTooltip";

@@ -13,7 +13,7 @@ import { getOwnedCount, getSellableCount, type OwnedCardEntry } from "@/features
 import { sellPlayerCards } from "@/features/player/profile/client";
 import type { PlayerIdentity, PlayerProfile } from "@/features/player/profile/types";
 import { cn } from "@/shared/lib/cn";
-import { PLAYER_DECK_SIZE } from "../../model/randomDeck";
+import { PLAYER_DECK_SIZE } from "../../model/deckConfig";
 
 type Props = {
   collectionIds: string[];

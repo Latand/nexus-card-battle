@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { hasCardArt } from "@/features/battle/model/cardArtIndex";
 import { cards } from "@/features/battle/model/cards";
 import { clanList } from "@/features/battle/model/clans";
-import { BattleCard } from "@/features/battle/ui/components/BattleCard";
-import { PLAYER_DECK_SIZE } from "@/features/game/model/randomDeck";
-import { getOwnedCount } from "@/features/inventory/inventoryOps";
+import type { Card } from "@/features/battle/model/types";
+import { PLAYER_DECK_SIZE } from "@/features/game/model/deckConfig";
 import { sellPlayerCards } from "@/features/player/profile/client";
 import { cn } from "@/shared/lib/cn";
 import Modal from "@/shared/ui/v2/Modal";
@@ -15,6 +15,7 @@ import { DeckDockModal } from "./DeckDockModal";
 import {
   COLLECTION_MODES,
   GRID_LIMIT,
+  RARITY_LABELS,
   RARITY_FILTERS,
   SORT_MODES,
   sellErrorMessage,
@@ -95,6 +96,13 @@ export function CollectionDeckScreen(props: CollectionDeckScreenProps) {
   }, []);
 
   const ownedSet = useMemo(() => new Set(collectionIds), [collectionIds]);
+  const ownedCountById = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const entry of ownedCards) {
+      if (entry.count > 0) map.set(entry.cardId, entry.count);
+    }
+    return map;
+  }, [ownedCards]);
 
   const deckIds = useMemo(
     () => savedDeckIds.filter((id) => ownedSet.has(id)),
@@ -381,7 +389,7 @@ export function CollectionDeckScreen(props: CollectionDeckScreenProps) {
         ) : (
           <div className="mx-auto grid w-full max-w-[1280px] gap-1 sm:gap-2.5 grid-cols-4 sm:grid-cols-5 lg:grid-cols-7">
             {visibleCards.map((card) => {
-              const owned = getOwnedCount(ownedCards, card.id);
+              const owned = ownedCountById.get(card.id) ?? 0;
               const inDeck = deckIndexById.has(card.id);
               const slotIndex = deckIndexById.get(card.id);
               const isSelected = selectedId === card.id;
@@ -396,7 +404,7 @@ export function CollectionDeckScreen(props: CollectionDeckScreenProps) {
                   )}
                   onClick={() => handleCardClick(card.id)}
                 >
-                  <BattleCard card={card} />
+                  <CollectionCardTile card={card} locked={isLocked} />
                   {isLocked && (
                     <span
                       data-testid={`collection-locked-${card.id}`}
@@ -444,7 +452,7 @@ export function CollectionDeckScreen(props: CollectionDeckScreenProps) {
       <CardDetailModal
         open={detailOpen}
         card={selectedCard}
-        ownedCount={selectedCard ? getOwnedCount(ownedCards, selectedCard.id) : 0}
+        ownedCount={selectedCard ? ownedCountById.get(selectedCard.id) ?? 0 : 0}
         cardInDeck={selectedCard ? deckIds.includes(selectedCard.id) : false}
         canEditDeck={canEditDeck && (selectedCard ? ownedSet.has(selectedCard.id) : false)}
         canSell={canSell && Boolean(selectedCard && ownedSet.has(selectedCard.id))}
@@ -508,6 +516,64 @@ export function CollectionDeckScreen(props: CollectionDeckScreenProps) {
         </div>
       </Modal>
     </main>
+  );
+}
+
+function CollectionCardTile({ card, locked }: { card: Card; locked: boolean }) {
+  const hasArt = hasCardArt(card.id);
+  const style = {
+    "--accent": card.accent,
+    background:
+      `linear-gradient(180deg, color-mix(in srgb, ${card.accent}, transparent 83%), rgba(12,14,15,0.92) 40%, rgba(7,8,8,0.98)), ${card.portrait}`,
+    boxShadow: locked
+      ? "inset 0 0 0 1px rgba(255,255,255,0.06)"
+      : `inset 0 0 0 1px color-mix(in srgb, ${card.accent}, #f6dea5 24%), 0 8px 16px rgba(0,0,0,0.32)`,
+  } as CSSProperties;
+
+  return (
+    <div
+      className={cn(
+        "relative aspect-[2/3] w-full overflow-hidden rounded-[10px] border border-black/45 text-left",
+        locked ? "saturate-[0.45]" : "hover:brightness-110",
+      )}
+      style={style}
+    >
+      <div className="absolute left-[9%] top-[9%] h-[43%] w-[82%] overflow-hidden rounded-[5px] bg-black/25">
+        {hasArt && (
+          // eslint-disable-next-line @next/next/no-img-element -- catalog thumbnails avoid the heavier next/image wrapper.
+          <img
+            src={card.artUrl}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full object-cover object-top"
+            onError={(event) => {
+              event.currentTarget.hidden = true;
+            }}
+          />
+        )}
+      </div>
+      <div className="pointer-events-none absolute inset-x-[7%] top-[4%] flex items-center justify-between gap-1 text-[clamp(5px,1.6vw,9px)] font-black uppercase text-[#efd481]">
+        <span className="min-w-0 truncate">{RARITY_LABELS[card.rarity]}</span>
+        <span className="shrink-0 text-[#f8ebcb]">{card.level}</span>
+      </div>
+      <div className="pointer-events-none absolute inset-x-[8%] top-[54%] grid min-h-[15%] content-start gap-0.5">
+        <b className="min-w-0 truncate text-center text-[clamp(8px,2vw,13px)] font-black leading-none text-[#fff4cd] [text-shadow:0_1px_0_rgba(0,0,0,0.9)]">
+          {card.name}
+        </b>
+        <span className="min-w-0 truncate text-center text-[clamp(5px,1.45vw,9px)] font-bold uppercase text-[#bdb095]">
+          {card.clan}
+        </span>
+      </div>
+      <div className="pointer-events-none absolute bottom-[10%] left-[9%] right-[9%] flex items-center justify-between text-[clamp(9px,2.4vw,16px)] font-black">
+        <span className="grid aspect-square w-[22%] place-items-center rounded-full bg-black/55 text-[#ffe08a]">
+          {card.power}
+        </span>
+        <span className="grid aspect-square w-[22%] place-items-center rounded-full bg-black/55 text-[#ff7668]">
+          {card.damage}
+        </span>
+      </div>
+    </div>
   );
 }
 

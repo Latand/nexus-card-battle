@@ -53,6 +53,7 @@ type BattleGameProps = {
 
 type HumanMatchStatus = "idle" | "connecting" | "queued" | "matched" | "opponent_left" | "forfeit" | "error" | "closed";
 const BOT_FALLBACK_DELAY_MS = 5_000;
+const REMOTE_AI_CLIENT_BUDGET_MS = 4_000;
 
 type HumanMove = {
   cardId: string;
@@ -188,7 +189,8 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   // Lobby chat for the matchmaking screen — at queue time there is no opponent
   // yet, so we surface the global lobby websocket chat.
   const [lobbyChatDraft, setLobbyChatDraft] = useState("");
-  const lobbyChat = useLobbyChat(playerName);
+  const lobbyChatEnabled = isHumanMatch && humanStatus !== "matched";
+  const lobbyChat = useLobbyChat(playerName, { enabled: lobbyChatEnabled });
   const [matchInfo, setMatchInfo] = useState<HumanMatchInfo | null>(null);
   const [persistedRewards, setPersistedRewards] = useState<RewardSummary | null>(null);
   const [persistedRewardsError, setPersistedRewardsError] = useState<string | null>(null);
@@ -1025,15 +1027,28 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   }
 
   async function chooseAiEnemyMove(currentGame: GameState, visiblePlayerCard?: Card): Promise<EnemyMove> {
-    try {
-      return await requestBattleAiMove(currentGame, { visiblePlayerCard });
-    } catch (error) {
+    const fallback = chooseEnemyMove(currentGame.enemy, currentGame.player, currentGame.round.round, {
+      visiblePlayerCard,
+      first: currentGame.first,
+    });
+
+    const remoteMove = requestBattleAiMove(currentGame, { visiblePlayerCard }).catch((error) => {
       console.warn("Remote AI move failed; using local fallback.", error instanceof Error ? error.message : "Unknown error");
-      return chooseEnemyMove(currentGame.enemy, currentGame.player, currentGame.round.round, {
-        visiblePlayerCard,
-        first: currentGame.first,
-      });
-    }
+      return fallback;
+    });
+
+    return withLocalAiBudget(remoteMove, fallback);
+  }
+
+  function withLocalAiBudget(remoteMove: Promise<EnemyMove>, fallback: EnemyMove): Promise<EnemyMove> {
+    let timeout: number | undefined;
+    const localMove = new Promise<EnemyMove>((resolve) => {
+      timeout = window.setTimeout(() => resolve(fallback), REMOTE_AI_CLIENT_BUDGET_MS);
+    });
+
+    return Promise.race([remoteMove, localMove]).finally(() => {
+      if (timeout !== undefined) window.clearTimeout(timeout);
+    });
   }
 
   function isCurrentAiMoveRequest(requestId: number, round: number) {
@@ -1202,14 +1217,17 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     game.matchResult === "player" ? "victory" : "defeat";
   const matchEndRewards = mapRewardsForMatchEnd(persistedRewards ?? game.rewards);
 
-  const matchmakingChatMessages: MatchmakingChatMessage[] = lobbyChat.chatMessages.map((message) => ({
-    id: message.id,
-    authorId: message.authorId,
-    authorName: message.authorName,
-    text: message.text,
-    ts: message.createdAt,
-  }));
+  const matchmakingChatMessages: MatchmakingChatMessage[] = lobbyChatEnabled
+    ? lobbyChat.chatMessages.map((message) => ({
+        id: message.id,
+        authorId: message.authorId,
+        authorName: message.authorName,
+        text: message.text,
+        ts: message.createdAt,
+      }))
+    : [];
   const sendLobbyChatDraft = () => {
+    if (!lobbyChatEnabled) return;
     if (!lobbyChat.sendMessage(lobbyChatDraft)) return;
     setLobbyChatDraft("");
   };

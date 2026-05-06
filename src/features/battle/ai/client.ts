@@ -6,7 +6,11 @@ import {
   type BattleAiMoveResponse,
 } from "./publicState";
 
-export async function requestBattleAiMove(game: GameState, options: { visiblePlayerCard?: Card } = {}): Promise<EnemyMove> {
+type BattleAiClientMoveOptions = {
+  visiblePlayerCard?: Card;
+};
+
+export async function requestBattleAiMove(game: GameState, options: BattleAiClientMoveOptions = {}): Promise<EnemyMove> {
   const response = await fetch("/api/battle/ai-move", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
