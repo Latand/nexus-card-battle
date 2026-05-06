@@ -1,15 +1,17 @@
 import { cards as activeCards } from "@/features/battle/model/cards";
 import type { Card } from "@/features/battle/model/types";
+import { GroupContextError, verifyGroupLaunchContext } from "@/features/integrations/groupContext";
 import { PlayerAuthError, resolveAuthenticatedPlayerIdentity, type PlayerAuthResult } from "@/features/player/profile/auth";
 import { PlayerIdentityValidationError, toPlayerProfile } from "@/features/player/profile/types";
-import { getBoosterCatalogForPlayer, getBoosterCatalogResponse, validateBoosterCatalog } from "./catalog";
-import { BoosterOpeningError, preparePaidBoosterOpening, prepareStarterBoosterOpening, type RandomSource } from "./opening";
-import type { BoosterOpeningRecord, BoosterOpeningStore, StoredBoosterOpeningRecord } from "./types";
+import { boosterCatalog, getBoosterCatalogForPlayerWithBoosters, getBoosterCatalogResponse, serializeBooster, validateBoosterCatalog } from "./catalog";
+import { BoosterOpeningError, createGroupBooster, preparePaidBoosterOpening, prepareStarterBoosterOpening, type RandomSource } from "./opening";
+import type { Booster, BoosterOpeningRecord, BoosterOpeningStore, StoredBoosterOpeningRecord } from "./types";
 
-export async function handleBoosterCatalogGet() {
+export async function handleBoosterCatalogGet(request?: Request, store?: BoosterOpeningStore) {
   try {
     validateBoosterCatalog();
-    return noStoreJson({ boosters: getBoosterCatalogResponse() });
+    const groupBooster = request && store ? await resolveGroupBoosterFromRequest(request, store, { required: false }) : undefined;
+    return noStoreJson({ boosters: groupBooster ? [...getBoosterCatalogResponse(), serializeBooster(groupBooster)] : getBoosterCatalogResponse() });
   } catch (error) {
     return boosterApiErrorResponse(error);
   }
@@ -22,9 +24,11 @@ export async function handleBoosterCatalogPost(request: Request, store: BoosterO
     const auth = resolveAuthenticatedPlayerIdentity(request, body, { allowGuestCreation: true });
     const identity = auth.identity;
     const profile = toPlayerProfile(await store.findOrCreateByIdentity(identity));
+    const groupBooster = await resolveGroupBoosterFromBody(body, store, { required: false });
+    const boosters: readonly Booster[] = groupBooster ? [...boosterCatalog, groupBooster] : boosterCatalog;
 
     return noStoreJson({
-      boosters: getBoosterCatalogForPlayer(profile),
+      boosters: getBoosterCatalogForPlayerWithBoosters(profile, boosters),
       player: profile,
     }, auth);
   } catch (error) {
@@ -83,6 +87,9 @@ async function openStarterBooster(
 ) {
   const { identity } = resolveAuthenticatedPlayerIdentity(request, body);
   const boosterId = parseBoosterId(body.boosterId);
+  if (boosterId.startsWith("group-")) {
+    throw new BoosterOpeningError("group_context_required", "Group boosters cannot be opened as starter boosters.", 403);
+  }
   const profile = toPlayerProfile(await store.findOrCreateByIdentity(identity));
   const prepared = prepareStarterBoosterOpening({
     boosterId,
@@ -117,11 +124,14 @@ async function openPaidBooster(
 ) {
   const { identity } = resolveAuthenticatedPlayerIdentity(request, body);
   const boosterId = parseBoosterId(body.boosterId);
+  const groupOpening = boosterId.startsWith("group-") ? await resolveGroupOpening(body, store, boosterId) : undefined;
   const profile = toPlayerProfile(await store.findOrCreateByIdentity(identity));
   const prepared = preparePaidBoosterOpening({
     boosterId,
     player: profile,
     rng: options.rng,
+    booster: groupOpening?.booster,
+    groupCards: groupOpening?.groupCards,
   });
   const openedAt = options.now?.() ?? new Date();
   const persisted = await store.savePaidBoosterOpening({
@@ -139,6 +149,46 @@ async function openPaidBooster(
     opening: serializeOpeningRecord(persisted.opening),
     player: toPlayerProfile(persisted.player),
     crystalCost: prepared.crystalCost,
+  });
+}
+
+async function resolveGroupOpening(body: Record<string, unknown>, store: BoosterOpeningStore, boosterId: string) {
+  const groupBooster = await resolveGroupBoosterFromBody(body, store, { required: true });
+  if (!groupBooster || groupBooster.id !== boosterId || !groupBooster.group) {
+    throw new BoosterOpeningError("group_context_required", "Valid signed group context is required for this booster.", 403);
+  }
+  const groupCards = await store.findIntegrationGroupCardsByChatId?.(groupBooster.group.chatId);
+  if (!groupCards) {
+    throw new BoosterOpeningError("group_booster_unavailable", "Group booster is unavailable.", 404);
+  }
+  return { booster: groupBooster, groupCards };
+}
+
+async function resolveGroupBoosterFromRequest(request: Request, store: BoosterOpeningStore, options: { required: boolean }) {
+  const context = new URL(request.url).searchParams.get("groupContext");
+  return resolveGroupBooster(context, store, options);
+}
+
+async function resolveGroupBoosterFromBody(body: Record<string, unknown>, store: BoosterOpeningStore, options: { required: boolean }) {
+  return resolveGroupBooster(body.groupContext, store, options);
+}
+
+async function resolveGroupBooster(value: unknown, store: BoosterOpeningStore, options: { required: boolean }) {
+  if (value === undefined || value === null || value === "") {
+    if (!options.required) return undefined;
+    throw new BoosterOpeningError("group_context_required", "Valid signed group context is required for group boosters.", 403);
+  }
+  const context = verifyGroupLaunchContext(value);
+  const group = await store.findIntegrationGroupByChatId?.(context.chatId);
+  if (!group) {
+    throw new BoosterOpeningError("group_booster_unavailable", "Group booster is unavailable.", 404);
+  }
+  return createGroupBooster({
+    chatId: group.chatId,
+    boosterId: group.boosterId,
+    name: group.displayName,
+    clan: group.clan,
+    cardCount: group.cardIds.length,
   });
 }
 
@@ -218,6 +268,16 @@ function boosterApiErrorResponse(error: unknown) {
         message: error.message,
       },
       { status: 400 },
+    );
+  }
+
+  if (error instanceof GroupContextError) {
+    return noStoreJson(
+      {
+        error: error.code,
+        message: error.message,
+      },
+      { status: error.status },
     );
   }
 

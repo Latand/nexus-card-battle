@@ -19,8 +19,9 @@ export type OpenStarterBoosterResponse = {
   crystalCost?: number;
 };
 
-export async function fetchBoosterCatalog(): Promise<BoosterCatalogResponse> {
-  const response = await fetch("/api/boosters", {
+export async function fetchBoosterCatalog(groupContext?: string | null): Promise<BoosterCatalogResponse> {
+  const query = groupContext ? `?groupContext=${encodeURIComponent(groupContext)}` : "";
+  const response = await fetch(`/api/boosters${query}`, {
     method: "GET",
   });
   const body = (await response.json().catch(() => undefined)) as Partial<BoosterCatalogResponse> & {
@@ -40,13 +41,13 @@ export async function fetchBoosterCatalog(): Promise<BoosterCatalogResponse> {
   };
 }
 
-export async function fetchStarterBoosterCatalog(identity: PlayerIdentity): Promise<StarterBoosterCatalogResponse> {
+export async function fetchStarterBoosterCatalog(identity: PlayerIdentity, groupContext?: string | null): Promise<StarterBoosterCatalogResponse> {
   const response = await fetch("/api/boosters", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ identity }),
+    body: JSON.stringify({ identity, ...(groupContext ? { groupContext } : {}) }),
   });
   const body = (await response.json().catch(() => undefined)) as Partial<StarterBoosterCatalogResponse> & {
     message?: string;
@@ -94,13 +95,13 @@ export async function openStarterBooster(identity: PlayerIdentity, boosterId: st
   };
 }
 
-export async function openPaidBooster(identity: PlayerIdentity, boosterId: string): Promise<OpenStarterBoosterResponse> {
+export async function openPaidBooster(identity: PlayerIdentity, boosterId: string, groupContext?: string | null): Promise<OpenStarterBoosterResponse> {
   const response = await fetch("/api/player/open-booster", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ identity, boosterId, source: "paid_crystals" }),
+    body: JSON.stringify({ identity, boosterId, source: "paid_crystals", ...(groupContext ? { groupContext } : {}) }),
   });
   const body = (await response.json().catch(() => undefined)) as Partial<OpenStarterBoosterResponse> & {
     message?: string;

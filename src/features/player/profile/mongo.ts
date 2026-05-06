@@ -442,6 +442,18 @@ export class MongoPlayerProfileStore implements PlayerDeckStore, PlayerMatchRewa
     return { group: fromMongoGroup(group), groupCard: fromMongoGroupCard(existing), cardInput: existing.card, player, idempotent: true };
   }
 
+  async findIntegrationGroupByChatId(chatId: string): Promise<GroupIntegrationRecord | undefined> {
+    const groups = await this.getGroupsCollection();
+    const group = await groups.findOne({ chatId });
+    return group ? fromMongoGroup(group) : undefined;
+  }
+
+  async findIntegrationGroupCardsByChatId(chatId: string): Promise<GroupCardIntegrationRecord[]> {
+    const groupCards = await this.getGroupCardsCollection();
+    const cards = await groupCards.find({ chatId }).toArray();
+    return cards.map(fromMongoGroupCard);
+  }
+
   async hydrateIntegrationRuntime() {
     const groups = await this.getGroupsCollection();
     const groupCards = await this.getGroupCardsCollection();

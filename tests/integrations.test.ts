@@ -3,7 +3,8 @@ import sharp from "sharp";
 import { cards } from "../src/features/battle/model/cards";
 import { createBattleHand, createCardCollection, createDeck, findCard } from "../src/features/battle/model/domain/decks";
 import type { Bonus } from "../src/features/battle/model/types";
-import { handleGroupCardPost, handleGroupUpsertPut, createGroupCardRecord, createNewGroup, validateGroupBonusChange, type CreateGroupCardInput, type CreateGroupCardResult, type IntegrationStore, type UpsertGroupInput } from "../src/features/integrations/api";
+import { handleGroupCardPost, handleGroupLaunchUrlPost, handleGroupUpsertPut, createGroupCardRecord, createNewGroup, validateGroupBonusChange, type CreateGroupCardInput, type CreateGroupCardResult, type IntegrationStore, type UpsertGroupInput } from "../src/features/integrations/api";
+import { verifyGroupLaunchContext } from "../src/features/integrations/groupContext";
 import { groupCardId, hydrateGroupRuntime, resetDynamicIntegrationRuntimeForTests } from "../src/features/integrations/runtime";
 import { addToInventory, getOwnedCount } from "../src/features/inventory/inventoryOps";
 import { handlePlayerDeckSavePost } from "../src/features/player/profile/api";
@@ -59,6 +60,36 @@ describe("integration API", () => {
 
     expect(groupResponse.status).toBe(401);
     expect(cardResponse.status).toBe(401);
+    const launchResponse = await handleGroupLaunchUrlPost(
+      jsonRequest("http://localhost/api/integrations/groups/-100/launch-url", {}),
+      { params: { chatId: "-100" } },
+    );
+    expect(launchResponse.status).toBe(401);
+  });
+
+  test("generates a signed expiring group launch URL", async () => {
+    const response = await handleGroupLaunchUrlPost(
+      jsonRequest(
+        "http://localhost/api/integrations/groups/-100launch/launch-url",
+        { baseUrl: "https://nexus.test/play?screen=collection" },
+        authHeaders(),
+      ),
+      { params: { chatId: "-100launch" } },
+      { now: new Date("2026-05-06T10:00:00.000Z"), ttlSeconds: 60 },
+    );
+    const body = (await response.json()) as { url: string; expiresInSeconds: number };
+    const url = new URL(body.url);
+    const groupContext = url.searchParams.get("groupContext");
+
+    expect(response.status).toBe(200);
+    expect(body.expiresInSeconds).toBe(60);
+    expect(url.origin).toBe("https://nexus.test");
+    expect(url.searchParams.get("screen")).toBe("collection");
+    expect(groupContext).toBeString();
+    expect(verifyGroupLaunchContext(groupContext, { now: new Date("2026-05-06T10:00:30.000Z") })).toMatchObject({
+      chatId: "-100launch",
+      expiresAt: 1778061660,
+    });
   });
 
   test("upserts a group clan and booster with Nexus-owned glyph URL", async () => {

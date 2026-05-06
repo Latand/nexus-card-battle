@@ -2,6 +2,8 @@ import { clans } from "@/features/battle/model/clans";
 import { PAID_BOOSTER_CRYSTAL_COST, type Booster, type BoosterCatalogItem, type BoosterResponse, type PlayerBoosterCatalogProfile } from "./types";
 
 export const boosterCatalog = [
+  // Solo-clan VibeCoders pack: 4 random Legends from the fan clan.
+  { id: "vibe-drop", name: "Vibe Drop", clans: ["VibeCoders"], cardCount: 4, requiredRarities: ["Legend"], presentation: "special" },
   { id: "neon-breach", name: "Neon Breach", clans: ["[Da:Hack]", "Aliens"] },
   { id: "factory-shift", name: "Factory Shift", clans: ["Workers", "Micron"] },
   { id: "street-kings", name: "Street Kings", clans: ["Street", "Kingpin"] },
@@ -14,8 +16,6 @@ export const boosterCatalog = [
   { id: "metro-chase", name: "Metro Chase", clans: ["Metropolis", "Chasers"] },
   { id: "desert-signal", name: "Desert Signal", clans: ["Халифат", "Nemos"] },
   { id: "street-plague", name: "Street Plague", clans: ["Street", "Damned"] },
-  // Solo-clan VibeCoders pack: 4 random Legends from the new fan clan.
-  { id: "vibe-drop", name: "Vibe Drop", clans: ["VibeCoders"], cardCount: 4, requiredRarities: ["Legend"] },
 ] as const satisfies readonly Booster[];
 
 export function getBoosterById(boosterId: string): Booster | undefined {
@@ -28,6 +28,8 @@ export function serializeBooster(booster: Booster): BoosterResponse {
     name: booster.name,
     clans: [...booster.clans],
     cardCount: booster.cardCount,
+    presentation: booster.presentation,
+    groupChatId: booster.group?.chatId,
   };
 }
 
@@ -36,11 +38,16 @@ export function getBoosterCatalogResponse() {
 }
 
 export function getBoosterCatalogForPlayer(profile: PlayerBoosterCatalogProfile): BoosterCatalogItem[] {
+  return getBoosterCatalogForPlayerWithBoosters(profile, boosterCatalog);
+}
+
+export function getBoosterCatalogForPlayerWithBoosters(profile: PlayerBoosterCatalogProfile, boosters: readonly Booster[]): BoosterCatalogItem[] {
   const openedBoosterIds = new Set(profile.openedBoosterIds);
 
-  return boosterCatalog.map((booster) => {
+  return boosters.map((booster) => {
     const opened = openedBoosterIds.has(booster.id);
-    const canOpen = profile.starterFreeBoostersRemaining > 0 && !opened;
+    const starterEligible = !booster.group && (booster.cardCount ?? 5) >= 4;
+    const canOpen = starterEligible && profile.starterFreeBoostersRemaining > 0 && !opened;
     const canOpenPaid = profile.crystals >= PAID_BOOSTER_CRYSTAL_COST;
 
     return {

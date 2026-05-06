@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Card } from "@/features/battle/model/types";
 import { BattleCard } from "@/features/battle/ui/components/BattleCard";
 import { fetchBoosterCatalog, openPaidBooster } from "@/features/boosters/client";
@@ -25,6 +25,7 @@ export type BoosterShopModalProps = {
    * callbacks because it carries fresh ownedCards / openedBoosterIds too.
    */
   onProfileChange?: (profile: PlayerProfile) => void;
+  groupContext?: string | null;
 };
 
 type ShopStatus =
@@ -46,21 +47,21 @@ export function BoosterShopModal({
   onCrystalsUpdated,
   onCardsObtained,
   onProfileChange,
+  groupContext,
 }: BoosterShopModalProps) {
   const isMobile = useIsMobile();
   const [boosters, setBoosters] = useState<BoosterResponse[] | null>(null);
   const [status, setStatus] = useState<ShopStatus>({ kind: "idle" });
   const [reveal, setReveal] = useState<RevealState | null>(null);
-  const fetchedRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
 
     let cancelled = false;
+    setBoosters(null);
+    setReveal(null);
     setStatus({ kind: "loading" });
-    void fetchBoosterCatalog()
+    void fetchBoosterCatalog(groupContext)
       .then((response) => {
         if (cancelled) return;
         setBoosters(response.boosters);
@@ -69,20 +70,15 @@ export function BoosterShopModal({
       .catch((error: unknown) => {
         if (cancelled) return;
         const message = error instanceof Error ? error.message : "Не вдалося завантажити бустери";
+        setBoosters(null);
+        setReveal(null);
         setStatus({ kind: "error", message });
       });
 
     return () => {
       cancelled = true;
     };
-  }, [open]);
-
-  useEffect(() => {
-    if (open) return;
-    // Reset on close so reopening starts fresh (loading shows briefly again).
-    setReveal(null);
-    setStatus({ kind: "idle" });
-  }, [open]);
+  }, [groupContext, open]);
 
   const handleOpenBooster = useCallback(
     (boosterId: string) => {
@@ -91,7 +87,7 @@ export function BoosterShopModal({
       if (profileCrystals < PAID_BOOSTER_CRYSTAL_COST) return;
 
       setStatus({ kind: "opening", boosterId });
-      void openPaidBooster(playerIdentity, boosterId)
+      void openPaidBooster(playerIdentity, boosterId, groupContext)
         .then((response) => {
           setReveal({ booster: response.booster, cards: response.cards });
           setStatus({ kind: "idle" });
@@ -115,6 +111,7 @@ export function BoosterShopModal({
       onCardsObtained,
       onCrystalsUpdated,
       onProfileChange,
+      groupContext,
       playerIdentity,
       profileCrystals,
       status.kind,
@@ -164,7 +161,7 @@ export function BoosterShopModal({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4 flex flex-col gap-4">
-          {reveal && (
+          {status.kind !== "error" && reveal && (
             <RevealPanel reveal={reveal} onDismiss={() => setReveal(null)} />
           )}
 
@@ -188,13 +185,13 @@ export function BoosterShopModal({
             </div>
           )}
 
-          {!loading && boosters && boosters.length === 0 && (
+          {status.kind !== "error" && !loading && boosters && boosters.length === 0 && (
             <p className="text-[12px] text-ink-mute uppercase tracking-[0.16em]">
               Бустери недоступні
             </p>
           )}
 
-          {!loading && boosters && boosters.length > 0 && (
+          {status.kind !== "error" && !loading && boosters && boosters.length > 0 && (
             <ul
               data-testid="booster-shop-list"
               className="grid grid-cols-1 sm:grid-cols-2 gap-3"
@@ -241,16 +238,23 @@ function BoosterRow({
   insufficient: boolean;
   onOpen: () => void;
 }) {
+  const special = booster.presentation === "special" || booster.presentation === "group";
   return (
     <article
       data-testid={`booster-shop-item-${booster.id}`}
-      className="flex items-center gap-3 rounded-md border border-accent-quiet bg-surface px-3 py-3"
+      data-presentation={booster.presentation}
+      className={cn(
+        "flex items-center gap-3 rounded-md border px-3 py-3",
+        special
+          ? "border-accent/80 bg-[linear-gradient(135deg,rgba(240,196,49,0.18),rgba(70,210,255,0.12)),var(--color-surface)] shadow-[0_0_24px_rgba(240,196,49,0.16)]"
+          : "border-accent-quiet bg-surface",
+      )}
     >
       <div className="min-w-0 flex-1">
-        <strong className="block truncate text-[14px] text-ink uppercase tracking-[0.06em]">
+        <strong className={cn("block truncate text-[14px] uppercase tracking-[0.06em]", special ? "text-accent" : "text-ink")}>
           {booster.name}
         </strong>
-        <span className="mt-0.5 block truncate text-[11px] text-cool uppercase tracking-[0.16em]">
+        <span className={cn("mt-0.5 block truncate text-[11px] uppercase tracking-[0.16em]", special ? "text-cool" : "text-cool")}>
           {booster.clans.join(" · ")}
         </span>
       </div>

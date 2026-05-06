@@ -1,5 +1,6 @@
 import { cards as activeCards } from "@/features/battle/model/cards";
 import type { Card, Rarity } from "@/features/battle/model/types";
+import type { GroupCardIntegrationRecord } from "@/features/integrations/runtime";
 import type { PlayerProfile } from "@/features/player/profile/types";
 import { getBoosterById, serializeBooster } from "./catalog";
 import { PAID_BOOSTER_CRYSTAL_COST, STARTER_BOOSTER_CARD_COUNT, type Booster, type PreparedPaidBoosterOpening, type PreparedStarterBoosterOpening } from "./types";
@@ -25,6 +26,8 @@ export class BoosterOpeningError extends Error {
       | "insufficient_crystals"
       | "booster_required_rarity_unavailable"
       | "booster_pool_exhausted"
+      | "group_context_required"
+      | "group_booster_unavailable"
       | "invalid_booster_opening",
     message: string,
     readonly status = 400,
@@ -75,8 +78,10 @@ export function preparePaidBoosterOpening(input: {
   player: Pick<PlayerProfile, "crystals">;
   rng?: RandomSource;
   cardPool?: readonly Card[];
+  booster?: Booster;
+  groupCards?: readonly Pick<GroupCardIntegrationRecord, "id" | "dropWeight">[];
 }): PreparedPaidBoosterOpening {
-  const booster = getBoosterById(input.boosterId);
+  const booster = input.booster ?? getBoosterById(input.boosterId);
 
   if (!booster) {
     throw new BoosterOpeningError("invalid_booster_id", "Booster does not exist.", 404);
@@ -86,13 +91,14 @@ export function preparePaidBoosterOpening(input: {
     throw new BoosterOpeningError("insufficient_crystals", "Not enough crystals to open this booster.", 409);
   }
 
-  const requiredRarities = booster.requiredRarities ?? REQUIRED_PAID_RARITIES;
-  const openedCards = prepareBoosterOpeningCards({
-    booster,
-    requiredRarities,
-    rng: input.rng,
-    cardPool: input.cardPool,
-  });
+  const openedCards = booster.group
+    ? prepareGroupBoosterOpeningCards({ booster, rng: input.rng, cardPool: input.cardPool, groupCards: input.groupCards ?? [] })
+    : prepareBoosterOpeningCards({
+        booster,
+        requiredRarities: booster.requiredRarities ?? REQUIRED_PAID_RARITIES,
+        rng: input.rng,
+        cardPool: input.cardPool,
+      });
 
   return {
     booster: serializeBooster(booster),
@@ -100,6 +106,19 @@ export function preparePaidBoosterOpening(input: {
     cardIds: openedCards.map((card) => card.id),
     source: "paid_crystals",
     crystalCost: PAID_BOOSTER_CRYSTAL_COST,
+  };
+}
+
+export function createGroupBooster(input: { chatId: string; boosterId: string; name: string; clan: string; cardCount: number }): Booster {
+  return {
+    id: input.boosterId,
+    name: input.name,
+    clans: [input.clan],
+    cardCount: Math.min(4, input.cardCount),
+    presentation: "group",
+    group: {
+      chatId: input.chatId,
+    },
   };
 }
 
@@ -193,6 +212,50 @@ function pickRandomCard(cards: readonly Card[], rng: RandomSource) {
   return cards[index];
 }
 
+function prepareGroupBoosterOpeningCards(input: {
+  booster: Booster;
+  rng?: RandomSource;
+  cardPool?: readonly Card[];
+  groupCards: readonly Pick<GroupCardIntegrationRecord, "id" | "dropWeight">[];
+}) {
+  const rng = input.rng ?? Math.random;
+  const cardPool = input.cardPool ?? activeCards;
+  const cardsById = new Map(cardPool.map((card) => [card.id, card]));
+  const weightedPool = input.groupCards
+    .filter((entry) => entry.dropWeight > 0)
+    .map((entry) => ({ card: cardsById.get(entry.id), weight: entry.dropWeight }))
+    .filter((entry): entry is { card: Card; weight: number } => Boolean(entry.card) && Number.isFinite(entry.weight) && entry.weight > 0);
+
+  if (weightedPool.length === 0) {
+    throw new BoosterOpeningError("group_booster_unavailable", "Group booster has no cards.", 409);
+  }
+
+  if (weightedPool.length <= 3) {
+    return weightedPool.map((entry) => entry.card);
+  }
+
+  const remaining = [...weightedPool];
+  const openedCards: Card[] = [];
+  while (openedCards.length < 4 && remaining.length > 0) {
+    const index = pickWeightedIndex(remaining, rng);
+    openedCards.push(remaining[index].card);
+    remaining.splice(index, 1);
+  }
+  validateOpeningCards(openedCards, input.booster, cardPool, { expectedCount: openedCards.length, requiredRarities: [] });
+  return openedCards;
+}
+
+function pickWeightedIndex(items: readonly { weight: number }[], rng: RandomSource) {
+  const total = items.reduce((sum, item) => sum + item.weight, 0);
+  const roll = normalizeRandom(rng()) * total;
+  let cumulative = 0;
+  for (let index = 0; index < items.length; index += 1) {
+    cumulative += items[index].weight;
+    if (roll < cumulative) return index;
+  }
+  return items.length - 1;
+}
+
 function normalizeRandom(value: number) {
   if (!Number.isFinite(value)) return 0;
   if (value <= 0) return 0;
@@ -204,9 +267,9 @@ function validateOpeningCards(
   openedCards: readonly Card[],
   booster: Booster,
   cardPool: readonly Card[],
-  options: { requiredRarities: readonly Rarity[] },
+  options: { requiredRarities: readonly Rarity[]; expectedCount?: number },
 ) {
-  const expectedCount = booster.cardCount ?? STARTER_BOOSTER_CARD_COUNT;
+  const expectedCount = options.expectedCount ?? booster.cardCount ?? STARTER_BOOSTER_CARD_COUNT;
   if (openedCards.length !== expectedCount) {
     throw new BoosterOpeningError("invalid_booster_opening", `Booster opening must contain ${expectedCount} cards.`, 500);
   }
