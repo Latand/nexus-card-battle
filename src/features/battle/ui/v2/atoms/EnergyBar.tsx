@@ -12,8 +12,8 @@ const FILL = "#f0c668";
 const RAIL = "#3a2f15";
 
 export function EnergyBar({ value, max, label, className, ...rest }: EnergyBarProps) {
-  const safeMax = Math.max(1, max);
-  const safeValue = Math.max(0, Math.min(value, safeMax));
+  const safeValue = Math.max(0, value);
+  const safeMax = Math.max(1, max, safeValue);
   const pct = (safeValue / safeMax) * 100;
   return (
     <div

@@ -57,8 +57,9 @@ export function CardPickModal({
   if (!open) return null;
 
   // `maxEnergy` is the absolute cap for the bid (player.energy − boostCost).
-  // Slots beyond it are disabled (greyed out, not clickable).
-  const available = Math.min(MAX_ENERGY, maxEnergy);
+  // Fighters start at MAX_ENERGY, but card effects can push current energy above it.
+  const available = Math.max(0, Math.floor(maxEnergy));
+  const energySlotCount = Math.max(MAX_ENERGY, available, energy);
   const baseAttack = selected.power;
 
   const setEnergyTo = (n: number) => {
@@ -191,14 +192,14 @@ export function CardPickModal({
                 Енергія
               </span>
               <span className="font-mono tabular-nums text-[11px] text-ink-mute">
-                {energy} / {MAX_ENERGY}
+                {energy} / {available}
               </span>
             </div>
             <div
               data-testid="card-pick-energy-stepper"
               className="flex items-center justify-center gap-[4px] flex-wrap"
             >
-              {Array.from({ length: MAX_ENERGY }).map((_, i) => {
+              {Array.from({ length: energySlotCount }).map((_, i) => {
                 const filled = i < energy;
                 const slotAvailable = i < available;
                 return (

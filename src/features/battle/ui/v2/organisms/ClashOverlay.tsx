@@ -805,8 +805,8 @@ function CardHpPillRow({ value, side }: { value: number; side: "player" | "enemy
  * so it visually parallels the persistent HUD HP strip.
  */
 function AvatarHpPillRow({ value, max }: { value: number; max: number }) {
-  const total = Math.max(1, max);
-  const filled = Math.max(0, Math.min(total, value));
+  const filled = Math.max(0, Math.round(value));
+  const total = Math.max(1, max, filled);
   return (
     <div
       data-testid="clash-avatar-hp"
@@ -897,8 +897,8 @@ function ProjectileFlight({ spec, kind }: { spec: ProjectileSpec; kind: number }
 }
 
 function EnergyPillRow({ energy, side }: { energy: number; side: "player" | "enemy" }) {
-  const total = MAX_ENERGY;
-  const filled = Math.max(0, Math.min(total, Math.round(energy)));
+  const filled = Math.max(0, Math.round(energy));
+  const total = Math.max(MAX_ENERGY, filled);
   return (
     <div
       data-testid={side === "player" ? "clash-player-energy" : "clash-enemy-energy"}

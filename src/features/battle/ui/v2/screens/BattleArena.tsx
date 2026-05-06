@@ -157,6 +157,11 @@ export function BattleArena({
   const turnWarningActive = Boolean(timer?.warning);
   const selected =
     player.hand.find((card) => card.id === selectedCardId) ?? player.hand[0];
+  const playerEnergyMax = Math.max(MAX_ENERGY, player.energy);
+  const enemyEnergyMax = Math.max(MAX_ENERGY, enemy.energy);
+  const playerHpMax = Math.max(MAX_HEALTH, player.hp);
+  const enemyHpMax = Math.max(MAX_HEALTH, enemy.hp);
+  const clashHpMax = Math.max(MAX_HEALTH, player.hp, enemy.hp);
 
   return (
     <div
@@ -188,8 +193,8 @@ export function BattleArena({
           mode={mode}
           timer={timer ? { secondsLeft: timer.secondsLeft, totalSeconds: timer.secondsLeft } : undefined}
           timerWarning={turnWarningActive}
-          energy={{ value: enemy.energy, max: MAX_ENERGY }}
-          hp={{ value: enemy.hp, max: MAX_HEALTH }}
+          energy={{ value: enemy.energy, max: enemyEnergyMax }}
+          hp={{ value: enemy.hp, max: enemyHpMax }}
           identity={opponentIdentity}
           damageFlash={enemyDamageFlash}
           statuses={enemy.statuses}
@@ -216,8 +221,8 @@ export function BattleArena({
         <BattleHud
           side="player"
           mode={mode}
-          energy={{ value: player.energy, max: MAX_ENERGY }}
-          hp={{ value: player.hp, max: MAX_HEALTH }}
+          energy={{ value: player.energy, max: playerEnergyMax }}
+          hp={{ value: player.hp, max: playerHpMax }}
           identity={{ name: player.name }}
           roundNumber={game.round.round}
           damageFlash={playerDamageFlash}
@@ -264,7 +269,7 @@ export function BattleArena({
           enemyAvatarUrl={enemy.avatarUrl}
           playerHp={player.hp}
           enemyHp={enemy.hp}
-          hpMax={MAX_HEALTH}
+          hpMax={clashHpMax}
           onImpact={onClashImpact}
           onProjectileImpact={onClashProjectileImpact}
           onDone={onClashDone ?? (() => {})}

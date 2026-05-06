@@ -272,6 +272,31 @@ describe("battle effect rules", () => {
     expect(effectValue(outcome.clash.effects, "blessing:none")).toBe(2);
   });
 
+  test("healing and energy gains can exceed the starting 12 resource baseline", () => {
+    const playerCard = makeCard({
+      id: "player-overcap-resource",
+      power: 10,
+      damage: 2,
+      abilityEffects: [
+        { key: "add-hp", amount: 4, outcome: "on_win" },
+        { key: "add-energy", amount: 2, mode: "per_damage", outcome: "on_win" },
+      ],
+    });
+    const enemyCard = makeCard({ id: "enemy-overcap-resource", power: 1, damage: 1 });
+    const player = makeFighter("player", [playerCard], { hp: MAX_HEALTH, energy: MAX_ENERGY });
+    const enemy = makeFighter("enemy", [enemyCard]);
+
+    const outcome = resolveRound(player, enemy, playerCard, 0, false, "player", 1, {
+      card: enemyCard,
+      energy: 0,
+      damageBoost: false,
+    });
+
+    expect(outcome.clash.winner).toBe("player");
+    expect(outcome.nextPlayer.hp).toBe(MAX_HEALTH + 4);
+    expect(outcome.nextPlayer.energy).toBe(MAX_ENERGY + 4);
+  });
+
   test("existing blessing can save a fighter from lethal combat damage before matchResult is calculated", () => {
     const playerCard = makeCard({ id: "dahack-110", power: 1, damage: 1 });
     const enemyCard = makeCard({ id: "enemy-lethal", power: 10, damage: 3 });

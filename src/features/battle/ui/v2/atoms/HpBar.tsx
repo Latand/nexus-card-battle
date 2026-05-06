@@ -17,8 +17,8 @@ const DAMAGE_FLASH = "#d97056";
 const FLASH_MS = 600;
 
 export function HpBar({ value, max, label, className, ...rest }: HpBarProps) {
-  const safeMax = Math.max(1, max);
-  const safeValue = Math.max(0, Math.min(value, safeMax));
+  const safeValue = Math.max(0, value);
+  const safeMax = Math.max(1, max, safeValue);
   const pct = (safeValue / safeMax) * 100;
 
   // Track previous value to flash a danger-coloured overlay when HP drops.
