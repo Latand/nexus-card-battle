@@ -94,7 +94,10 @@ export function CardPickModal({
     >
       <section
         data-testid="selection-overlay"
-        className="selection-dialog flex h-full min-h-0 w-full flex-col overflow-hidden"
+        className={cn(
+          "selection-dialog flex min-h-0 w-full flex-col overflow-hidden",
+          !isMobile && "h-full",
+        )}
       >
         {/* Header */}
         <header className="flex items-center justify-between px-4 sm:px-7 pt-3 sm:pt-4 pb-1.5 sm:pb-2 shrink-0">
@@ -113,7 +116,12 @@ export function CardPickModal({
         </header>
 
         {/* Body (scrolls only on mobile sheet; sizes to content on desktop) */}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 sm:px-7 pb-3">
+        <div
+          className={cn(
+            "min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-7",
+            isMobile ? "shrink-0 pb-2" : "flex-1 pb-3",
+          )}
+        >
           {/* Two-card duel preview (compact) */}
           <div className="flex items-stretch justify-center gap-6">
             <CompactCardSlot label="Твій боєць" className="selection-card">
@@ -264,13 +272,13 @@ export function CardPickModal({
         </div>
 
         {/* STICKY ACTION FOOTER */}
-        <div className="shrink-0 border-t border-accent-quiet/40 bg-surface-raised">
-          <div className="px-4 py-3">
+        <div className={cn("shrink-0 bg-surface-raised", !isMobile && "border-t border-accent-quiet/40")}>
+          <div className={cn("px-4", isMobile ? "pb-4 pt-1" : "py-3")}>
             <button
               type="button"
               data-testid="selection-ok"
               onClick={onConfirm}
-              className="inline-flex items-center justify-center w-full h-14 rounded-md bg-accent text-bg font-bold text-[15px] uppercase tracking-[0.18em] hover:brightness-110 transition-all"
+              className="inline-flex items-center justify-center w-full min-w-0 h-12 sm:h-14 rounded-md bg-accent text-bg font-bold text-[15px] uppercase tracking-[0.18em] whitespace-nowrap hover:brightness-110 transition-all"
             >
               ОК
             </button>

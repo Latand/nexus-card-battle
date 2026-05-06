@@ -9,6 +9,7 @@ import { readStableSessionName, rememberStableSessionName } from "@/features/pre
 import type { PlayerIdentity, PlayerProfile } from "@/features/player/profile/types";
 import { computeLevelFromXp } from "@/features/player/profile/types";
 import { cn } from "@/shared/lib/cn";
+import { Modal } from "@/shared/ui/v2/Modal";
 import type { TelegramPlayer } from "@/shared/lib/telegram";
 import { cards } from "../model/cards";
 import { isClanBonusActive } from "../model/clans";
@@ -195,6 +196,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const [persistedRewards, setPersistedRewards] = useState<RewardSummary | null>(null);
   const [persistedRewardsError, setPersistedRewardsError] = useState<string | null>(null);
   const [surrendering, setSurrendering] = useState(false);
+  const [surrenderConfirmOpen, setSurrenderConfirmOpen] = useState(false);
   const persistedMatchSignatureRef = useRef<string | null>(null);
   const surrenderedMatchRef = useRef(false);
   const autoSubmitRef = useRef(() => {});
@@ -829,6 +831,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       setSelectionOpen(false);
       setTurnSeconds(TURN_SECONDS);
       setSurrendering(false);
+      setSurrenderConfirmOpen(false);
       setHumanStatus("matched");
       setHumanMessage("");
       setMatchmakingQueuedAt(null);
@@ -987,6 +990,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setSelectionOpen(false);
     setTurnSeconds(0);
     setSurrendering(false);
+    setSurrenderConfirmOpen(false);
     clearHumanMessageBuffers();
     setGame((value) => ({
       ...value,
@@ -1008,6 +1012,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setRoundWinnerCardIds(new Set());
     setSelectionOpen(false);
     setSurrendering(false);
+    setSurrenderConfirmOpen(false);
     setPersistedRewards(null);
     setPersistedRewardsError(null);
     activeRewardMatchIdRef.current = null;
@@ -1137,6 +1142,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     setPersistedRewards(null);
     setPersistedRewardsError(null);
     setSurrendering(false);
+    setSurrenderConfirmOpen(false);
     persistedMatchSignatureRef.current = null;
   }
 
@@ -1171,7 +1177,13 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
 
   function surrenderMatch() {
     if (!canSurrender) return;
+    setSurrenderConfirmOpen(true);
+  }
 
+  function confirmSurrenderMatch() {
+    if (!canSurrender) return;
+
+    setSurrenderConfirmOpen(false);
     setSurrendering(true);
     setSelectionOpen(false);
     setPending(null);
@@ -1185,6 +1197,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       const socket = socketRef.current;
       if (!currentMatch || !isSocketOpen(socket)) {
         setSurrendering(false);
+        setSurrenderConfirmOpen(false);
         setHumanStatus("error");
         setHumanMessage("З'єднання арени ще не готове для здачі.");
         return;
@@ -1397,7 +1410,55 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
         onGoToCollection={onOpenCollection ?? (() => {})}
       />
 
+      <SurrenderConfirmModal
+        open={surrenderConfirmOpen}
+        onCancel={() => setSurrenderConfirmOpen(false)}
+        onConfirm={confirmSurrenderMatch}
+      />
+
     </main>
+  );
+}
+
+function SurrenderConfirmModal({
+  open,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Modal open={open} onClose={onCancel} size="sm" ariaLabel="Підтвердити здачу">
+      <div className="grid gap-4 p-5 sm:p-6">
+        <div className="grid gap-2">
+          <h2 className="text-sm font-black uppercase tracking-[0.14em] text-accent">
+            Здатись?
+          </h2>
+          <p className="text-sm leading-relaxed text-ink-mute">
+            Бій завершиться поразкою. Суперник отримає звичайну ELO-нагороду, а з тебе зніметься половина звичайного мінуса.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="h-11 rounded-md border border-accent-quiet text-[12px] font-bold uppercase tracking-[0.12em] text-ink-mute hover:text-ink hover:bg-accent/5"
+          >
+            Ні
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            data-testid="surrender-confirm"
+            className="h-11 rounded-md border border-danger/70 bg-danger/12 text-[12px] font-bold uppercase tracking-[0.12em] text-danger hover:bg-danger/20"
+          >
+            Здатись
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
