@@ -53,8 +53,11 @@ type BattleGameProps = {
 };
 
 type HumanMatchStatus = "idle" | "connecting" | "queued" | "matched" | "opponent_left" | "forfeit" | "error" | "closed";
+type FirstBattleTutorialStep = "card" | "energy" | "confirm";
+
 const BOT_FALLBACK_DELAY_MS = 5_000;
 const REMOTE_AI_CLIENT_BUDGET_MS = 4_000;
+const FIRST_BATTLE_TUTORIAL_STORAGE_KEY = "nexus:first-battle-tutorial-seen:v1";
 
 type HumanMove = {
   cardId: string;
@@ -163,6 +166,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
     }
     return initialGame;
   });
+  const [aiSessionLoaded, setAiSessionLoaded] = useState(isHumanMatch);
   const [selectedId, setSelectedId] = useState(() => getAvailableCards(game.player)[0]?.id);
   const [energy, setEnergy] = useState(0);
   const [damageBoost, setDamageBoost] = useState(false);
@@ -197,6 +201,8 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const [persistedRewardsError, setPersistedRewardsError] = useState<string | null>(null);
   const [surrendering, setSurrendering] = useState(false);
   const [surrenderConfirmOpen, setSurrenderConfirmOpen] = useState(false);
+  const [tutorialSeen, setTutorialSeen] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState<FirstBattleTutorialStep>("card");
   const persistedMatchSignatureRef = useRef<string | null>(null);
   const surrenderedMatchRef = useRef(false);
   const autoSubmitRef = useRef(() => {});
@@ -222,22 +228,51 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   }, [game]);
 
   useEffect(() => {
+    mountedRef.current = true;
+    setTutorialSeen(readFirstBattleTutorialSeen());
+
     return () => {
       mountedRef.current = false;
       aiMoveRequestIdRef.current += 1;
     };
   }, []);
 
+  useEffect(() => {
+    if (isHumanMatch) {
+      setAiSessionLoaded(true);
+      return;
+    }
+
+    const persisted = normalizeLoadedAiGame(loadBattleSession());
+    if (persisted && !persisted.matchResult) {
+      const nextCard = getAvailableCards(persisted.player)[0];
+      setGame(persisted);
+      setSelectedId(nextCard?.id);
+      setEnergy(0);
+      setDamageBoost(false);
+      setPending(null);
+      setEnemyLockedMove(null);
+      setRoundWinnerCardIds(new Set());
+      setSelectionOpen(false);
+      setClashOverlayDone(false);
+      setHudHpOverride({});
+      setTurnSeconds(TURN_SECONDS);
+    }
+
+    setAiSessionLoaded(true);
+  }, [isHumanMatch]);
+
   // Persist AI-mode game state across refreshes; clear once a match concludes
   // so the next entry to the battle screen starts a fresh fight.
   useEffect(() => {
     if (isHumanMatch) return;
+    if (!aiSessionLoaded) return;
     if (game.matchResult) {
       clearBattleSession();
       return;
     }
     saveBattleSession(game);
-  }, [game, isHumanMatch]);
+  }, [aiSessionLoaded, game, isHumanMatch]);
 
   useEffect(() => {
     matchInfoRef.current = matchInfo;
@@ -384,6 +419,16 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const playerDecisionActive = pending === null && ["player_turn", "card_preview"].includes(game.phase);
   const turnWarningActive = playerDecisionActive && turnSeconds <= 10;
   const canSurrender = !humanBlockingOverlay && !surrendering && !game.matchResult && game.phase !== "reward_summary";
+  const tutorialTargetCard = getAvailableCards(game.player)[0];
+  const tutorialActive =
+    !isHumanMatch &&
+    tutorialSeen === false &&
+    pending === null &&
+    !game.matchResult &&
+    Boolean(tutorialTargetCard) &&
+    (tutorialStep === "card"
+      ? game.phase === "player_turn"
+      : game.phase === "card_preview" && selectionOpen);
 
   useEffect(() => {
     if (humanBlockingOverlay) return;
@@ -506,7 +551,35 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
 
     if (game.phase === "opponent_turn") {
       if (isHumanMatch) return;
-      if (!pending && aiMoveRequestIdRef.current === 0 && game.first === "player" && game.round.playerCardId) {
+      if (!pending && game.first === "enemy" && !game.round.enemyCardId) {
+        const requestId = ++aiMoveRequestIdRef.current;
+        chooseAiEnemyMove(game).then((enemyMove) => {
+          if (!isCurrentAiMoveRequest(requestId, game.round.round)) return;
+
+          playOpponentMoveCue(soundCueRef, game.round.round, enemyMove.card.id);
+          setEnemyLockedMove(enemyMove);
+          setGame((value) => {
+            if (value.round.round !== game.round.round || value.first !== "enemy" || value.phase !== "opponent_turn") {
+              return value;
+            }
+
+            return {
+              ...value,
+              phase: "player_turn",
+              turnDeadlineAt: startTurnDeadline(),
+              round: {
+                ...value.round,
+                enemyCardId: enemyMove.card.id,
+                enemyEnergyBid: enemyMove.energy,
+                enemyDamageBoost: enemyMove.damageBoost,
+              },
+            };
+          });
+        });
+        return;
+      }
+
+      if (!pending && game.first === "player" && game.round.playerCardId) {
         const playerCard = findCardInHand(game.player.hand, game.round.playerCardId);
         if (!playerCard) return;
 
@@ -658,6 +731,16 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   }, [game.matchResult, game.phase, isHumanMatch, onPlayerUpdated, playerIdentity]);
 
   useEffect(() => {
+    if (tutorialActive) {
+      setTurnSeconds(TURN_SECONDS);
+      setGame((value) =>
+        ["player_turn", "card_preview"].includes(value.phase) && value.turnDeadlineAt
+          ? { ...value, turnDeadlineAt: undefined }
+          : value,
+      );
+      return;
+    }
+
     if (!playerDecisionActive) {
       setTurnSeconds(TURN_SECONDS);
       return;
@@ -687,10 +770,17 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       window.clearInterval(interval);
       window.clearTimeout(timeout);
     };
-  }, [game.round.round, game.turnDeadlineAt, playerDecisionActive]);
+  }, [game.round.round, game.turnDeadlineAt, playerDecisionActive, tutorialActive]);
 
   function confirmSelection() {
     if (!selected) return;
+    if (tutorialActive && tutorialStep === "energy") {
+      if (selectedEnergy > 0) setTutorialStep("confirm");
+      return;
+    }
+    if (tutorialActive && tutorialStep === "confirm") {
+      completeFirstBattleTutorial();
+    }
 
     submitSelection(selected, selectedEnergy, damageBoost);
   }
@@ -1184,6 +1274,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
 
   useEffect(() => {
     autoSubmitRef.current = () => {
+      if (tutorialActive) return;
       if (pending || !["player_turn", "card_preview"].includes(game.phase)) return;
 
       if (isHumanMatch) {
@@ -1260,11 +1351,37 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   }
 
   function closeSelection() {
+    if (tutorialActive) return;
     setSelectionOpen(false);
     setGame((value) => (value.phase === "card_preview" ? { ...value, phase: "player_turn" } : value));
   }
 
+  function completeFirstBattleTutorial() {
+    writeFirstBattleTutorialSeen();
+    setTutorialSeen(true);
+    setTurnSeconds(TURN_SECONDS);
+    setGame((value) =>
+      ["player_turn", "card_preview"].includes(value.phase)
+        ? { ...value, turnDeadlineAt: undefined }
+        : value,
+    );
+  }
+
+  function skipFirstBattleTutorial() {
+    completeFirstBattleTutorial();
+  }
+
+  function setTutorialEnergy(next: number) {
+    if (tutorialActive && tutorialStep === "confirm") return;
+    const legal = Math.max(0, Math.min(maxEnergyForCard, next));
+    setEnergy(legal);
+    if (tutorialActive && tutorialStep === "energy" && legal > 0) {
+      setTutorialStep("confirm");
+    }
+  }
+
   function openCollectionFromBattle() {
+    if (tutorialActive) return;
     setSelectionOpen(false);
     setSurrenderConfirmOpen(false);
     setPending(null);
@@ -1279,6 +1396,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   }
 
   function surrenderMatch() {
+    if (tutorialActive) return;
     if (!canSurrender) return;
     setSurrenderConfirmOpen(true);
   }
@@ -1402,8 +1520,10 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
   const onSelectHandCard = (cardId: string) => {
     const card = game.player.hand.find((entry) => entry.id === cardId);
     if (!card || locked || card.used) return;
+    if (tutorialActive && tutorialStep === "card" && card.id !== tutorialTargetCard?.id) return;
     setSelectedId(card.id);
     setSelectionOpen(true);
+    if (tutorialActive && tutorialStep === "card") setTutorialStep("energy");
     setGame((value) => ({
       ...value,
       phase: "card_preview",
@@ -1482,16 +1602,26 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
           }}
           onClashDone={() => setClashOverlayDone(true)}
           onSelectCard={onSelectHandCard}
-          onEnergyMinus={() => setEnergy((value) => Math.max(0, Math.min(value, maxEnergyForCard) - 1))}
-          onEnergyPlus={() => setEnergy((value) => Math.min(maxEnergyForCard, value + 1))}
-          onEnergyChange={(next) => setEnergy(Math.max(0, Math.min(maxEnergyForCard, next)))}
+          onEnergyMinus={() => setTutorialEnergy(Math.max(0, Math.min(energy, maxEnergyForCard) - 1))}
+          onEnergyPlus={() => setTutorialEnergy(Math.min(maxEnergyForCard, energy + 1))}
+          onEnergyChange={setTutorialEnergy}
           onToggleBoost={toggleBoost}
           onConfirmPick={confirmSelection}
           onCancelPick={closeSelection}
           onLeave={openCollectionFromBattle}
           onSurrender={surrenderMatch}
           canSurrender={canSurrender}
+          tutorial={
+            tutorialActive
+              ? {
+                  step: tutorialStep,
+                  targetCardId: tutorialTargetCard?.id,
+                  onSkip: skipFirstBattleTutorial,
+                }
+              : undefined
+          }
           onOpenDecks={() => {
+            if (tutorialActive) return;
             // TODO(owner): wire deck-management modal. Today GameRoot only
             // exposes onOpenCollection (which both Leaves the match AND opens
             // the collection/deck screen) — there is no dedicated deck modal
@@ -1868,6 +1998,23 @@ function getVerdict(result?: MatchResult) {
   if (!result) return "";
   if (result === "draw") return "Нічия";
   return result === "player" ? "Перемога" : "Програш";
+}
+
+function readFirstBattleTutorialSeen() {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(FIRST_BATTLE_TUTORIAL_STORAGE_KEY) === "true";
+  } catch {
+    return true;
+  }
+}
+
+function writeFirstBattleTutorialSeen() {
+  try {
+    window.localStorage.setItem(FIRST_BATTLE_TUTORIAL_STORAGE_KEY, "true");
+  } catch {
+    // Tutorial persistence is best effort; failing closed prevents trapping users.
+  }
 }
 
 function matchResultToBucket(result: MatchResult): "win" | "draw" | "loss" {

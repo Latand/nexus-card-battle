@@ -83,7 +83,8 @@ export function GameRoot() {
   const [deckSaveStatus, setDeckSaveStatus] = useState<DeckSaveStatus>("idle");
   const [profileRetryKey, setProfileRetryKey] = useState(0);
   const [starterDeckReadyVisible, setStarterDeckReadyVisible] = useState(false);
-  const [telegramPlayer, setTelegramPlayer] = useState<TelegramPlayer>(() => readTelegramPlayer());
+  const [telegramPlayer, setTelegramPlayer] = useState<TelegramPlayer>({});
+  const [clientReady, setClientReady] = useState(false);
   const deckTouchedRef = useRef(false);
   const deckSaveRequestRef = useRef(0);
   const lastConfirmedDeckIdsRef = useRef<string[]>([]);
@@ -101,6 +102,7 @@ export function GameRoot() {
       ((playerProfile?.starterFreeBoostersRemaining ?? 0) > 0 && !playerProfile?.onboarding.completed));
 
   useEffect(() => {
+    setClientReady(true);
     const telegramPlayerHandle = window.setTimeout(() => setTelegramPlayer(readTelegramPlayer()), 0);
 
     return () => {
@@ -301,8 +303,8 @@ export function GameRoot() {
   // bounce back to the collection unless we have a persisted session that
   // BattleGame can resume from. Without this guard, BattleGame's createInitialGame
   // throws on the empty placeholder deck.
-  const hasPersistedBattleSession = screen === "battle" && hasBattleSession();
-  const battleResumable = screen === "battle" && (deckIds.length >= PLAYER_DECK_SIZE || hasPersistedBattleSession);
+  const hasPersistedBattleSession = clientReady && screen === "battle" && hasBattleSession();
+  const battleResumable = clientReady && screen === "battle" && (deckIds.length >= PLAYER_DECK_SIZE || hasPersistedBattleSession);
   useEffect(() => {
     if (screen !== "battle") return;
     if (profileStatus !== "ready") return;

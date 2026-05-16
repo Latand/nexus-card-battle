@@ -27,11 +27,12 @@ export type BattleHandProps = {
   cards: BattleHandCard[];
   /** Highlight the row (e.g. when it's this side's turn). */
   active?: boolean;
+  tutorialTargetCardId?: string;
   onSelect?: (cardId: string) => void;
   className?: string;
 };
 
-export function BattleHand({ side, cards, active, onSelect, className }: BattleHandProps) {
+export function BattleHand({ side, cards, active, tutorialTargetCardId, onSelect, className }: BattleHandProps) {
   const isPlayer = side === "player";
   const handTestId = isPlayer ? "battle-hand-player" : "battle-hand-opponent";
 
@@ -48,8 +49,10 @@ export function BattleHand({ side, cards, active, onSelect, className }: BattleH
       )}
     >
       {cards.map(({ card, used, roundResult, medal, selectable, selected, played }) => {
-        const interactive = isPlayer && Boolean(onSelect) && Boolean(selectable) && !used;
-        const cardDisabled = isPlayer && (used || !selectable);
+        const blockedByTutorial = isPlayer && Boolean(tutorialTargetCardId) && tutorialTargetCardId !== card.id;
+        const tutorialTarget = tutorialTargetCardId === card.id;
+        const interactive = isPlayer && Boolean(onSelect) && Boolean(selectable) && !used && !blockedByTutorial;
+        const cardDisabled = isPlayer && (used || !selectable || blockedByTutorial);
         const damageBoost = hasDamageBoost(card);
         const handleClick = () => {
           if (interactive) onSelect!(card.id);
@@ -81,6 +84,7 @@ export function BattleHand({ side, cards, active, onSelect, className }: BattleH
             data-side={side}
             data-state={stateValue}
             data-selected={selected ? "true" : undefined}
+            data-tutorial-target={tutorialTarget ? "true" : undefined}
             role={isPlayer ? "button" : undefined}
             tabIndex={isPlayer ? (cardDisabled ? -1 : 0) : -1}
             aria-pressed={isPlayer ? Boolean(selected) : undefined}
@@ -93,6 +97,9 @@ export function BattleHand({ side, cards, active, onSelect, className }: BattleH
               "outline-none",
               interactive && "cursor-pointer hover:-translate-y-0.5",
               !interactive && isPlayer && "cursor-not-allowed",
+              blockedByTutorial && "opacity-30 saturate-50 grayscale",
+              tutorialTarget &&
+                "z-30 -translate-y-2 scale-[1.07] drop-shadow-[0_0_34px_rgba(240,198,104,0.98)]",
               played && !isPlayer && "translate-y-2 scale-[1.04] drop-shadow-[0_18px_24px_rgba(255,74,66,0.45)]",
               used && "opacity-35 saturate-50 grayscale pointer-events-none",
             )}
@@ -102,6 +109,8 @@ export function BattleHand({ side, cards, active, onSelect, className }: BattleH
               className={cn(
                 "rounded-[12px] transition-shadow duration-200",
                 selected && "ring-2 ring-accent ring-offset-0",
+                tutorialTarget &&
+                  "ring-4 ring-accent bg-accent/25 shadow-[0_0_0_2px_rgba(255,255,255,0.72),0_0_34px_rgba(240,198,104,0.88)]",
                 damageBoost &&
                   "bg-danger/15 ring-1 ring-danger/40 shadow-[0_0_18px_rgba(217,112,86,0.18)]",
               )}

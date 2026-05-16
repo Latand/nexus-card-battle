@@ -88,6 +88,11 @@ export type BattleArenaProps = {
   onOpenDecks?: () => void;
   onSurrender?: () => void;
   canSurrender?: boolean;
+  tutorial?: {
+    step: "card" | "energy" | "confirm";
+    targetCardId?: string;
+    onSkip: () => void;
+  };
 
   /** Active hand ring (player|enemy|null). */
   activeHand?: "player" | "enemy" | null;
@@ -142,6 +147,7 @@ export function BattleArena({
   onOpenDecks,
   onSurrender,
   canSurrender,
+  tutorial,
   activeHand,
   playerDamageFlash,
   enemyDamageFlash,
@@ -215,11 +221,17 @@ export function BattleArena({
           <CenterStage variant={variant} className="battle-arena-strip" />
         </div>
 
-        <div className="mx-auto w-full max-w-[1440px] mb-3 sm:mb-5">
+        <div
+          className={cn(
+            "mx-auto w-full max-w-[1440px] mb-3 sm:mb-5",
+            tutorial?.step === "card" && "relative z-20",
+          )}
+        >
           <BattleHand
             side="player"
             cards={playerHand}
             active={activeHand === "player"}
+            tutorialTargetCardId={tutorial?.step === "card" ? tutorial.targetCardId : undefined}
             onSelect={onSelectCard}
           />
         </div>
@@ -236,6 +248,14 @@ export function BattleArena({
           onSurrender={onSurrender}
           canSurrender={canSurrender}
         />
+
+        {tutorial?.step === "card" ? (
+          <div
+            data-testid="first-battle-tutorial-dim"
+            className="pointer-events-none absolute inset-0 z-10 bg-black/58"
+            aria-hidden
+          />
+        ) : null}
       </div>
 
       <CardPickModal
@@ -258,7 +278,29 @@ export function BattleArena({
         onEnergyChange={onEnergyChange}
         onToggleBoost={onToggleBoost}
         onConfirm={onConfirmPick}
+        tutorialStep={tutorial?.step === "energy" || tutorial?.step === "confirm" ? tutorial.step : undefined}
+        onTutorialSkip={tutorial?.onSkip}
       />
+
+      {tutorial?.step === "card" ? (
+        <>
+          <div
+            data-testid="first-battle-tutorial"
+            data-step="card"
+            className="pointer-events-none fixed left-3 right-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 mx-auto flex max-w-[460px] items-center justify-between gap-3 rounded-lg border border-accent bg-[#19140d]/95 px-4 py-3 text-sm text-ink shadow-[0_18px_44px_rgba(0,0,0,0.42)] sm:bottom-8"
+          >
+            <span>Обери підсвічену картку для першої атаки.</span>
+            <button
+              type="button"
+              data-testid="first-battle-tutorial-skip"
+              onClick={tutorial.onSkip}
+              className="pointer-events-auto shrink-0 cursor-pointer rounded-md border border-accent bg-accent px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-bg shadow-[0_0_18px_rgba(240,198,104,0.45)] hover:brightness-110"
+            >
+              Пропустити
+            </button>
+          </div>
+        </>
+      ) : null}
 
       {clash ? (
         <ClashOverlay
