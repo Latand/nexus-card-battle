@@ -208,8 +208,9 @@ function TraitSlot({
 // clean — no tint, no white-spot placeholder.
 function CardArtImage({ cardId, src, fallbackBg }: { cardId: string; src: string; fallbackBg: string }) {
   // Skip the <Image> request entirely when we know there's no portrait yet.
-  // Avoids noisy 400s from the Next image optimizer for cards without art.
-  const knownMissing = !hasCardArt(cardId);
+  // Avoids noisy 400s from the Next image optimizer for static cards without
+  // art, while still allowing integration cards to render their ingested URLs.
+  const knownMissing = !hasCardArt(cardId) && isStaticCardArtUrl(cardId, src);
   const [errored, setErrored] = useState(knownMissing);
   const resolved = errored ? FALLBACK_PORTRAIT_URL : src;
   return (
@@ -228,4 +229,8 @@ function CardArtImage({ cardId, src, fallbackBg }: { cardId: string; src: string
       />
     </div>
   );
+}
+
+function isStaticCardArtUrl(cardId: string, src: string) {
+  return src === `/nexus-assets/characters/cards/${cardId}.webp`;
 }
