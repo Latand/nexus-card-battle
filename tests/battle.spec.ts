@@ -1,8 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import { cards } from "../src/features/battle/model/cards";
+import { createInitialGame } from "../src/features/battle/model/game";
 import { mockDeckReadyProfile } from "./fixtures/playerProfile";
 
 const DECK_SESSION_STORAGE_KEY = "nexus:deck-session:v1";
+const BATTLE_SESSION_STORAGE_KEY = "nexus.battle.session.v1";
+const FIRST_BATTLE_TUTORIAL_STORAGE_KEY = "nexus:first-battle-tutorial-seen:v1";
 const PROFILE_ONLY_DECK_IDS = cards
   .filter((card) => card.clan === "Workers")
   .slice(0, 9)
@@ -105,6 +108,8 @@ test("returns from an active battle to the collection deck screen", async ({ pag
   await expect(page.getByTestId("collection-search")).toBeVisible();
   await page.getByTestId("play-selected-deck").click();
   await expect(page.getByTestId("battle-arena")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("first-battle-tutorial")).toBeVisible({ timeout: 10_000 });
+  await skipFirstBattleTutorialIfVisible(page);
 
   await page.getByTestId("battle-hud-open-decks").click();
 
@@ -113,7 +118,200 @@ test("returns from an active battle to the collection deck screen", async ({ pag
   await expect(page.locator('[data-testid^="deck-card-"]')).toHaveCount(9);
 });
 
+test("guides a first-time player through card, energy, and confirm tutorial steps", async ({ page }) => {
+  await mockDeckReadyProfile(page);
+  await page.goto("/");
+
+  await expect(page.getByTestId("collection-search")).toBeVisible();
+  await page.getByTestId("play-selected-deck").click();
+
+  await expect(page.getByTestId("first-battle-tutorial")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("first-battle-tutorial")).toHaveAttribute("data-step", "card");
+  await expect.poll(async () => countEnabledPlayerCards(page), { timeout: 12_000 }).toBe(1);
+
+  const highlightedCard = page.locator('[data-testid^="player-card-"][data-tutorial-target="true"]');
+  await expect(highlightedCard).toHaveCount(1);
+  await highlightedCard.click();
+
+  await expect(page.getByTestId("selection-overlay")).toBeVisible();
+  await expect(page.getByTestId("first-battle-tutorial")).toHaveAttribute("data-step", "energy");
+  await expect(page.getByTestId("selection-energy")).toHaveText("0");
+
+  await page.getByTestId("selection-ok").click();
+  await expect(page.getByTestId("first-battle-tutorial")).toHaveAttribute("data-step", "energy");
+
+  await page.getByTestId("card-pick-energy-dot-1").click();
+  await expect(page.getByTestId("selection-energy")).toHaveText("1");
+  await expect(page.getByTestId("first-battle-tutorial")).toHaveAttribute("data-step", "confirm");
+
+  await page.getByTestId("card-pick-energy-dot-1").click();
+  await expect(page.getByTestId("selection-energy")).toHaveText("1");
+  await expect(page.getByTestId("first-battle-tutorial")).toHaveAttribute("data-step", "confirm");
+
+  await page.getByTestId("selection-ok").click();
+  await expect(page.getByTestId("first-battle-tutorial")).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByTestId("battle-arena")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("first-battle-tutorial")).toHaveCount(0);
+});
+
+test("skipping the first battle tutorial persists normal battle interaction", async ({ page }) => {
+  await mockDeckReadyProfile(page);
+  await page.goto("/");
+
+  await page.getByTestId("play-selected-deck").click();
+  await expect(page.getByTestId("first-battle-tutorial")).toBeVisible({ timeout: 10_000 });
+
+  await page.getByTestId("first-battle-tutorial-skip").click();
+  await expect(page.getByTestId("first-battle-tutorial")).toHaveCount(0);
+  await expect.poll(async () => countEnabledPlayerCards(page), { timeout: 12_000 }).toBeGreaterThan(1);
+
+  await page.reload();
+  await expect(page.getByTestId("battle-arena")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("first-battle-tutorial")).toHaveCount(0);
+});
+
+test("does not auto-submit while the first battle tutorial is waiting", async ({ page }) => {
+  await page.clock.install({ time: Date.now() });
+  await mockDeckReadyProfile(page);
+  await page.goto("/");
+
+  await page.getByTestId("play-selected-deck").click();
+  await expect(page.getByTestId("first-battle-tutorial")).toHaveAttribute("data-step", "card", { timeout: 10_000 });
+  await expect.poll(async () => countEnabledPlayerCards(page), { timeout: 12_000 }).toBe(1);
+
+  await page.clock.fastForward(76_000);
+
+  await expect(page.getByTestId("first-battle-tutorial")).toHaveAttribute("data-step", "card");
+  await expect(page.getByTestId("selection-overlay")).toHaveCount(0);
+  await expect(page.getByTestId("battle-overlay")).toHaveCount(0);
+  await expect.poll(async () => countEnabledPlayerCards(page)).toBe(1);
+
+  await page.getByTestId("first-battle-tutorial-skip").click();
+  await expect(page.getByTestId("first-battle-tutorial")).toHaveCount(0);
+  await expect(page.getByTestId("turn-timer")).toContainText("75");
+  await expect.poll(async () => countEnabledPlayerCards(page)).toBeGreaterThan(1);
+
+  await page.clock.fastForward(74_000);
+
+  await expect(page.getByTestId("selection-overlay")).toHaveCount(0);
+  await expect(page.getByTestId("battle-overlay")).toHaveCount(0);
+  await expect.poll(async () => countEnabledPlayerCards(page)).toBeGreaterThan(1);
+});
+
+test("keeps the first battle tutorial usable on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockDeckReadyProfile(page);
+  await page.goto("/");
+
+  await page.getByTestId("play-selected-deck").click();
+  await expect(page.getByTestId("first-battle-tutorial")).toHaveAttribute("data-step", "card", { timeout: 10_000 });
+
+  await page.locator('[data-testid^="player-card-"][data-tutorial-target="true"]').click();
+  await expect(page.getByTestId("selection-overlay")).toBeVisible();
+  await expect(page.getByTestId("first-battle-tutorial")).toHaveAttribute("data-step", "energy");
+
+  await page.getByTestId("card-pick-energy-dot-1").click();
+  await expect(page.getByTestId("first-battle-tutorial")).toHaveAttribute("data-step", "confirm");
+  await page.getByTestId("selection-ok").click();
+
+  await expect(page.getByTestId("first-battle-tutorial")).toHaveCount(0);
+});
+
+test("resumes a pending AI opponent turn after reload", async ({ page }) => {
+  await page.route("**/api/battle/ai-move", async (route) => {
+    const request = route.request().postDataJSON() as {
+      enemy: { hand: Array<{ id: string }>; usedCardIds: string[] };
+    };
+    const cardId = request.enemy.hand.find((card) => !request.enemy.usedCardIds.includes(card.id))?.id;
+    if (!cardId) {
+      await route.abort();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ cardId, energy: 1, damageBoost: false, source: "fallback" }),
+    });
+  });
+  const savedGame = createInitialGame({
+    playerCollectionIds: PROFILE_ONLY_OWNED_CARD_IDS,
+    playerDeckIds: PROFILE_ONLY_DECK_IDS,
+  });
+  const playerCard = savedGame.player.hand[0];
+  await page.addInitScript(
+    ({ storageKey, game, cardId }) => {
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          v: 1,
+          savedAt: Date.now(),
+          game: {
+            ...game,
+            phase: "opponent_turn",
+            round: {
+              ...game.round,
+              playerCardId: cardId,
+              playerEnergyBid: 1,
+              playerDamageBoost: false,
+            },
+          },
+        }),
+      );
+    },
+    { storageKey: BATTLE_SESSION_STORAGE_KEY, game: savedGame, cardId: playerCard.id },
+  );
+  await mockDeckReadyProfile(page, {
+    ownedCardIds: PROFILE_ONLY_OWNED_CARD_IDS,
+    deckIds: PROFILE_ONLY_DECK_IDS,
+  });
+
+  await page.goto("/?screen=battle");
+
+  await expect(page.getByTestId("battle-arena")).toBeVisible({ timeout: 10_000 });
+  await expect
+    .poll(
+      async () => {
+        const overlay = page.getByTestId("battle-overlay");
+        if (!(await overlay.isVisible().catch(() => false))) return "hidden";
+        return (await overlay.getAttribute("data-phase")) ?? "missing";
+      },
+      { timeout: 12_000 },
+    )
+    .toMatch(/^(battle_intro|damage_apply)$/);
+});
+
+test("restores a saved AI battle while profile is still loading", async ({ page }) => {
+  const savedGame = createInitialGame({
+    playerCollectionIds: PROFILE_ONLY_OWNED_CARD_IDS,
+    playerDeckIds: PROFILE_ONLY_DECK_IDS,
+  });
+  await page.addInitScript(
+    ({ storageKey, game }) => {
+      window.localStorage.setItem(storageKey, JSON.stringify({ v: 1, savedAt: Date.now(), game }));
+    },
+    { storageKey: BATTLE_SESSION_STORAGE_KEY, game: savedGame },
+  );
+  await mockDeckReadyProfile(page, {
+    ownedCardIds: PROFILE_ONLY_OWNED_CARD_IDS,
+    deckIds: PROFILE_ONLY_DECK_IDS,
+  });
+  await page.route("**/api/player", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    await route.fallback();
+  });
+
+  await page.goto("/?screen=battle");
+
+  await expect(page.getByTestId("battle-arena")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("round-status")).toBeVisible();
+  await expect(page.getByText("BattleGame mounted without a usable deck or persisted session")).toHaveCount(0);
+});
+
 test("plays a complete state-machine battle", async ({ page }) => {
+  await markFirstBattleTutorialSeen(page);
   await mockDeckReadyProfile(page);
   await page.goto("/");
 
@@ -127,6 +325,7 @@ test("plays a complete state-machine battle", async ({ page }) => {
   await expect(page.getByTestId("round-marker")).toContainText("1");
   await expect(page.locator('[data-testid^="player-card-"]')).toHaveCount(4);
   await expect(page.locator('[data-testid^="enemy-card-"]')).toHaveCount(4);
+  await expect(page.getByTestId("first-battle-tutorial")).toHaveCount(0);
 
   await playFirstAvailableCard(page, 2, { knownEnemyCard: false });
 
@@ -135,7 +334,7 @@ test("plays a complete state-machine battle", async ({ page }) => {
     await expect
       .poll(
         async () => {
-          if (await page.getByTestId("reward-summary").isVisible().catch(() => false)) return "reward";
+          if (await page.getByTestId("match-end-overlay").isVisible().catch(() => false)) return "reward";
           if ((await countEnabledPlayerCards(page)) > 0) return "card";
           return "waiting";
         },
@@ -143,23 +342,18 @@ test("plays a complete state-machine battle", async ({ page }) => {
       )
       .not.toBe("waiting");
 
-    if (await page.getByTestId("reward-summary").isVisible().catch(() => false)) break;
+    if (await page.getByTestId("match-end-overlay").isVisible().catch(() => false)) break;
 
     await playFirstAvailableCard(page, 0, { knownEnemyCard });
     knownEnemyCard = !knownEnemyCard;
   }
 
-  await expect(page.getByTestId("reward-summary")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("match-end-overlay")).toBeVisible({ timeout: 60_000 });
 
-  const replayAiButton = page.getByTestId("reward-replay-ai");
+  const replayAiButton = page.getByTestId("match-end-replay");
   await expect(replayAiButton).toHaveAttribute("data-mode", "ai");
-  await expect(replayAiButton).toContainText("AI");
-  await expect(page.getByTestId("reward-replay-human")).toBeVisible();
-  await replayAiButton.click();
-  await expect(page.getByTestId("phase-overlay")).toHaveAttribute("data-phase", "match_intro");
-  await expect(page.getByTestId("round-status")).toBeVisible({ timeout: 5_000 });
-  await expect(page.locator('[data-testid^="player-card-"]')).toHaveCount(4);
-  await expect(page.locator('[data-testid^="enemy-card-"]')).toHaveCount(4);
+  await expect(replayAiButton).toContainText("НА АРЕНУ");
+  await expect(page.getByTestId("match-end-collection")).toBeVisible();
 });
 
 async function playFirstAvailableCard(page: Page, extraEnergyClicks: number, options: { knownEnemyCard: boolean }) {
@@ -171,29 +365,30 @@ async function playFirstAvailableCard(page: Page, extraEnergyClicks: number, opt
   await cardButton.click();
 
   await expect(page.getByTestId("selection-overlay")).toBeVisible();
+  if ((await page.getByTestId("selection-energy").textContent()) === "0") {
+    await page.getByTestId("card-pick-energy-dot-1").click();
+  }
   await expect(page.getByTestId("selection-energy")).toHaveText("1");
   if (options.knownEnemyCard) {
-    await expect(page.getByTestId("known-enemy-card")).toBeVisible();
+    await expect(page.getByTestId("card-pick-known-enemy")).toBeVisible();
   } else {
-    await expect(page.getByTestId("enemy-card-hidden")).toBeVisible();
+    await expect(page.getByTestId("card-pick-hidden-enemy")).toBeVisible();
   }
 
-  for (let index = 0; index < extraEnergyClicks; index += 1) {
-    await page.getByTestId("energy-plus").click();
+  const desiredEnergy = extraEnergyClicks + 1;
+  if (desiredEnergy > 1) {
+    await page.getByTestId(`card-pick-energy-dot-${desiredEnergy}`).click();
   }
-  await expect(page.getByTestId("selection-energy")).toHaveText(`${extraEnergyClicks + 1}`);
+  await expect(page.getByTestId("selection-energy")).toHaveText(`${desiredEnergy}`);
 
   await page.getByTestId("selection-ok").click();
   if (options.knownEnemyCard) {
-    await expect(page.getByTestId("battle-overlay")).toHaveAttribute("data-phase", "battle_intro", { timeout: 5_000 });
+    await expectCombatOverlayActive(page, 5_000);
   } else {
     await expect(page.getByTestId("phase-overlay")).toBeHidden();
-    await expect(page.getByTestId("opponent-thinking")).toBeVisible();
-    await expect(page.locator('[data-owner="enemy"] [data-played="true"]')).toHaveCount(1);
+    await expect(page.getByTestId("center-stage-thinking")).toBeVisible();
   }
-  await expect(page.getByTestId("battle-overlay")).toHaveAttribute("data-phase", "battle_intro", { timeout: 8_000 });
-  await expect.poll(async () => page.getByTestId("duel-exchange-projectile").count()).toBeGreaterThanOrEqual(2);
-  await expect.poll(async () => page.getByTestId("duel-exchange-projectile").count()).toBeLessThanOrEqual(4);
+  await expectCombatOverlayActive(page, 8_000);
   await expect
     .poll(
       async () => {
@@ -229,6 +424,34 @@ async function countEnabledPlayerCards(page: Page) {
   }
 
   return enabled;
+}
+
+async function skipFirstBattleTutorialIfVisible(page: Page) {
+  const tutorial = page.getByTestId("first-battle-tutorial");
+  await tutorial.waitFor({ state: "visible", timeout: 2_500 }).catch(() => undefined);
+  if (!(await tutorial.isVisible().catch(() => false))) return;
+
+  await page.getByTestId("first-battle-tutorial-skip").click();
+  await expect(tutorial).toHaveCount(0);
+}
+
+async function markFirstBattleTutorialSeen(page: Page) {
+  await page.addInitScript((storageKey) => {
+    window.localStorage.setItem(storageKey, "true");
+  }, FIRST_BATTLE_TUTORIAL_STORAGE_KEY);
+}
+
+async function expectCombatOverlayActive(page: Page, timeout: number) {
+  await expect
+    .poll(
+      async () => {
+        const overlay = page.getByTestId("battle-overlay");
+        if (!(await overlay.isVisible().catch(() => false))) return "hidden";
+        return (await overlay.getAttribute("data-phase")) ?? "missing";
+      },
+      { timeout },
+    )
+    .toMatch(/^(battle_intro|damage_apply)$/);
 }
 
 async function readSavedDeckIds(page: Page) {

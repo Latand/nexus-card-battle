@@ -28,6 +28,8 @@ export type CardPickModalProps = {
   onEnergyChange?: (next: number) => void;
   onToggleBoost: () => void;
   onConfirm: () => void;
+  tutorialStep?: "energy" | "confirm";
+  onTutorialSkip?: () => void;
 };
 
 export function CardPickModal({
@@ -49,6 +51,8 @@ export function CardPickModal({
   onEnergyChange,
   onToggleBoost,
   onConfirm,
+  tutorialStep,
+  onTutorialSkip,
 }: CardPickModalProps) {
   const isMobile = useIsMobile();
 
@@ -83,6 +87,7 @@ export function CardPickModal({
   };
 
   const boostToggleDisabled = !damageBoost && !canBoost;
+  const tutorialActive = tutorialStep === "energy" || tutorialStep === "confirm";
 
   return (
     <Modal
@@ -108,8 +113,12 @@ export function CardPickModal({
             type="button"
             data-testid="card-pick-cancel"
             onClick={onClose}
+            disabled={tutorialActive}
             aria-label="Закрити"
-            className="inline-grid place-items-center w-8 h-8 rounded-full text-ink-mute hover:text-ink hover:bg-accent/10 transition-colors"
+            className={cn(
+              "inline-grid place-items-center w-8 h-8 rounded-full text-ink-mute transition-colors",
+              tutorialActive ? "opacity-35 cursor-not-allowed" : "hover:text-ink hover:bg-accent/10",
+            )}
           >
             <span aria-hidden className="text-lg leading-none">×</span>
           </button>
@@ -200,12 +209,17 @@ export function CardPickModal({
                 Енергія
               </span>
               <span className="font-mono tabular-nums text-[11px] text-ink-mute">
-                {energy} / {available}
+                <span data-testid="selection-energy">{energy}</span> / {available}
               </span>
             </div>
             <div
               data-testid="card-pick-energy-stepper"
-              className="flex items-center justify-center gap-[4px] flex-wrap"
+              data-tutorial-target={tutorialStep === "energy" ? "true" : undefined}
+              className={cn(
+                "flex items-center justify-center gap-[4px] flex-wrap",
+                tutorialStep === "energy" &&
+                  "relative z-20 rounded-lg p-1 ring-2 ring-accent shadow-[0_0_24px_rgba(240,198,104,0.45)]",
+              )}
             >
               {Array.from({ length: energySlotCount }).map((_, i) => {
                 const filled = i < energy;
@@ -225,6 +239,7 @@ export function CardPickModal({
                         ? "bg-accent text-[#1a1408] shadow-[0_0_8px_rgba(240,198,104,0.45)]"
                         : "bg-surface-raised border-[1.5px] border-accent-quiet text-accent-quiet",
                       !slotAvailable && "opacity-30 cursor-not-allowed",
+                      slotAvailable && "cursor-pointer",
                       slotAvailable && !filled && "hover:bg-accent/10",
                     )}
                   >
@@ -246,14 +261,14 @@ export function CardPickModal({
                 data-testid="card-pick-boost-toggle"
                 data-active={damageBoost ? "true" : "false"}
                 onClick={onToggleBoost}
-                disabled={boostToggleDisabled}
+                disabled={boostToggleDisabled || tutorialActive}
                 aria-pressed={damageBoost}
                 className={cn(
                   "inline-flex items-center gap-2 w-[240px] justify-center px-3 h-9 rounded-md border text-[12px] uppercase tracking-[0.12em] transition-colors",
                   damageBoost
                     ? "border-accent text-accent bg-accent/10"
                     : "border-accent-quiet text-accent/80 hover:bg-accent/5",
-                  boostToggleDisabled && "opacity-40 cursor-not-allowed",
+                  (boostToggleDisabled || tutorialActive) && "opacity-40 cursor-not-allowed",
                 )}
               >
                 <span
@@ -277,15 +292,57 @@ export function CardPickModal({
             <button
               type="button"
               data-testid="selection-ok"
+              data-tutorial-target={tutorialStep === "confirm" ? "true" : undefined}
               onClick={onConfirm}
-              className="inline-flex items-center justify-center w-full min-w-0 h-12 sm:h-14 rounded-md bg-accent text-bg font-bold text-[15px] uppercase tracking-[0.18em] whitespace-nowrap hover:brightness-110 transition-all"
+              className={cn(
+                "inline-flex cursor-pointer items-center justify-center w-full min-w-0 h-12 sm:h-14 rounded-md bg-accent text-bg font-bold text-[15px] uppercase tracking-[0.18em] whitespace-nowrap hover:brightness-110 transition-all",
+                tutorialStep === "confirm" &&
+                  "relative z-20 ring-2 ring-white shadow-[0_0_24px_rgba(240,198,104,0.55)]",
+              )}
             >
               ОК
             </button>
           </div>
         </div>
+        {tutorialActive && onTutorialSkip ? (
+          <TutorialBubble
+            step={tutorialStep}
+            onSkip={onTutorialSkip}
+          />
+        ) : null}
       </section>
     </Modal>
+  );
+}
+
+function TutorialBubble({
+  step,
+  onSkip,
+}: {
+  step: "energy" | "confirm";
+  onSkip: () => void;
+}) {
+  const copy =
+    step === "energy"
+      ? "Обери хоча б 1 енергію для атаки."
+      : "Натисни OK, щоб підтвердити хід.";
+
+  return (
+    <div
+      data-testid="first-battle-tutorial"
+      data-step={step}
+      className="pointer-events-none fixed left-3 right-3 top-4 z-40 mx-auto flex max-w-[460px] items-center justify-between gap-3 rounded-lg border border-accent bg-[#19140d]/95 px-4 py-3 text-sm text-ink shadow-[0_18px_44px_rgba(0,0,0,0.42)] sm:top-8"
+    >
+      <span>{copy}</span>
+      <button
+        type="button"
+        data-testid="first-battle-tutorial-skip"
+        onClick={onSkip}
+        className="pointer-events-auto shrink-0 cursor-pointer rounded-md border border-accent bg-accent px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-bg shadow-[0_0_18px_rgba(240,198,104,0.45)] hover:brightness-110"
+      >
+        Пропустити
+      </button>
+    </div>
   );
 }
 
