@@ -6,6 +6,7 @@ import {
   createPlayerSessionCookie,
   readPlayerSessionIdentity,
   resolveAuthenticatedPlayerIdentity,
+  resolveAuthenticatedSocketIdentity,
   verifyTelegramInitData,
 } from "../src/features/player/profile/auth";
 import type { PlayerIdentity } from "../src/features/player/profile/types";
@@ -75,6 +76,28 @@ describe("player auth", () => {
     expect(cookie).toContain("HttpOnly");
     expect(cookie).toContain("SameSite=Lax");
     expect(readPlayerSessionIdentity(cookie)).toEqual(identity);
+  });
+
+  test("authenticates a cookie-less Telegram socket from signed initData", () => {
+    process.env.TELEGRAM_BOT_TOKEN = TEST_BOT_TOKEN;
+    const identity: PlayerIdentity = { mode: "telegram", telegramId: "123456789" };
+    const initData = createTelegramInitData({ id: 123456789, username: "duelist" });
+
+    expect(resolveAuthenticatedSocketIdentity(null, identity, initData)).toEqual(identity);
+  });
+
+  test("rejects a client-claimed socket identity without a cookie or signed initData", () => {
+    const claimedIdentity: PlayerIdentity = { mode: "telegram", telegramId: "123456789" };
+
+    expect(resolveAuthenticatedSocketIdentity(null, claimedIdentity, undefined)).toBeNull();
+  });
+
+  test("rejects signed socket initData when the claimed player differs", () => {
+    process.env.TELEGRAM_BOT_TOKEN = TEST_BOT_TOKEN;
+    const initData = createTelegramInitData({ id: 123456789, username: "duelist" });
+    const claimedIdentity: PlayerIdentity = { mode: "telegram", telegramId: "987654321" };
+
+    expect(resolveAuthenticatedSocketIdentity(null, claimedIdentity, initData)).toBeNull();
   });
 });
 

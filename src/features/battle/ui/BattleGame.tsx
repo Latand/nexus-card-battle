@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { requestBattleAiMove } from "@/features/battle/ai/client";
 import { DEFAULT_BATTLE_AI_MODEL_LABEL } from "@/features/battle/ai/modelInfo";
-import { postMatchFinished } from "@/features/player/profile/client";
+import { postMatchFinished, readTelegramInitData } from "@/features/player/profile/client";
 import { useLobbyChat } from "@/features/presence/client";
 import { readStableSessionName, rememberStableSessionName } from "@/features/presence/sessionName";
 import type { PlayerIdentity, PlayerProfile } from "@/features/player/profile/types";
@@ -315,6 +315,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
         deckIds: playerDeckIds,
         collectionIds: playerCollectionIds,
         identity: playerIdentity,
+        telegramInitData: readTelegramInitData(),
         user: getHumanSocketUser(telegramPlayer, stableHumanName),
       });
     });
@@ -1205,6 +1206,7 @@ export function BattleGame({ playerCollectionIds, playerDeckIds, playerIdentity,
       deckIds: playerDeckIds,
       collectionIds: playerCollectionIds,
       identity: playerIdentity,
+      telegramInitData: readTelegramInitData(),
       user: getHumanSocketUser(telegramPlayer, stableHumanNameRef.current),
     });
   }

@@ -177,7 +177,7 @@ function readTelegramId() {
   return value || undefined;
 }
 
-function readTelegramInitData() {
+export function readTelegramInitData() {
   if (typeof window === "undefined") return undefined;
 
   const initData = (window as TelegramProfileWindow).Telegram?.WebApp?.initData;

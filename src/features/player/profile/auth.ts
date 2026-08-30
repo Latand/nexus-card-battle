@@ -87,6 +87,39 @@ export function readPlayerSessionIdentity(cookieHeader: string | null | undefine
   }
 }
 
+export function resolveAuthenticatedSocketIdentity(
+  sessionIdentity: PlayerIdentity | null,
+  claimedIdentityValue: unknown,
+  telegramInitDataValue: unknown,
+): PlayerIdentity | null {
+  let claimedIdentity: PlayerIdentity | undefined;
+  try {
+    claimedIdentity = claimedIdentityValue === undefined ? undefined : parsePlayerIdentity(claimedIdentityValue);
+  } catch {
+    return null;
+  }
+
+  const telegramInitData = parseOptionalString(telegramInitDataValue);
+  if (telegramInitData) {
+    try {
+      const verifiedIdentity = verifyTelegramInitData(telegramInitData);
+      assertClaimedIdentityMatchesSession(claimedIdentity, verifiedIdentity);
+      return verifiedIdentity;
+    } catch {
+      return null;
+    }
+  }
+
+  if (!sessionIdentity) return null;
+
+  try {
+    assertClaimedIdentityMatchesSession(claimedIdentity, sessionIdentity);
+    return sessionIdentity;
+  } catch {
+    return null;
+  }
+}
+
 export function createPlayerSessionCookie(identity: PlayerIdentity, options: { now?: number; maxAgeSeconds?: number } = {}) {
   const maxAgeSeconds = options.maxAgeSeconds ?? getSessionMaxAgeSeconds();
   const issuedAt = options.now ?? nowSeconds();
