@@ -470,5 +470,5 @@ async function expectPlayerHandToUseDeck(page: Page, deckIds: string[]) {
   );
 
   expect(handIds).toHaveLength(4);
-  expect(handIds.every((cardId) => Boolean(cardId) && deckIds.includes(cardId))).toBe(true);
+  expect(handIds.every((cardId) => typeof cardId === "string" && deckIds.includes(cardId))).toBe(true);
 }

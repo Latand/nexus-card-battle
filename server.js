@@ -15,9 +15,9 @@ const {
   toPlayerProfile,
 } = require("./src/features/player/profile/types.ts");
 const {
-  assertClaimedIdentityMatchesSession,
   createPlayerSessionCookie,
   readPlayerSessionIdentity,
+  resolveAuthenticatedSocketIdentity,
 } = require("./src/features/player/profile/auth.ts");
 const { getOwnedCardIds, addToInventory } = require("./src/features/inventory/inventoryOps.ts");
 const { computeLevelUpBonusForRange } = require("./src/features/player/profile/progression.ts");
@@ -262,7 +262,6 @@ function publishChatMessage(session, message) {
 async function joinHumanQueue(session, message) {
   const clientDeckIds = sanitizeStringArray(message.deckIds);
   const clientCollectionIds = sanitizeStringArray(message.collectionIds);
-  session.user = sanitizeSessionUser(session, message.user);
 
   const deckError = validateKnownCardIds(clientDeckIds, "deck");
   if (deckError) {
@@ -289,11 +288,12 @@ async function joinHumanQueue(session, message) {
     return;
   }
 
-  const identity = parseAuthenticatedSocketIdentity(session, message.identity);
+  const identity = parseAuthenticatedSocketIdentity(session, message.identity, message.telegramInitData);
   if (!identity) {
     sendError(session, "Authenticated player session is required for arena matchmaking.");
     return;
   }
+  session.user = sanitizeSessionUser(session, message.user);
 
   const profile = await getPlayerProfileStore().findOrCreateByIdentity(identity);
   const profileLoadout = validateProfileBattleLoadout(profile);
@@ -390,21 +390,10 @@ function reenqueueWithCapturedElo(session, eloRating) {
   });
 }
 
-function parseAuthenticatedSocketIdentity(session, value) {
-  if (!session.authenticatedIdentity && testPlayerProfileStore) {
-    return parseSocketPlayerIdentity(value);
-  }
-
-  if (!session.authenticatedIdentity) return null;
-
-  const claimedIdentity = parseSocketPlayerIdentity(value);
-  try {
-    assertClaimedIdentityMatchesSession(claimedIdentity || undefined, session.authenticatedIdentity);
-  } catch {
-    return null;
-  }
-
-  return session.authenticatedIdentity;
+function parseAuthenticatedSocketIdentity(session, value, telegramInitData) {
+  const identity = resolveAuthenticatedSocketIdentity(session.authenticatedIdentity, value, telegramInitData);
+  if (identity) session.authenticatedIdentity = identity;
+  return identity;
 }
 
 function sanitizeSessionUser(session, value) {
@@ -923,14 +912,6 @@ function sendError(session, message) {
 
 function getPlayerProfileStore() {
   return testPlayerProfileStore ?? getMongoPlayerProfileStore();
-}
-
-function parseSocketPlayerIdentity(value) {
-  try {
-    return parsePlayerIdentity(value);
-  } catch {
-    return null;
-  }
 }
 
 function validateProfileBattleLoadout(profile) {

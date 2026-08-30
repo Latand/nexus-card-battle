@@ -46,31 +46,34 @@ describe("OpenRouter battle AI", () => {
     const enemyCard = game.enemy.hand[0];
     const request = createBattleAiMoveRequest(game, { visiblePlayerCard: game.player.hand[0] });
     let capturedBody: unknown;
-    const fetchImpl: typeof fetch = async (_input, init) => {
-      capturedBody = JSON.parse(String(init?.body));
-      return new Response(
-        JSON.stringify({
-          choices: [
-            {
-              message: {
-                content: null,
-                tool_calls: [
-                  {
-                    id: "call_battle_move",
-                    type: "function",
-                    function: {
-                      name: "choose_battle_move",
-                      arguments: JSON.stringify({ cardId: enemyCard.id, energy: 2, damageBoost: false }),
+    const fetchImpl: typeof fetch = Object.assign(
+      async (_input: URL | RequestInfo, init?: RequestInit) => {
+        capturedBody = JSON.parse(String(init?.body));
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: null,
+                  tool_calls: [
+                    {
+                      id: "call_battle_move",
+                      type: "function",
+                      function: {
+                        name: "choose_battle_move",
+                        arguments: JSON.stringify({ cardId: enemyCard.id, energy: 2, damageBoost: false }),
+                      },
                     },
-                  },
-                ],
+                  ],
+                },
               },
-            },
-          ],
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
-    };
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      },
+      { preconnect: fetch.preconnect },
+    );
 
     const response = await chooseOpenRouterBattleAiMove(request, {
       apiKey: "test-openrouter-key",

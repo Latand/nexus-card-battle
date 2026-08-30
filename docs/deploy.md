@@ -132,6 +132,30 @@ server {
 }
 ```
 
+## CloudFront and Cloudflare
+
+Keep the public app, `/api/*`, and `/ws` on one HTTPS origin. The arena authenticates Telegram players inside the WebSocket protocol with Telegram-signed `initData`; the server verifies its signature, age, and claimed player identity before queueing.
+
+The session cookie remains `HttpOnly; Secure; SameSite=Lax`. Embedded Telegram clients can omit that cookie from the WebSocket upgrade, so arena authentication does not depend on its presence. Guest sessions and HTTP mutations still use the signed cookie.
+
+For CloudFront, configure separate uncached behaviors for `/api/*` and `/ws`:
+
+- Use the `CachingDisabled` managed cache policy for both behaviors.
+- Attach an origin request policy that forwards all viewer cookies, or allowlists `nexus_player_session`. CloudFront removes viewer cookies and origin `Set-Cookie` headers when cookie forwarding is disabled.
+- For `/ws`, use the `AllViewer` managed origin request policy or explicitly forward `Sec-WebSocket-Key` and `Sec-WebSocket-Version`. Forwarding the remaining `Sec-WebSocket-*` headers is recommended.
+- Use HTTPS from viewer to edge and from edge to origin.
+
+For Cloudflare, keep Network > WebSockets enabled and add cache bypass rules for `/api/*` and `/ws`. Remove any response-header transform that strips `Set-Cookie`; an Edge TTL override can otherwise strip that header from cache-eligible responses.
+
+References: [CloudFront WebSockets](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/distribution-working-with.websockets.html), [CloudFront cookie forwarding](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Cookies.html), and [Cloudflare WebSockets](https://developers.cloudflare.com/network/websockets/).
+
+Verification from an embedded client should show:
+
+1. `POST /api/player` returns `200` and a `Set-Cookie` response header.
+2. `/ws` upgrades with `101`.
+3. The first `join_human` frame includes `telegramInitData` for a Telegram player.
+4. A valid signed identity receives `queued` or `match_ready`; a missing or invalid credential receives the arena authentication error.
+
 ## Publish To GitHub
 
 Create an empty GitHub repository, then from this folder:

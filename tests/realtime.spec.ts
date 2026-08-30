@@ -1,9 +1,13 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { createHmac } from "node:crypto";
+import WebSocket from "ws";
 import { cards } from "../src/features/battle/model/cards";
 import type { RewardSummary } from "../src/features/battle/model/types";
+import { createPlayerSessionCookie, PLAYER_SESSION_COOKIE } from "../src/features/player/profile/auth";
 import type { PlayerIdentity } from "../src/features/player/profile/types";
 import { mockDeckReadyProfile, PROFILE_DECK_IDS } from "./fixtures/playerProfile";
 
+const TEST_BOT_TOKEN = "123456:playwright-bot-token";
 const PROTOCOL_OWNED_COLLECTION_IDS = cards.slice(0, 10).map((card) => card.id);
 const PROTOCOL_OWNED_DECK_IDS = PROTOCOL_OWNED_COLLECTION_IDS.slice(0, 9);
 
@@ -51,6 +55,80 @@ test("pairs two tabs and resolves the first human round", async ({ baseURL, brow
     await firstContext.close();
     await secondContext.close();
   }
+});
+
+test("matches two Telegram players after their profile cookies are omitted", async ({ baseURL, browser }) => {
+  const firstContext = await browser.newContext();
+  const secondContext = await browser.newContext();
+  const first = await firstContext.newPage();
+  const second = await secondContext.newPage();
+  const firstIdentity: PlayerIdentity = { mode: "telegram", telegramId: "700000001" };
+  const secondIdentity: PlayerIdentity = { mode: "telegram", telegramId: "700000002" };
+  const firstTrace = captureRedactedArenaTrace(first);
+  const secondTrace = captureRedactedArenaTrace(second);
+
+  try {
+    await first.route("https://telegram.org/js/telegram-web-app.js", (route) => route.fulfill({ contentType: "application/javascript", body: "" }));
+    await second.route("https://telegram.org/js/telegram-web-app.js", (route) => route.fulfill({ contentType: "application/javascript", body: "" }));
+    await installTelegramWebApp(first, firstIdentity.telegramId, createTelegramInitData(firstIdentity.telegramId));
+    await installTelegramWebApp(second, secondIdentity.telegramId, createTelegramInitData(secondIdentity.telegramId));
+    await mockDeckReadyProfile(first, { identity: firstIdentity });
+    await mockDeckReadyProfile(second, { identity: secondIdentity });
+
+    await Promise.all([first.goto(baseURL ?? "/"), second.goto(baseURL ?? "/")]);
+    await expect(first.getByTestId("player-profile-shell")).toHaveAttribute("data-profile-status", "ready");
+    await expect(second.getByTestId("player-profile-shell")).toHaveAttribute("data-profile-status", "ready");
+    await expect(first.getByTestId("play-human-match")).toBeEnabled();
+    await expect(second.getByTestId("play-human-match")).toBeEnabled();
+
+    await Promise.all([firstContext.clearCookies(), secondContext.clearCookies()]);
+    expect((await firstContext.cookies()).some((cookie) => cookie.name === PLAYER_SESSION_COOKIE)).toBe(false);
+    expect((await secondContext.cookies()).some((cookie) => cookie.name === PLAYER_SESSION_COOKIE)).toBe(false);
+
+    await Promise.all([
+      first.getByTestId("play-human-match").click(),
+      second.getByTestId("play-human-match").click(),
+    ]);
+    await expect(first.getByTestId("battle-game")).toHaveAttribute("data-mode", "pvp");
+    await expect(second.getByTestId("battle-game")).toHaveAttribute("data-mode", "pvp");
+
+    await expect
+      .poll(() => firstTrace.receivedTypes, { message: JSON.stringify(firstTrace), timeout: 20_000 })
+      .toContain("match_ready");
+    await expect
+      .poll(() => secondTrace.receivedTypes, { message: JSON.stringify(secondTrace), timeout: 20_000 })
+      .toContain("match_ready");
+    expect(firstTrace.joinFrames).toEqual([{ identityMode: "telegram", hasTelegramInitData: true }]);
+    expect(secondTrace.joinFrames).toEqual([{ identityMode: "telegram", hasTelegramInitData: true }]);
+  } finally {
+    await firstContext.close();
+    await secondContext.close();
+  }
+});
+
+test("rejects cookie-less sockets with missing or invalid Telegram credentials", async ({ baseURL, request }) => {
+  const wsUrl = `${baseURL?.replace(/^http/, "ws") ?? "ws://127.0.0.1:3000"}/ws`;
+  const missingIdentity = testIdentity("missing-auth");
+  const invalidIdentity: PlayerIdentity = { mode: "telegram", telegramId: "700000003" };
+  await seedRealtimeProfile(request, missingIdentity);
+  await seedRealtimeProfile(request, invalidIdentity);
+
+  const missing = await connectRealtimeClient(wsUrl, "Missing Auth", PROTOCOL_OWNED_DECK_IDS, {
+    identity: missingIdentity,
+    omitCookie: true,
+  });
+  const invalid = await connectRealtimeClient(wsUrl, "Invalid Auth", PROTOCOL_OWNED_DECK_IDS, {
+    identity: invalidIdentity,
+    telegramInitData: `${createTelegramInitData(invalidIdentity.telegramId)}tampered`,
+    omitCookie: true,
+  });
+
+  const expectedMessage = "Authenticated player session is required for arena matchmaking.";
+  expect((await missing.waitFor("error", { timeoutMs: 2_000 })).message).toBe(expectedMessage);
+  expect((await invalid.waitFor("error", { timeoutMs: 2_000 })).message).toBe(expectedMessage);
+
+  missing.close();
+  invalid.close();
 });
 
 test("matches direct PvP clients with saved profile decks", async ({ baseURL, request }) => {
@@ -457,7 +535,7 @@ test("rejects PvP moves with energy bids exceeding the fighter's remaining energ
   const second = await connectRealtimeClient(wsUrl, "Tamper B", PROTOCOL_OWNED_DECK_IDS, { identity: secondIdentity });
 
   const firstReady = await first.waitFor("match_ready") as unknown as { matchId: string; round: number; firstPlayerId: string; opponentId: string; playerId: string; players: Record<string, { handIds: string[] }> };
-  const secondReady = await second.waitFor("match_ready") as typeof firstReady;
+  const secondReady = await second.waitFor("match_ready") as unknown as typeof firstReady;
 
   const firstMover = firstReady.firstPlayerId === firstReady.playerId ? first : second;
   const secondMover = firstMover === first ? second : first;
@@ -518,7 +596,7 @@ test("rejects PvP moves whose boost cost exceeds the fighter's energy", async ({
   const second = await connectRealtimeClient(wsUrl, "Boost B", PROTOCOL_OWNED_DECK_IDS, { identity: secondIdentity });
 
   const firstReady = await first.waitFor("match_ready") as unknown as { matchId: string; round: number; firstPlayerId: string; playerId: string; players: Record<string, { handIds: string[] }> };
-  const secondReady = await second.waitFor("match_ready") as typeof firstReady;
+  const secondReady = await second.waitFor("match_ready") as unknown as typeof firstReady;
 
   const firstMover = firstReady.firstPlayerId === firstReady.playerId ? first : second;
   const firstMoverReady = firstMover === first ? firstReady : secondReady;
@@ -553,13 +631,13 @@ test("rejects PvP moves for cards not in the fighter's hand", async ({ baseURL, 
   const second = await connectRealtimeClient(wsUrl, "Card B", PROTOCOL_OWNED_DECK_IDS, { identity: secondIdentity });
 
   const firstReady = await first.waitFor("match_ready") as unknown as { matchId: string; round: number; firstPlayerId: string; playerId: string; opponentId: string; players: Record<string, { handIds: string[] }> };
-  const secondReady = await second.waitFor("match_ready") as typeof firstReady;
+  const secondReady = await second.waitFor("match_ready") as unknown as typeof firstReady;
 
   const firstMover = firstReady.firstPlayerId === firstReady.playerId ? first : second;
   const firstMoverReady = firstMover === first ? firstReady : secondReady;
   const moverPlayer = firstMoverReady.players[firstMoverReady.playerId];
   const otherCardId = PROTOCOL_OWNED_DECK_IDS.find((id) => !moverPlayer.handIds.includes(id));
-  expect(otherCardId).toBeTruthy();
+  if (!otherCardId) throw new Error("Expected a saved card outside the current hand.");
 
   firstMover.send({
     type: "submit_move",
@@ -830,10 +908,17 @@ async function connectRealtimeClient(
   options: {
     collectionIds?: string[];
     identity?: PlayerIdentity;
+    telegramInitData?: string;
+    omitCookie?: boolean;
     user?: { telegramId?: string; name?: string; username?: string } | null;
   } = {},
 ) {
-  const socket = new WebSocket(url);
+  const socket = new WebSocket(
+    url,
+    options.identity && !options.omitCookie
+      ? { headers: { Cookie: createPlayerSessionCookie(options.identity) } }
+      : undefined,
+  );
   const messages: RealtimeMessage[] = [];
   const waiters = new Map<string, ((message: RealtimeMessage) => void)[]>();
 
@@ -856,6 +941,7 @@ async function connectRealtimeClient(
       ...(deckIds ? { deckIds } : {}),
       ...(options.collectionIds ? { collectionIds: options.collectionIds } : deckIds ? { collectionIds: deckIds } : {}),
       identity: options.identity,
+      ...(options.telegramInitData ? { telegramInitData: options.telegramInitData } : {}),
       ...(options.user === null ? {} : { user: options.user ?? { name } }),
     }),
   );
@@ -907,7 +993,7 @@ async function connectRealtimeClient(
           socket.removeEventListener("message", onMessage);
           resolve(message);
         };
-        const onMessage = (event: MessageEvent) => {
+        const onMessage = (event: WebSocket.MessageEvent) => {
           handler(JSON.parse(String(event.data)) as RealtimeMessage);
         };
 
@@ -922,6 +1008,71 @@ async function connectRealtimeClient(
       });
     },
   };
+}
+
+async function installTelegramWebApp(page: Page, telegramId: string, initData: string) {
+  await page.addInitScript(
+    ({ id, signedInitData }) => {
+      Object.defineProperty(window, "Telegram", {
+        configurable: true,
+        value: {
+          WebApp: {
+            initData: signedInitData,
+            initDataUnsafe: { user: { id, first_name: "Arena", last_name: id.slice(-1) } },
+            ready() {},
+            expand() {},
+            disableVerticalSwipes() {},
+            isVersionAtLeast() {
+              return false;
+            },
+          },
+        },
+      });
+    },
+    { id: telegramId, signedInitData: initData },
+  );
+}
+
+function createTelegramInitData(telegramId: string) {
+  const params = new URLSearchParams({
+    auth_date: String(Math.floor(Date.now() / 1000)),
+    query_id: `arena-${telegramId}`,
+    user: JSON.stringify({ id: telegramId }),
+  });
+  const dataCheckString = [...params.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("\n");
+  const secretKey = createHmac("sha256", "WebAppData").update(TEST_BOT_TOKEN).digest();
+  params.set("hash", createHmac("sha256", secretKey).update(dataCheckString).digest("hex"));
+  return params.toString();
+}
+
+function captureRedactedArenaTrace(page: Page) {
+  const trace = {
+    joinFrames: [] as { identityMode?: string; hasTelegramInitData: boolean }[],
+    receivedTypes: [] as string[],
+    sentTypes: [] as string[],
+  };
+
+  page.on("websocket", (socket) => {
+    if (!socket.url().endsWith("/ws")) return;
+    socket.on("framesent", ({ payload }) => {
+      const message = JSON.parse(payload.toString()) as { type?: string; identity?: { mode?: string }; telegramInitData?: unknown };
+      if (message.type) trace.sentTypes.push(message.type);
+      if (message.type !== "join_human") return;
+      trace.joinFrames.push({
+        identityMode: message.identity?.mode,
+        hasTelegramInitData: typeof message.telegramInitData === "string" && message.telegramInitData.length > 0,
+      });
+    });
+    socket.on("framereceived", ({ payload }) => {
+      const message = JSON.parse(payload.toString()) as { type?: string };
+      if (message.type) trace.receivedTypes.push(message.type);
+    });
+  });
+
+  return trace;
 }
 
 function testIdentity(slug: string): PlayerIdentity {
@@ -983,5 +1134,5 @@ async function expectPlayerHandToUseDeck(page: Page, deckIds: string[]) {
   );
 
   expect(handIds).toHaveLength(4);
-  expect(handIds.every((cardId) => Boolean(cardId) && deckIds.includes(cardId))).toBe(true);
+  expect(handIds.every((cardId) => typeof cardId === "string" && deckIds.includes(cardId))).toBe(true);
 }

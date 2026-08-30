@@ -3,6 +3,11 @@ import { defineConfig, devices } from "@playwright/test";
 const port = process.env.PLAYWRIGHT_PORT ?? "3000";
 const baseURL = `http://127.0.0.1:${port}`;
 const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER !== "0";
+const testSessionSecret = "playwright-nexus-session-secret";
+const testBotToken = "123456:playwright-bot-token";
+
+process.env.NEXUS_SESSION_SECRET = testSessionSecret;
+process.env.TELEGRAM_BOT_TOKEN = testBotToken;
 
 export default defineConfig({
   testDir: "./tests",
@@ -16,7 +21,7 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: `PORT=${port} NEXUS_TEST_PROFILE_STORE=1 MONGODB_SERVER_SELECTION_TIMEOUT_MS=200 bun run dev -- --hostname 127.0.0.1`,
+    command: `PORT=${port} NEXUS_TEST_PROFILE_STORE=1 NEXUS_SESSION_SECRET=${testSessionSecret} TELEGRAM_BOT_TOKEN=${testBotToken} MONGODB_SERVER_SELECTION_TIMEOUT_MS=200 bun run dev -- --hostname 127.0.0.1`,
     url: baseURL,
     reuseExistingServer,
     timeout: 120_000,

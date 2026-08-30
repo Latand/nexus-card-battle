@@ -6,10 +6,10 @@ import { STARTER_FREE_BOOSTERS, type PlayerIdentity } from "../src/features/play
 import { fulfillBoosterCatalog, fulfillPlayerProfile, seedServerPlayerProfile, type TestPlayerProfileInput } from "./fixtures/playerProfile";
 
 const GUEST_ID_STORAGE_KEY = "nexus:player-guest-id:v1";
-const identity: PlayerIdentity = {
+const identity = {
   mode: "guest",
   guestId: "starter-reveal-e2e",
-};
+} satisfies PlayerIdentity;
 const firstBoosterId = "neon-breach";
 const secondBoosterId = "factory-shift";
 const firstOpenedCards = getCardsForClans(["[Da:Hack]", "Aliens"]);
@@ -22,10 +22,10 @@ const revealRarityPriority: Record<Card["rarity"], number> = {
   Common: 3,
 };
 
-type RevealProfileState = Pick<
+type RevealProfileState = Required<Pick<
   TestPlayerProfileInput,
   "ownedCardIds" | "deckIds" | "starterFreeBoostersRemaining" | "openedBoosterIds"
->;
+>>;
 
 test("opens two different starter boosters, survives reload, reaches deck ready, and enters battle", async ({ page }) => {
   expect(firstOpenedCards).toHaveLength(5);
@@ -354,5 +354,5 @@ async function expectPlayerHandToUseDeck(page: Page, deckIds: string[]) {
   );
 
   expect(handIds).toHaveLength(4);
-  expect(handIds.every((cardId) => Boolean(cardId) && deckIds.includes(cardId))).toBe(true);
+  expect(handIds.every((cardId) => typeof cardId === "string" && deckIds.includes(cardId))).toBe(true);
 }

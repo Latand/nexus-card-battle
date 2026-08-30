@@ -6,6 +6,7 @@ import {
   createPlayerSessionCookie,
   readPlayerSessionIdentity,
   resolveAuthenticatedPlayerIdentity,
+  resolveAuthenticatedSocketIdentity,
   verifyTelegramInitData,
 } from "../src/features/player/profile/auth";
 import type { PlayerIdentity } from "../src/features/player/profile/types";
@@ -76,11 +77,51 @@ describe("player auth", () => {
     expect(cookie).toContain("SameSite=Lax");
     expect(readPlayerSessionIdentity(cookie)).toEqual(identity);
   });
+
+  test("authenticates a cookie-less Telegram socket from signed initData", () => {
+    process.env.TELEGRAM_BOT_TOKEN = TEST_BOT_TOKEN;
+    const identity: PlayerIdentity = { mode: "telegram", telegramId: "123456789" };
+    const initData = createTelegramInitData({ id: 123456789, username: "duelist" });
+
+    expect(resolveAuthenticatedSocketIdentity(null, identity, initData)).toEqual(identity);
+  });
+
+  test("keeps a valid socket session when matching Telegram initData is stale", () => {
+    process.env.TELEGRAM_BOT_TOKEN = TEST_BOT_TOKEN;
+    const identity: PlayerIdentity = { mode: "telegram", telegramId: "123456789" };
+    const staleInitData = createTelegramInitData(
+      { id: 123456789, username: "duelist" },
+      Math.floor(Date.now() / 1000) - 60 * 60 * 25,
+    );
+
+    expect(resolveAuthenticatedSocketIdentity(identity, identity, staleInitData)).toEqual(identity);
+  });
+
+  test("rejects a client-claimed socket identity without a cookie or signed initData", () => {
+    const claimedIdentity: PlayerIdentity = { mode: "telegram", telegramId: "123456789" };
+
+    expect(resolveAuthenticatedSocketIdentity(null, claimedIdentity, undefined)).toBeNull();
+  });
+
+  test("rejects a socket claim that differs from its valid session", () => {
+    const sessionIdentity: PlayerIdentity = { mode: "telegram", telegramId: "123456789" };
+    const claimedIdentity: PlayerIdentity = { mode: "telegram", telegramId: "987654321" };
+
+    expect(resolveAuthenticatedSocketIdentity(sessionIdentity, claimedIdentity, undefined)).toBeNull();
+  });
+
+  test("rejects signed socket initData when the claimed player differs", () => {
+    process.env.TELEGRAM_BOT_TOKEN = TEST_BOT_TOKEN;
+    const initData = createTelegramInitData({ id: 123456789, username: "duelist" });
+    const claimedIdentity: PlayerIdentity = { mode: "telegram", telegramId: "987654321" };
+
+    expect(resolveAuthenticatedSocketIdentity(null, claimedIdentity, initData)).toBeNull();
+  });
 });
 
-function createTelegramInitData(user: Record<string, unknown>) {
+function createTelegramInitData(user: Record<string, unknown>, authDate = Math.floor(Date.now() / 1000)) {
   const params = new URLSearchParams({
-    auth_date: String(Math.floor(Date.now() / 1000)),
+    auth_date: String(authDate),
     query_id: "test-query",
     user: JSON.stringify(user),
   });

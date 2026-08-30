@@ -87,6 +87,42 @@ export function readPlayerSessionIdentity(cookieHeader: string | null | undefine
   }
 }
 
+export function resolveAuthenticatedSocketIdentity(
+  sessionIdentity: PlayerIdentity | null,
+  claimedIdentityValue: unknown,
+  telegramInitDataValue: unknown,
+): PlayerIdentity | null {
+  let claimedIdentity: PlayerIdentity | undefined;
+  try {
+    claimedIdentity = claimedIdentityValue === undefined ? undefined : parsePlayerIdentity(claimedIdentityValue);
+  } catch {
+    return null;
+  }
+
+  if (sessionIdentity) {
+    try {
+      assertClaimedIdentityMatchesSession(claimedIdentity, sessionIdentity);
+      return sessionIdentity;
+    } catch {
+      // A fresh signed Telegram credential can intentionally replace a stale
+      // cookie from another account, so continue to its verification below.
+    }
+  }
+
+  const telegramInitData = parseOptionalString(telegramInitDataValue);
+  if (telegramInitData) {
+    try {
+      const verifiedIdentity = verifyTelegramInitData(telegramInitData);
+      assertClaimedIdentityMatchesSession(claimedIdentity, verifiedIdentity);
+      return verifiedIdentity;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 export function createPlayerSessionCookie(identity: PlayerIdentity, options: { now?: number; maxAgeSeconds?: number } = {}) {
   const maxAgeSeconds = options.maxAgeSeconds ?? getSessionMaxAgeSeconds();
   const issuedAt = options.now ?? nowSeconds();
