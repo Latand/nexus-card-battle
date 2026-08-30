@@ -99,6 +99,16 @@ export function resolveAuthenticatedSocketIdentity(
     return null;
   }
 
+  if (sessionIdentity) {
+    try {
+      assertClaimedIdentityMatchesSession(claimedIdentity, sessionIdentity);
+      return sessionIdentity;
+    } catch {
+      // A fresh signed Telegram credential can intentionally replace a stale
+      // cookie from another account, so continue to its verification below.
+    }
+  }
+
   const telegramInitData = parseOptionalString(telegramInitDataValue);
   if (telegramInitData) {
     try {
@@ -110,14 +120,7 @@ export function resolveAuthenticatedSocketIdentity(
     }
   }
 
-  if (!sessionIdentity) return null;
-
-  try {
-    assertClaimedIdentityMatchesSession(claimedIdentity, sessionIdentity);
-    return sessionIdentity;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 export function createPlayerSessionCookie(identity: PlayerIdentity, options: { now?: number; maxAgeSeconds?: number } = {}) {

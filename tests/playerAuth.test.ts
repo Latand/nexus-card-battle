@@ -86,10 +86,28 @@ describe("player auth", () => {
     expect(resolveAuthenticatedSocketIdentity(null, identity, initData)).toEqual(identity);
   });
 
+  test("keeps a valid socket session when matching Telegram initData is stale", () => {
+    process.env.TELEGRAM_BOT_TOKEN = TEST_BOT_TOKEN;
+    const identity: PlayerIdentity = { mode: "telegram", telegramId: "123456789" };
+    const staleInitData = createTelegramInitData(
+      { id: 123456789, username: "duelist" },
+      Math.floor(Date.now() / 1000) - 60 * 60 * 25,
+    );
+
+    expect(resolveAuthenticatedSocketIdentity(identity, identity, staleInitData)).toEqual(identity);
+  });
+
   test("rejects a client-claimed socket identity without a cookie or signed initData", () => {
     const claimedIdentity: PlayerIdentity = { mode: "telegram", telegramId: "123456789" };
 
     expect(resolveAuthenticatedSocketIdentity(null, claimedIdentity, undefined)).toBeNull();
+  });
+
+  test("rejects a socket claim that differs from its valid session", () => {
+    const sessionIdentity: PlayerIdentity = { mode: "telegram", telegramId: "123456789" };
+    const claimedIdentity: PlayerIdentity = { mode: "telegram", telegramId: "987654321" };
+
+    expect(resolveAuthenticatedSocketIdentity(sessionIdentity, claimedIdentity, undefined)).toBeNull();
   });
 
   test("rejects signed socket initData when the claimed player differs", () => {
@@ -101,9 +119,9 @@ describe("player auth", () => {
   });
 });
 
-function createTelegramInitData(user: Record<string, unknown>) {
+function createTelegramInitData(user: Record<string, unknown>, authDate = Math.floor(Date.now() / 1000)) {
   const params = new URLSearchParams({
-    auth_date: String(Math.floor(Date.now() / 1000)),
+    auth_date: String(authDate),
     query_id: "test-query",
     user: JSON.stringify(user),
   });

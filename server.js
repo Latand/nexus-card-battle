@@ -391,10 +391,6 @@ function reenqueueWithCapturedElo(session, eloRating) {
 }
 
 function parseAuthenticatedSocketIdentity(session, value, telegramInitData) {
-  if (!session.authenticatedIdentity && !telegramInitData && testPlayerProfileStore) {
-    return parseSocketPlayerIdentity(value);
-  }
-
   const identity = resolveAuthenticatedSocketIdentity(session.authenticatedIdentity, value, telegramInitData);
   if (identity) session.authenticatedIdentity = identity;
   return identity;
@@ -916,14 +912,6 @@ function sendError(session, message) {
 
 function getPlayerProfileStore() {
   return testPlayerProfileStore ?? getMongoPlayerProfileStore();
-}
-
-function parseSocketPlayerIdentity(value) {
-  try {
-    return parsePlayerIdentity(value);
-  } catch {
-    return null;
-  }
 }
 
 function validateProfileBattleLoadout(profile) {
